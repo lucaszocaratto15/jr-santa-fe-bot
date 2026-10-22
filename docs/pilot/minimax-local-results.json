@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "startedAt": "2026-10-22T14:47:44.650Z",
+  "finishedAt": "2026-10-22T14:48:38.866Z",
+  "source": {
+    "repository": "https://github.com/iOfficeAI/AionUi",
+    "tag": "v2.2.2",
+    "commit": "6744099b279b991c17e31c243f0920477bd31cb6"
+  },
+  "runtime": {
+    "version": "AionCore v0.2.2",
+    "agent": "aionrs",
+    "archiveSha256": "70c50b84be9e17ba574a2c74370e6d57a267f44bdd6ecf641740cf220737d5cb",
+    "startupMs": 3227,
+    "processesStoppedAfterRun": true
+  },
+  "machine": {
+    "cpu": "Apple M4 Pro",
+    "platform": "darwin",
+    "architecture": "arm64",
+    "memoryMiB": 24576,
+    "pilotNodeVersion": "v24.21.0"
+  },
+  "model": "MiniMax-M3.1-Flash",
+  "approvalSamplingMs": 300,
+  "turns": [
+    {
+      "name": "greeting",
+      "completed": true,
+      "totalMs": 4561,
+      "approvalWaitMs": 0,
+      "processingMs": 4561,
+      "firstApiTextMs": 3806,
+      "firstAgentTextMs": 4305,
+      "modelCalls": 1,
+      "backendRssSnapshotMiB": 55,
+      "providerReportedUsage": {
+        "promptTokens": 4896,
+        "completionTokens": 30,
+        "cachedPromptTokens": 0
+      }
+    },
+    {
+      "name": "local_code_task",
+      "completed": true,
+      "totalMs": 46303,
+      "approvalWaitMs": 28351,
+      "processingMs": 17952,
+      "firstApiTextMs": 2976,
+      "firstAgentTextMs": 2976,
+      "modelCalls": 4,
+      "backendRssSnapshotMiB": 44,
+      "providerReportedUsage": {
+        "promptTokens": 22782,
+        "completionTokens": 880,
+        "cachedPromptTokens": 20736
+      }
+    }
+  ],
+  "verification": {
+    "ok": true,
+    "inputValues": [58.41, 95.95, 194.86],
+    "expectedTotal": 349.22,
+    "actualTotal": 349.22,
+    "rows": 3,
+    "uniqueMarkerMatched": true,
+    "localHostMatched": true,
+    "platformMatched": true,
+    "successfulExecCommandObserved": true,
+    "artifactReadFromDisk": true
+  },
+  "limits": [
+    "Backend API pilot; Electron UI not exercised",
+    "Synthetic CSV and local script task; browser and Google Workspace not exercised",
+    "RSS snapshots exclude Electron, browser and peak memory",
+    "Mac with 24 GB; Windows machines with 4-8 GB not measured",
+    "No employee authentication, corporate sandbox or central administration implemented"
+  ]
+}

@@ -1,0 +1,93 @@
+import { mkdtemp, stat, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { beforeEach, expect, it, vi } from 'vitest';
+import {
+  bootstrapJrConnection,
+  getJrRelayConfig,
+  createJrWorkspace,
+  configureJrProvider,
+} from '@/process/services/jr/bootstrap';
+import { getJrConnectionStatus } from '@/process/services/jr/usage';
+
+const env = {
+  JR_LOCAL_PILOT: '1',
+  JR_RELAY_URL: 'http://127.0.0.1:4567/v1',
+  JR_RELAY_TOKEN: 'a'.repeat(64),
+  JR_MINIMAX_MODEL: 'MiniMax-M3.1-Flash',
+};
+beforeEach(() => vi.restoreAllMocks());
+
+it('accepts only the temporary loopback relay and never accepts incomplete configuration', () => {
+  expect(getJrRelayConfig({})).toBeNull();
+  expect(getJrRelayConfig(env)?.url).toBe(env.JR_RELAY_URL);
+  expect(() => getJrRelayConfig({ ...env, JR_RELAY_URL: 'https://example.com/v1' })).toThrow();
+  expect(() => getJrRelayConfig({ ...env, JR_RELAY_URL: 'http://127.0.0.1:4567/v1?key=secret' })).toThrow();
+  expect(() => getJrRelayConfig({ ...env, JR_RELAY_TOKEN: '' })).toThrow();
+});
+
+it('registers the fixed JR provider with only the temporary token', async () => {
+  const request = vi
+    .fn()
+    .mockResolvedValueOnce(Response.json({ success: true, data: [] }))
+    .mockResolvedValueOnce(Response.json({ success: true, data: { id: 'provider' } }));
+  await bootstrapJrConnection(8000, env, request);
+  const body = JSON.parse(request.mock.calls[1][1].body);
+  expect(body).toMatchObject({ name: 'JR MiniMax', api_key: env.JR_RELAY_TOKEN, models: ['MiniMax-M3.1-Flash'] });
+  expect(request.mock.calls[1][0]).toBe('http://127.0.0.1:8000/api/providers');
+});
+
+it('reports unavailable usage as null and keeps source tokens out of the renderer status', async () => {
+  expect(await getJrConnectionStatus({})).toEqual({ connected: false, model: null, usage: null });
+  const request = vi.fn().mockResolvedValue(Response.json({ model: 'MiniMax-M3.1-Flash', usage: null }));
+  const status = await getJrConnectionStatus(env, request);
+  expect(status).toEqual({ connected: true, model: 'MiniMax-M3.1-Flash', usage: null });
+  expect(JSON.stringify(status)).not.toContain(env.JR_RELAY_TOKEN);
+});
+
+it('rejects fabricated or malformed usage values instead of showing zero', async () => {
+  const request = vi.fn().mockResolvedValue(
+    Response.json({
+      model: 'MiniMax-M3.1-Flash',
+      usage: {
+        startedAt: '2026-10-22T15:00:00Z',
+        promptTokens: -1,
+        completionTokens: 9,
+        cachedPromptTokens: 0,
+        modelRequests: 1,
+      },
+    })
+  );
+  await expect(getJrConnectionStatus(env, request)).rejects.toThrow();
+});
+
+it('creates separate private workspaces inside the application profile', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'jr-workspace-'));
+  try {
+    const first = await createJrWorkspace(root),
+      second = await createJrWorkspace(root);
+    expect(first).not.toBe(second);
+    expect(first.startsWith(join(root, 'jr-workspaces') + '/')).toBe(true);
+    expect((await stat(first)).isDirectory()).toBe(true);
+    if (process.platform !== 'win32') expect((await stat(first)).mode & 0o777).toBe(0o700);
+    await expect(createJrWorkspace('relative')).rejects.toThrow();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it('does not activate a development relay unless local pilot mode is explicit', () => {
+  expect(getJrRelayConfig({ ...env, JR_LOCAL_PILOT: undefined })).toBeNull();
+});
+
+it('never stores a remote service session directly in the renderer-visible provider catalog', async () => {
+  const request = vi.fn();
+  await expect(
+    configureJrProvider(
+      8000,
+      { url: 'https://company.example/v1', token: 'a'.repeat(64), model: 'MiniMax-M3.1-Flash' },
+      request
+    )
+  ).rejects.toThrow();
+  expect(request).not.toHaveBeenCalled();
+});

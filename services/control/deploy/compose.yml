@@ -1,0 +1,37 @@
+services:
+  control:
+    build: ..
+    restart: unless-stopped
+    environment:
+      JR_ADMIN_CODE: ${JR_ADMIN_CODE:?Defina o código seguro do administrador}
+      JR_UPSTREAM_KEY: ${JR_UPSTREAM_KEY:?Defina a chave do provedor}
+      JR_UPSTREAM_URL: ${JR_UPSTREAM_URL:-https://jrsantafe.stratacerta.com.br/mmx/v1}
+      JR_MODEL: MiniMax-M3.1-Flash
+    ports:
+      - '127.0.0.1:8787:8787'
+    volumes:
+      - control_data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 1g
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:8787/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 5s
+      retries: 3
+
+volumes:
+  control_data:

@@ -1,0 +1,132 @@
+:root {
+  --jr-brand: #1c1c1c;
+  --jr-logo: #90182c;
+  --jr-brand-hover: #353535;
+  --jr-on-brand: #ffffff;
+  --jr-brand-soft: #1c1c1c0f;
+  --jr-surface: #ffffff;
+  --jr-chrome: #fcfcfc;
+  --jr-sidebar: #f5f5f5;
+  --jr-border: #1c1c1c1f;
+  --jr-border-strong: #1c1c1c3d;
+  --jr-composer-shadow: 0 2px 8px -1px #0000000d, 0 1px 2px #00000008, 0 0 0 1px #e4e4e40a;
+  --jr-shadow: #0000000a;
+  --jr-focus: #1e86fc;
+}
+body {
+  --app-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --bg-base: var(--jr-surface);
+  --bg-1: var(--jr-surface);
+  --bg-2: var(--jr-sidebar);
+  --bg-3: var(--jr-border);
+  --bg-hover: #1c1c1c0f;
+  --bg-active: #1c1c1c14;
+  --color-bg-1: var(--jr-chrome);
+  --color-bg-2: var(--jr-surface);
+  --color-text-1: #1c1c1c;
+  --color-text-2: #1c1c1cad;
+  --color-text-3: #1c1c1c8f;
+  --color-text-4: #1c1c1c66;
+  --color-fill-1: #1c1c1c08;
+  --color-fill-2: #1c1c1c0f;
+  --text-primary: var(--color-text-1);
+  --text-secondary: var(--color-text-2);
+  --border-base: var(--jr-border);
+  --border-light: #1c1c1c14;
+  --primary: var(--jr-brand);
+  --primary-5: 53, 53, 53;
+  --primary-6: 28, 28, 28;
+  --primary-7: 10, 10, 10;
+  --message-user-bg: var(--color-fill-2);
+  --thought-gradient: transparent;
+}
+body[arco-theme='dark'] {
+  /* shortcut: dark colors match the captured reference approximately; measure pixels before claiming exact parity. */
+  --jr-brand: #f4f4f4;
+  --jr-brand-hover: #dedede;
+  --jr-on-brand: #1c1c1c;
+  --jr-brand-soft: #ffffff0f;
+  --jr-surface: #101010;
+  --jr-chrome: #101010;
+  --jr-sidebar: #0e0e0e;
+  --jr-border: #ffffff1f;
+  --jr-border-strong: #ffffff3d;
+  --jr-composer-shadow: 0 2px 8px -1px #00000040, 0 1px 2px #00000030;
+  --jr-shadow: #00000022;
+  --bg-hover: #ffffff0f;
+  --bg-active: #ffffff14;
+  --color-text-1: #f4f4f4;
+  --color-text-2: #ffffffad;
+  --color-text-3: #ffffff8f;
+  --color-text-4: #ffffff66;
+  --color-fill-1: #ffffff08;
+  --color-fill-2: #ffffff0f;
+  --border-light: #ffffff14;
+  --primary-5: 222, 222, 222;
+  --primary-6: 244, 244, 244;
+  --primary-7: 255, 255, 255;
+}
+
+.app-shell {
+  position: relative;
+  font-size: 14px;
+  line-height: 20px;
+}
+.app-shell > .app-titlebar {
+  height: 38px;
+  min-height: 38px;
+  background: var(--jr-chrome);
+  border-bottom: none;
+}
+.app-shell > .app-titlebar--desktop {
+  position: absolute;
+  inset: 0 0 auto;
+  background: transparent;
+  pointer-events: none;
+}
+.app-titlebar--desktop .app-titlebar__menu,
+.app-titlebar--desktop .app-titlebar__toolbar {
+  pointer-events: auto;
+}
+.app-shell .layout-sider > .arco-layout-sider-children {
+  overflow: hidden;
+}
+.app-shell .layout-sider-header,
+.app-shell .chat-layout-header {
+  -webkit-app-region: drag;
+}
+.app-shell button,
+.jr-brand-symbol {
+  -webkit-app-region: no-drag;
+}
+.app-shell .chat-surface-fluid {
+  max-width: 960px;
+  margin-inline: auto;
+}
+.app-shell .chat-layout-header {
+  padding-block: 10px;
+  gap: 8px;
+  background: var(--jr-surface);
+}
+.app-shell .chat-layout-header--glass::after {
+  display: none;
+}
+.jr-chat-bot-title {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.jr-brand-symbol {
+  width: 50px;
+  height: 40px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.jr-brand-logo {
+  height: 40px;
+  width: 50px;
+  background-color: var(--jr-logo);
+  mask-size: 120px 40px;
+  mask-repeat: no-repeat;
+}

@@ -1,0 +1,7 @@
+*
+!Dockerfile
+!index.mjs
+!server.mjs
+!store.mjs
+!proxy.mjs
+!validation.mjs

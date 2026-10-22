@@ -1,0 +1,18 @@
+services:
+  control:
+    container_name: jr-bot-control
+    networks:
+      - traefik-proxy
+    labels:
+      traefik.enable: 'true'
+      traefik.docker.network: traefik-proxy
+      traefik.http.routers.jr-bot-control.rule: 'Host(`jrsantafe.stratacerta.com.br`) && (PathPrefix(`/bot/`) || Path(`/bot`))'
+      traefik.http.routers.jr-bot-control.entrypoints: websecure
+      traefik.http.routers.jr-bot-control.tls.certresolver: letsencrypt
+      traefik.http.routers.jr-bot-control.priority: '250'
+      traefik.http.routers.jr-bot-control.middlewares: jr-bot-control-prefix
+      traefik.http.middlewares.jr-bot-control-prefix.stripprefix.prefixes: /bot
+      traefik.http.services.jr-bot-control.loadbalancer.server.port: '8787'
+networks:
+  traefik-proxy:
+    external: true

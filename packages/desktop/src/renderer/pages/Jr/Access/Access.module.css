@@ -1,0 +1,103 @@
+.page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  box-sizing: border-box;
+  background: var(--jr-surface);
+  color: var(--text-primary);
+}
+.login {
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.login h1 {
+  margin: 8px 0 0;
+  font-size: 26px;
+  letter-spacing: -0.5px;
+  text-align: center;
+}
+.brand {
+  height: 48px;
+  width: 60px;
+  background: var(--jr-logo);
+  mask-size: 144px 48px;
+  mask-repeat: no-repeat;
+  align-self: center;
+}
+.hint {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+.primary {
+  background: var(--jr-brand) !important;
+  border-color: var(--jr-brand) !important;
+  color: var(--jr-on-brand) !important;
+}
+.admin {
+  max-width: 1024px;
+  margin: 0 auto;
+  padding: 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.heading h1,
+.person h2 {
+  margin: 0;
+}
+.inviteForm {
+  display: flex;
+  gap: 12px;
+  align-items: end;
+}
+.field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.code {
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, monospace;
+  padding: 12px;
+  background: var(--jr-brand-soft);
+  border-radius: 8px;
+  user-select: all;
+}
+.person {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  border: 1px solid var(--jr-border);
+  border-radius: 12px;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+@media (max-width: 768px) {
+  .admin {
+    padding: 24px;
+  }
+  .inviteForm {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .heading {
+    align-items: start;
+    flex-direction: column;
+  }
+}
