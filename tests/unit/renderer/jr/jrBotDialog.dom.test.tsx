@@ -45,26 +45,23 @@ it('provisions the local folder and saves the selected character', async () => {
       name: 'Compras',
       workspace: '/tmp/novo-bot',
       appearance: { shape: 'heart', color: 'blue' },
-      useChrome: true,
     }),
     undefined
   );
 });
-it('selects every skill by default and can clear them, with Chrome checked', async () => {
-  mocks.skills.mockResolvedValue([
-    { name: 'planilhas', description: 'Planilhas' },
-    { name: 'pesquisa-jr', description: 'Pesquisa' },
-  ]);
+it('does not offer a skill picker or a Chrome switch', () => {
   render(<JrBotDialog visible onClose={vi.fn()} onSaved={vi.fn()} />);
-  expect(screen.getByRole('checkbox', { name: 'common.jr.chromeEnabled' })).toBeChecked();
-  fireEvent.change(screen.getByLabelText('common.jr.botName'), { target: { value: 'Compras' } });
-  await waitFor(() => expect(screen.getByRole('button', { name: 'common.jr.skillsSelectNone' })).toBeInTheDocument());
-  fireEvent.click(screen.getByRole('button', { name: 'common.jr.skillsSelectNone' }));
-  fireEvent.click(screen.getByRole('checkbox', { name: 'common.jr.chromeEnabled' }));
-  fireEvent.click(screen.getByText('common.jr.createAction'));
-  await waitFor(() =>
-    expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ skillIds: [], useChrome: false }), undefined)
-  );
+  expect(screen.queryByText('common.jr.skillsTitle')).not.toBeInTheDocument();
+  expect(screen.queryByRole('checkbox', { name: 'common.jr.chromeEnabled' })).not.toBeInTheDocument();
+  expect(screen.getByLabelText('common.jr.learningTitle')).toBeInTheDocument();
+});
+it('centers the selected shape highlight on the shape itself', () => {
+  render(<JrBotDialog visible onClose={vi.fn()} onSaved={vi.fn()} />);
+  const selected = screen.getByRole('button', { name: 'common.jr.shapes.cloud' });
+  const image = selected.querySelector('img');
+  expect(selected).toHaveAttribute('aria-pressed', 'true');
+  expect(image?.parentElement?.tagName).toBe('SPAN');
+  expect(image?.parentElement?.parentElement).toBe(selected);
 });
 it('retains the name and character after a failed save', async () => {
   mocks.save.mockRejectedValue(new Error('unavailable'));

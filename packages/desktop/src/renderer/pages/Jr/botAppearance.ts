@@ -67,12 +67,20 @@ export function normalizeAppearance(value?: { shape?: string; color?: string }):
 }
 
 /** Own vector geometry; no third-party artwork or runtime script. */
-export function characterSvg(value: JrAppearance): string {
+export function characterSvg(value: JrAppearance, options?: { animate?: boolean }): string {
   const appearance = normalizeAppearance(value);
   const eyes = appearance.color === 'black' ? '#ffffff' : '#242326';
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-4 -4 108 108"><style>.body{transform-origin:50px 55px;animation:float 3.6s ease-in-out infinite}.eyes{transform-origin:50px 49px;animation:blink 5.2s infinite}@keyframes float{0%,100%{transform:translateY(2px) rotate(-7deg)}50%{transform:translateY(-2px) rotate(7deg)}}@keyframes blink{0%,44%,48%,100%{transform:scaleY(1)}46%{transform:scaleY(.08)}}@media(prefers-reduced-motion:reduce){.body,.eyes{animation:none}}</style><g class="body"><path fill="${CHARACTER_PALETTE[appearance.color]}" d="${paths[appearance.shape]}"/><g class="eyes" fill="${eyes}"><rect x="35" y="38" width="8" height="23" rx="4"/><rect x="57" y="38" width="8" height="23" rx="4"/></g></g></svg>`;
+  const animate = options?.animate !== false;
+  const motion = animate
+    ? '<style>.body{transform-origin:50px 55px;animation:float 3.6s ease-in-out infinite}.eyes{transform-origin:50px 49px;animation:blink 5.2s infinite}@keyframes float{0%,100%{transform:translateY(2px) rotate(-7deg)}50%{transform:translateY(-2px) rotate(7deg)}}@keyframes blink{0%,44%,48%,100%{transform:scaleY(1)}46%{transform:scaleY(.08)}}@media(prefers-reduced-motion:reduce){.body,.eyes{animation:none}}</style>'
+    : '';
+  // A still pose keeps the path centered in the viewBox. The float keyframe
+  // starts translated and rotated, which shifts every shape off the highlight.
+  const group = animate ? ' class="body"' : '';
+  const eyeGroup = animate ? ' class="eyes"' : '';
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-4 -4 108 108">${motion}<g${group}><path fill="${CHARACTER_PALETTE[appearance.color]}" d="${paths[appearance.shape]}"/><g${eyeGroup} fill="${eyes}"><rect x="35" y="38" width="8" height="23" rx="4"/><rect x="57" y="38" width="8" height="23" rx="4"/></g></g></svg>`;
 }
 
-export function characterImage(appearance: JrAppearance): string {
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(characterSvg(appearance))}`;
+export function characterImage(appearance: JrAppearance, options?: { animate?: boolean }): string {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(characterSvg(appearance, options))}`;
 }

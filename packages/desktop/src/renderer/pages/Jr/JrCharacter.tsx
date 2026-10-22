@@ -7,9 +7,13 @@ import styles from './JrWorkspace.module.css';
 
 const LOGO_RATIO = 240 / 68;
 
-const JrCharacter: React.FC<{ appearance?: JrAppearance; size?: number }> = ({ appearance, size = 40 }) => (
+const JrCharacter: React.FC<{ appearance?: JrAppearance; size?: number; still?: boolean }> = ({
+  appearance,
+  size = 40,
+  still = false,
+}) => (
   <img
-    src={characterImage(normalizeAppearance(appearance))}
+    src={characterImage(normalizeAppearance(appearance), { animate: !still })}
     width={size}
     height={size}
     alt=''
