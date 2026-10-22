@@ -48,6 +48,22 @@ function validId(value: unknown): value is string {
 function validToken(value: unknown): value is string {
   return typeof value === 'string' && /^[A-Za-z0-9._~-]{32,512}$/.test(value);
 }
+function validClock(value: unknown): value is string {
+  return typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/u.test(value);
+}
+async function responseCode(response: Response): Promise<string | null> {
+  try {
+    const value: unknown = await response.json();
+    return record(value) && record(value.error) && typeof value.error.code === 'string' ? value.error.code : null;
+  } catch {
+    return null;
+  }
+}
+function restrictionStatus(code: string): 'blocked' | 'outside-hours' | null {
+  if (code === 'employee_blocked') return 'blocked';
+  if (code === 'outside_access_hours') return 'outside-hours';
+  return null;
+}
 function parseUser(value: unknown): JrAccessUser {
   if (
     !record(value) ||
@@ -175,7 +191,9 @@ export class JrAccessController {
   }
   /** Retry connectivity on demand while preserving explicit logout and revocation notices. */
   accessStatus(): Promise<JrAccessState> {
-    return this.current.status === 'offline' ? this.refresh() : Promise.resolve(this.state);
+    return ['offline', 'blocked', 'outside-hours'].includes(this.current.status)
+      ? this.refresh()
+      : Promise.resolve(this.state);
   }
   private publish(status: JrAccessState['status'], user: JrAccessUser | null = null): JrAccessState {
     this.current = { status, user };
@@ -234,6 +252,15 @@ export class JrAccessController {
       return this.state;
     });
   }
+  private async applyRestriction(status: 'blocked' | 'outside-hours', expectedToken?: string): Promise<JrAccessState> {
+    if (expectedToken && expectedToken !== this.saved?.token) return this.state;
+    return this.blockTransitions(async () => {
+      this.generation += 1;
+      this.publish(status);
+      const stopped = await this.stopCore();
+      return stopped ? this.state : this.publish('unconfigured');
+    });
+  }
   async initialize(): Promise<JrAccessState> {
     if (this.options.pilot) return this.publish('pilot');
     if (!this.options.url) return this.publish('unconfigured');
@@ -263,6 +290,13 @@ export class JrAccessController {
       await this.rejectSession();
       return fail('JR_ACCESS_REVOKED');
     }
+    if (response.status === 403) {
+      const restriction = restrictionStatus((await responseCode(response)) ?? '');
+      if (restriction) {
+        await this.applyRestriction(restriction, token);
+        return fail(restriction === 'blocked' ? 'JR_ACCESS_BLOCKED' : 'JR_ACCESS_OUTSIDE_HOURS');
+      }
+    }
     if (!response.ok) return fail('JR_ACCESS_UNAVAILABLE');
     const result: unknown = await response.json();
     const model = 'MiniMax-M3.1-Flash';
@@ -286,20 +320,25 @@ export class JrAccessController {
     )
       return this.state;
     const epoch = this.generation;
+    const token = this.saved.token;
     this.refreshing = (async () => {
       try {
-        const response = await this.remote('/auth/session');
+        const response = await this.remote('/auth/session', {}, token);
         if (epoch !== this.generation) return this.state;
-        if (response.status === 401) return this.rejectSession();
+        if (response.status === 401) return this.rejectSession(token);
+        if (response.status === 403) {
+          const restriction = restrictionStatus((await responseCode(response)) ?? '');
+          return restriction ? this.applyRestriction(restriction, token) : this.rejectSession(token);
+        }
         if (!response.ok) return fail('JR_ACCESS_UNAVAILABLE');
         const value: unknown = await response.json();
         if (epoch !== this.generation) return this.state;
         const user = parseUser(record(value) ? value.user : null);
-        if (user.id !== this.saved?.ownerId) return this.rejectSession();
+        if (user.id !== this.saved?.ownerId) return this.rejectSession(token);
         if (this.current.status !== 'authenticated') {
-          const model = await this.verifyModel(this.saved.token!);
+          const model = await this.verifyModel(token);
           if (epoch !== this.generation) return this.state;
-          await this.options.configureCore({ url: `${this.options.url}/v1`, token: this.saved.token!, model });
+          await this.options.configureCore({ url: `${this.options.url}/v1`, token, model });
           if (epoch !== this.generation) {
             await this.stopCore();
             return this.state;
@@ -352,7 +391,12 @@ export class JrAccessController {
         },
         null
       );
-      if (response.status === 403) return fail('JR_ACCESS_DEVICE_BOUND');
+      if (response.status === 403) {
+        const code = (await responseCode(response)) ?? '';
+        const restriction = restrictionStatus(code);
+        if (restriction) return fail(restriction === 'blocked' ? 'JR_ACCESS_BLOCKED' : 'JR_ACCESS_OUTSIDE_HOURS');
+        return fail('JR_ACCESS_DEVICE_BOUND');
+      }
       if (response.status === 401) return fail('JR_ACCESS_INVALID_CODE');
       if (!response.ok) return fail('JR_ACCESS_UNAVAILABLE');
       const value: unknown = await response.json();
@@ -382,6 +426,8 @@ export class JrAccessController {
         'JR_ACCESS_INVALID_RESPONSE',
         'JR_ACCESS_INVALID_MODEL',
         'JR_ACCESS_REVOKED',
+        'JR_ACCESS_BLOCKED',
+        'JR_ACCESS_OUTSIDE_HOURS',
         'JR_ACCESS_PROFILE_UNBOUND',
         'JR_ACCESS_STORAGE_UNAVAILABLE',
         'JR_ACCESS_UNAVAILABLE',
@@ -394,13 +440,19 @@ export class JrAccessController {
           : 'JR_ACCESS_UNAVAILABLE';
       if (epoch === this.generation)
         this.publish(
-          ['JR_ACCESS_STORAGE_UNAVAILABLE', 'JR_ACCESS_PROFILE_UNBOUND', 'JR_ACCESS_RUNTIME_UNAVAILABLE'].includes(
-            publicError
-          )
-            ? 'unconfigured'
-            : publicError === 'JR_ACCESS_UNAVAILABLE'
-              ? 'offline'
-              : 'signed-out'
+          publicError === 'JR_ACCESS_BLOCKED'
+            ? 'blocked'
+            : publicError === 'JR_ACCESS_OUTSIDE_HOURS'
+              ? 'outside-hours'
+              : [
+                    'JR_ACCESS_STORAGE_UNAVAILABLE',
+                    'JR_ACCESS_PROFILE_UNBOUND',
+                    'JR_ACCESS_RUNTIME_UNAVAILABLE',
+                  ].includes(publicError)
+                ? 'unconfigured'
+                : publicError === 'JR_ACCESS_UNAVAILABLE'
+                  ? 'offline'
+                  : 'signed-out'
         );
       if (publicError !== 'JR_ACCESS_UNAVAILABLE') throw new Error(publicError);
       return fail('JR_ACCESS_UNAVAILABLE');
@@ -448,7 +500,14 @@ export class JrAccessController {
       await this.rejectSession(token);
       return fail('JR_ACCESS_REVOKED');
     }
-    if (response.status === 403) return fail('JR_ACCESS_FORBIDDEN');
+    if (response.status === 403) {
+      const restriction = restrictionStatus((await responseCode(response)) ?? '');
+      if (restriction) {
+        await this.applyRestriction(restriction, token);
+        return fail(restriction === 'blocked' ? 'JR_ACCESS_BLOCKED' : 'JR_ACCESS_OUTSIDE_HOURS');
+      }
+      return fail('JR_ACCESS_FORBIDDEN');
+    }
     if (response.status === 409) return fail('JR_ACCESS_EMPLOYEE_REVOKED');
     if (!response.ok) return fail('JR_ACCESS_UNAVAILABLE');
     let value: unknown;
@@ -471,6 +530,7 @@ export class JrAccessController {
       if (
         !record(entry) ||
         typeof entry.revoked !== 'boolean' ||
+        (entry.blocked !== undefined && typeof entry.blocked !== 'boolean') ||
         typeof entry.createdAt !== 'string' ||
         !Number.isFinite(Date.parse(entry.createdAt)) ||
         (entry.revokedAt !== null &&
@@ -501,23 +561,63 @@ export class JrAccessController {
           ? null
           : parseJrConnectionStatus({ model: record(entry.usage) ? entry.usage.model : null, usage: entry.usage })
               .usage;
+      const tokenLimit =
+        entry.tokenLimit == null ? null : typeof entry.tokenLimit === 'number' ? entry.tokenLimit : NaN;
+      const accessStart = entry.accessStart == null ? null : entry.accessStart;
+      const accessEnd = entry.accessEnd == null ? null : entry.accessEnd;
+      if (
+        (tokenLimit !== null && (!Number.isSafeInteger(tokenLimit) || tokenLimit < 0)) ||
+        (accessStart === null) !== (accessEnd === null) ||
+        (accessStart !== null && !validClock(accessStart)) ||
+        (accessEnd !== null && !validClock(accessEnd)) ||
+        (accessStart !== null && accessStart === accessEnd) ||
+        (entry.blockedAt != null &&
+          (typeof entry.blockedAt !== 'string' || !Number.isFinite(Date.parse(entry.blockedAt))))
+      )
+        return fail('JR_ACCESS_INVALID_RESPONSE');
       return {
         ...user,
         revoked: entry.revoked,
         createdAt: entry.createdAt,
         revokedAt: entry.revokedAt as string | null,
+        blocked: entry.blocked === true,
+        blockedAt: (entry.blockedAt as string | null | undefined) ?? null,
+        tokenLimit,
+        accessStart,
+        accessEnd,
         devices,
         usage,
       };
     });
   }
-  async createInvite(input: { name: string }): Promise<JrInvite> {
+  async createInvite(input: {
+    name: string;
+    tokenLimit?: number | null;
+    accessStart?: string | null;
+    accessEnd?: string | null;
+  }): Promise<JrInvite> {
     if (typeof input?.name !== 'string' || !input.name.trim() || input.name.trim().length > 120)
       return fail('JR_ACCESS_INVALID_NAME');
+    if (
+      (input.tokenLimit != null && (!Number.isSafeInteger(input.tokenLimit) || input.tokenLimit < 0)) ||
+      ((input.accessStart ?? null) === null) !== ((input.accessEnd ?? null) === null) ||
+      (input.accessStart != null && !validClock(input.accessStart)) ||
+      (input.accessEnd != null && !validClock(input.accessEnd)) ||
+      (input.accessStart != null && input.accessStart === input.accessEnd)
+    )
+      return fail('JR_ACCESS_INVALID_POLICY');
     return this.parseInvite(
       await this.authorized(
         '/admin/invites',
-        { method: 'POST', body: JSON.stringify({ name: input.name.trim() }) },
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            name: input.name.trim(),
+            tokenLimit: input.tokenLimit ?? null,
+            accessStart: input.accessStart ?? null,
+            accessEnd: input.accessEnd ?? null,
+          }),
+        },
         true
       )
     );
@@ -548,6 +648,52 @@ export class JrAccessController {
       true
     );
     if (!record(value) || value.revoked !== true) return fail('JR_ACCESS_INVALID_RESPONSE');
+  }
+  async setBlocked(input: { employeeId: string; blocked: boolean }): Promise<{ blocked: boolean }> {
+    if (!validId(input?.employeeId) || typeof input.blocked !== 'boolean') return fail('JR_ACCESS_INVALID_EMPLOYEE');
+    const value = await this.authorized(
+      `/admin/employees/${encodeURIComponent(input.employeeId)}/block`,
+      { method: 'POST', body: JSON.stringify({ blocked: input.blocked }) },
+      true
+    );
+    if (!record(value) || value.blocked !== input.blocked) return fail('JR_ACCESS_INVALID_RESPONSE');
+    return { blocked: value.blocked };
+  }
+  async updatePolicy(input: {
+    employeeId: string;
+    tokenLimit: number | null;
+    accessStart: string | null;
+    accessEnd: string | null;
+  }): Promise<{ tokenLimit: number | null; accessStart: string | null; accessEnd: string | null }> {
+    if (
+      !validId(input?.employeeId) ||
+      (input.tokenLimit !== null && (!Number.isSafeInteger(input.tokenLimit) || input.tokenLimit < 0)) ||
+      (input.accessStart === null) !== (input.accessEnd === null) ||
+      (input.accessStart !== null && !validClock(input.accessStart)) ||
+      (input.accessEnd !== null && !validClock(input.accessEnd)) ||
+      (input.accessStart !== null && input.accessStart === input.accessEnd)
+    )
+      return fail('JR_ACCESS_INVALID_POLICY');
+    const value = await this.authorized(
+      `/admin/employees/${encodeURIComponent(input.employeeId)}/policy`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          tokenLimit: input.tokenLimit,
+          accessStart: input.accessStart,
+          accessEnd: input.accessEnd,
+        }),
+      },
+      true
+    );
+    if (
+      !record(value) ||
+      value.tokenLimit !== input.tokenLimit ||
+      value.accessStart !== input.accessStart ||
+      value.accessEnd !== input.accessEnd
+    )
+      return fail('JR_ACCESS_INVALID_RESPONSE');
+    return { tokenLimit: value.tokenLimit, accessStart: value.accessStart, accessEnd: value.accessEnd };
   }
 }
 

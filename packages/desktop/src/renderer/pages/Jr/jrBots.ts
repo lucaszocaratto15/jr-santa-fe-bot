@@ -13,12 +13,24 @@ export const JR_PROVIDER = 'JR MiniMax';
 
 export const JR_DEFAULT_INSTRUCTIONS =
   'Responda sempre em português do Brasil, inclusive nas mensagens de andamento. Seja claro e breve. Ajude nas tarefas de escritório e projetos desta pasta. Use as ferramentas necessárias e aguarde as confirmações de escrita e execução. Reaproveite resultados já obtidos. Se um campo não existir, informe a ausência sem repetir consultas equivalentes. Verifique cada resultado uma vez e conclua quando o pedido estiver atendido. Não apresente raciocínio interno como resposta.';
-export type JrBotInput = { name: string; instructions: string; workspace: string; appearance?: JrAppearance };
-export type JrBot = JrBotInput & { id: string };
+export type JrBotInput = {
+  name: string;
+  instructions: string;
+  workspace: string;
+  appearance?: JrAppearance;
+  learning?: string;
+  skillIds?: string[];
+};
+export type JrBot = JrBotInput & { id: string; teamSelectable?: boolean };
 
-export function validateJrBot(input: JrBotInput): 'name' | 'instructions' | 'workspace' | null {
+function instructionWithLearning(instructions: string, learning: string): string {
+  return learning ? `${instructions.trim()}\n\n## Aprendizados deste bot\n${learning}` : instructions;
+}
+
+export function validateJrBot(input: JrBotInput): 'name' | 'instructions' | 'learning' | 'workspace' | null {
   if (!input.name.trim() || input.name.trim().length > 80) return 'name';
   if (!input.instructions.trim() || input.instructions.length > 12000) return 'instructions';
+  if ((input.learning?.length ?? 0) > 12000) return 'learning';
   if (!/^(?:\/|[A-Za-z]:[\\/]|\\\\[^\\/]+[\\/][^\\/]+)/.test(input.workspace)) return 'workspace';
   return null;
 }
@@ -33,9 +45,12 @@ export async function listJrBots(): Promise<JrBot[]> {
     .map((assistant) => ({
       id: assistant.id,
       name: assistant.name,
-      instructions: assistant.context || '',
+      instructions: workspaces![assistant.id].instructions ?? assistant.context ?? '',
       workspace: workspaces![assistant.id].workspace,
       appearance: normalizeAppearance(workspaces![assistant.id].appearance),
+      learning: workspaces![assistant.id].learning ?? '',
+      skillIds: workspaces![assistant.id].skillIds ?? [],
+      teamSelectable: assistant.team_selectable,
     }));
 }
 
@@ -50,9 +65,12 @@ export async function getJrBot(id: string): Promise<JrBot> {
   return {
     id,
     name: detail.profile.name,
-    instructions: detail.rules.content,
+    instructions: workspaces[id].instructions ?? detail.rules.content,
     workspace: workspaces[id].workspace,
     appearance: normalizeAppearance(workspaces[id].appearance),
+    learning: workspaces[id].learning ?? '',
+    skillIds: workspaces[id].skillIds ?? [],
+    teamSelectable: detail.team_selectable,
   };
 }
 
@@ -60,6 +78,10 @@ export async function saveJrBot(input: JrBotInput, id?: string): Promise<JrBot> 
   const invalid = validateJrBot(input);
   if (invalid) throw new Error(`Invalid bot ${invalid}`);
   const name = input.name.trim();
+  const learning = input.learning?.trim() ?? '';
+  const skillIds = Array.from(
+    new Set((input.skillIds ?? []).filter((skill) => skill.trim()).map((skill) => skill.trim()))
+  );
   const workspaces = (await getClientBusinessSetting('jr.botWorkspaces')) || {};
   const previous = id ? await getJrBot(id) : null;
   if (!id) {
@@ -70,6 +92,7 @@ export async function saveJrBot(input: JrBotInput, id?: string): Promise<JrBot> 
       name,
       agent_id: runtime.agent_id,
       avatar: '🤖',
+      defaults: { skills: { mode: 'fixed', value: skillIds } },
     });
     id = created.id;
   }
@@ -77,7 +100,7 @@ export async function saveJrBot(input: JrBotInput, id?: string): Promise<JrBot> 
     const written = await ipcBridge.fs.writeAssistantRule.invoke({
       assistant_id: id,
       locale: 'pt-BR',
-      content: input.instructions,
+      content: instructionWithLearning(input.instructions, learning),
     });
     if (!written) throw new Error('Bot instructions were not saved');
     if (previous)
@@ -85,16 +108,20 @@ export async function saveJrBot(input: JrBotInput, id?: string): Promise<JrBot> 
         id,
         name,
         avatar: '🤖',
+        defaults: { skills: { mode: 'fixed', value: skillIds } },
       });
     await setClientBusinessSetting('jr.botWorkspaces', {
       ...workspaces,
       [id]: {
         ...workspaces[id],
         workspace: input.workspace,
+        instructions: input.instructions,
+        learning,
+        skillIds,
         ...(input.appearance ? { appearance: normalizeAppearance(input.appearance) } : {}),
       },
     });
-    return { ...input, name, id };
+    return { ...input, name, learning, skillIds, id };
   } catch (error) {
     if (!previous) {
       await ipcBridge.assistants.delete.invoke({ id });
@@ -102,11 +129,12 @@ export async function saveJrBot(input: JrBotInput, id?: string): Promise<JrBot> 
       await ipcBridge.fs.writeAssistantRule.invoke({
         assistant_id: id,
         locale: 'pt-BR',
-        content: previous.instructions,
+        content: instructionWithLearning(previous.instructions, previous.learning ?? ''),
       });
       await ipcBridge.assistants.update.invoke({
         id,
         name: previous.name,
+        defaults: { skills: { mode: 'fixed', value: previous.skillIds ?? [] } },
       });
     }
     throw error;
@@ -189,7 +217,11 @@ async function resolveJrConversation(bot: JrBot): Promise<TChatConversation> {
   const conversation = await ipcBridge.conversation.create.invoke({
     name: bot.name,
     model,
-    assistant: { id: bot.id, locale: 'pt-BR', conversation_overrides: { mcp_ids: servers.map((server) => server.id) } },
+    assistant: {
+      id: bot.id,
+      locale: 'pt-BR',
+      conversation_overrides: { skill_ids: bot.skillIds ?? [], mcp_ids: servers.map((server) => server.id) },
+    },
     extra: {
       workspace: bot.workspace,
       custom_workspace: true,

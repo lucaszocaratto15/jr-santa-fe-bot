@@ -1,4 +1,4 @@
-# JR Santa Fé Bot
+# JR Bot
 
 Aplicativo corporativo baseado no AionUI. O agente e suas ferramentas executam no computador do funcionário; identidade, revogação e acesso ao MiniMax passam pelo serviço privado da JR.
 

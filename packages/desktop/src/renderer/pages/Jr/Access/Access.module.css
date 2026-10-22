@@ -61,6 +61,29 @@
   gap: 12px;
   align-items: end;
 }
+.invitePolicy {
+  flex: 2;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(100px, 1fr)) auto;
+  gap: 12px;
+  align-items: end;
+}
+.policyForm {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(100px, 1fr));
+  gap: 12px;
+}
+.policyInput {
+  width: 100%;
+  min-height: 32px;
+  box-sizing: border-box;
+  padding: 4px 8px;
+  border: 1px solid var(--jr-border);
+  border-radius: 6px;
+  background: var(--jr-surface);
+  color: var(--text-primary);
+  font: inherit;
+}
 .field {
   flex: 1;
   display: flex;
@@ -95,6 +118,10 @@
   .inviteForm {
     flex-direction: column;
     align-items: stretch;
+  }
+  .invitePolicy,
+  .policyForm {
+    grid-template-columns: 1fr;
   }
   .heading {
     align-items: start;

@@ -100,7 +100,9 @@ describe('JR bot persistence', () => {
       locale: 'pt-BR',
       content: input.instructions,
     });
-    expect(mocks.writeSetting).toHaveBeenCalledWith('jr.botWorkspaces', { 'jr-bot': { workspace: input.workspace } });
+    expect(mocks.writeSetting).toHaveBeenCalledWith('jr.botWorkspaces', {
+      'jr-bot': { workspace: input.workspace, instructions: input.instructions, learning: '', skillIds: [] },
+    });
     expect(bot.id).toBe('jr-bot');
   });
 
@@ -166,7 +168,7 @@ it('passes enabled MCP connections into the actual embedded-agent conversation',
   await startJrConversation({ id: 'jr-bot', ...input });
   expect(mocks.conversation).toHaveBeenCalledWith(
     expect.objectContaining({
-      assistant: expect.objectContaining({ conversation_overrides: { mcp_ids: ['chrome-1'] } }),
+      assistant: expect.objectContaining({ conversation_overrides: { skill_ids: [], mcp_ids: ['chrome-1'] } }),
       extra: expect.objectContaining({
         selected_mcp_server_ids: ['chrome-1'],
         selected_session_mcp_servers: [{ id: chrome.id, name: chrome.name, transport: chrome.transport }],
@@ -183,7 +185,13 @@ it('keeps animated appearance outside the native emoji or local-file avatar cont
   const bot = await saveJrBot({ ...input, appearance: { shape: 'star', color: 'blue' } });
   expect(bot.appearance).toEqual({ shape: 'star', color: 'blue' });
   expect(mocks.writeSetting).toHaveBeenCalledWith('jr.botWorkspaces', {
-    'jr-bot': { workspace: input.workspace, appearance: { shape: 'star', color: 'blue' } },
+    'jr-bot': {
+      workspace: input.workspace,
+      instructions: input.instructions,
+      learning: '',
+      skillIds: [],
+      appearance: { shape: 'star', color: 'blue' },
+    },
   });
 });
 
@@ -206,7 +214,11 @@ it('restores the previous bot name and instructions when editing its workspace f
     locale: 'pt-BR',
     content: 'Regras anteriores',
   });
-  expect(mocks.update).toHaveBeenLastCalledWith({ id: 'jr-bot', name: 'Anterior' });
+  expect(mocks.update).toHaveBeenLastCalledWith({
+    id: 'jr-bot',
+    name: 'Anterior',
+    defaults: { skills: { mode: 'fixed', value: [] } },
+  });
   expect(mocks.remove).not.toHaveBeenCalled();
 });
 
@@ -221,7 +233,9 @@ it('does not attach pending official Gmail connections to a new model conversati
   ]);
   await startJrConversation({ id: 'jr-bot', ...input });
   expect(mocks.conversation).toHaveBeenCalledWith(
-    expect.objectContaining({ assistant: expect.objectContaining({ conversation_overrides: { mcp_ids: [] } }) })
+    expect.objectContaining({
+      assistant: expect.objectContaining({ conversation_overrides: { skill_ids: [], mcp_ids: [] } }),
+    })
   );
 });
 
@@ -319,6 +333,34 @@ describe('one persistent conversation per JR bot', () => {
       'jr.botWorkspaces',
       expect.objectContaining({
         [bot.id]: expect.objectContaining({ conversationId: conversation.id }),
+      })
+    );
+  });
+
+  it('stores each bot learning notes and skills, then sends its selected skills to the model', async () => {
+    const trained = {
+      ...input,
+      learning: 'Conferir o relatório antes de concluir.',
+      skillIds: ['planilhas', 'pesquisa-jr'],
+    };
+    await saveJrBot(trained);
+    expect(mocks.writeRules).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: `${input.instructions}\n\n## Aprendizados deste bot\n${trained.learning}`,
+      })
+    );
+    expect(mocks.writeSetting).toHaveBeenCalledWith(
+      'jr.botWorkspaces',
+      expect.objectContaining({
+        'jr-bot': expect.objectContaining({ learning: trained.learning, skillIds: trained.skillIds }),
+      })
+    );
+    await startJrConversation({ id: 'jr-bot', ...trained });
+    expect(mocks.conversation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        assistant: expect.objectContaining({
+          conversation_overrides: expect.objectContaining({ skill_ids: trained.skillIds }),
+        }),
       })
     );
   });

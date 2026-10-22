@@ -11,7 +11,17 @@ export type ImageGenerationModelSetting = TProviderWithModel & {
 
 export type ClientBusinessSettingMap = {
   'jr.botWorkspaces':
-    | Record<string, { workspace: string; appearance?: JrAppearance; conversationId?: string }>
+    | Record<
+        string,
+        {
+          workspace: string;
+          appearance?: JrAppearance;
+          conversationId?: string;
+          instructions?: string;
+          learning?: string;
+          skillIds?: string[];
+        }
+      >
     | undefined;
   'google.config': GoogleClientSetting;
   'mcp.config': IMcpServer[] | undefined;
@@ -68,6 +78,7 @@ export type JrUsageSnapshot = {
   startedAt: string;
   promptTokens: number | null;
   completionTokens: number | null;
+  totalTokens?: number | null;
   cachedPromptTokens: number | null;
   modelRequests: number;
   requests?: number;
@@ -81,13 +92,27 @@ export type JrUsageSnapshot = {
 
 export type JrAccessUser = { id: string; name: string; role: 'admin' | 'employee' };
 export type JrAccessState = {
-  status: 'checking' | 'signed-out' | 'authenticated' | 'revoked' | 'offline' | 'unconfigured' | 'pilot';
+  status:
+    | 'checking'
+    | 'signed-out'
+    | 'authenticated'
+    | 'revoked'
+    | 'blocked'
+    | 'outside-hours'
+    | 'offline'
+    | 'unconfigured'
+    | 'pilot';
   user: JrAccessUser | null;
 };
 export type JrAdminEmployee = JrAccessUser & {
   revoked: boolean;
   createdAt: string;
   revokedAt: string | null;
+  blocked: boolean;
+  blockedAt: string | null;
+  tokenLimit: number | null;
+  accessStart: string | null;
+  accessEnd: string | null;
   devices: Array<{ id: string; name: string; lastSeenAt: string; expiresAt: string; revokedAt: string | null }>;
   usage: JrUsageSnapshot | null;
 };

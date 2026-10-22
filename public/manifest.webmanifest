@@ -1,7 +1,7 @@
 {
-  "name": "AionUi",
-  "short_name": "AionUi",
-  "description": "AionUi WebUI for mobile and desktop browsers.",
+  "name": "JR Bot",
+  "short_name": "JR Bot",
+  "description": "Assistente de IA da JR Santa Fé.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

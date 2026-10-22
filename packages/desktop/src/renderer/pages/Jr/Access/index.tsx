@@ -12,9 +12,9 @@ const JrAccessGate: React.FC<React.PropsWithChildren> = ({ children }) => {
   const [state, setState] = useState<JrAccessState>({ status: 'checking', user: null });
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<'invalidCode' | 'profileUnbound' | 'deviceBound' | 'storageUnavailable' | null>(
-    null
-  );
+  const [error, setError] = useState<
+    'invalidCode' | 'profileUnbound' | 'deviceBound' | 'storageUnavailable' | 'blocked' | 'outsideHours' | null
+  >(null);
   const refresh = useCallback(async () => {
     try {
       setState(await ipcBridge.jr.accessStatus.invoke());
@@ -51,7 +51,11 @@ const JrAccessGate: React.FC<React.PropsWithChildren> = ({ children }) => {
             ? 'deviceBound'
             : message.includes('STORAGE_UNAVAILABLE')
               ? 'storageUnavailable'
-              : 'invalidCode'
+              : message.includes('JR_ACCESS_BLOCKED')
+                ? 'blocked'
+                : message.includes('JR_ACCESS_OUTSIDE_HOURS')
+                  ? 'outsideHours'
+                  : 'invalidCode'
       );
     } finally {
       setBusy(false);
@@ -62,11 +66,15 @@ const JrAccessGate: React.FC<React.PropsWithChildren> = ({ children }) => {
   const message =
     state.status === 'revoked'
       ? 'common.jr.access.revoked'
-      : state.status === 'offline'
-        ? 'common.jr.access.offline'
-        : state.status === 'unconfigured'
-          ? 'common.jr.access.unconfigured'
-          : null;
+      : state.status === 'blocked'
+        ? 'common.jr.access.blocked'
+        : state.status === 'outside-hours'
+          ? 'common.jr.access.outsideHours'
+          : state.status === 'offline'
+            ? 'common.jr.access.offline'
+            : state.status === 'unconfigured'
+              ? 'common.jr.access.unconfigured'
+              : null;
   return (
     <main className={styles.page}>
       <section className={styles.login} aria-labelledby='jr-access-title'>
@@ -82,8 +90,13 @@ const JrAccessGate: React.FC<React.PropsWithChildren> = ({ children }) => {
           <Spin aria-label={t('common.loading')} />
         ) : (
           <>
-            {message && <Alert type={state.status === 'revoked' ? 'error' : 'warning'} content={t(message)} />}
-            {error && <Alert type='error' content={t(`common.jr.access.${error}`)} />}
+            {message && (
+              <Alert
+                type={state.status === 'revoked' || state.status === 'blocked' ? 'error' : 'warning'}
+                content={t(message)}
+              />
+            )}
+            {error && !message && <Alert type='error' content={t(`common.jr.access.${error}`)} />}
             <label htmlFor='jr-access-code'>{t('common.jr.access.code')}</label>
             <Input
               id='jr-access-code'

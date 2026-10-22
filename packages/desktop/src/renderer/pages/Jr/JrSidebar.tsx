@@ -5,7 +5,11 @@ import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
 import ConversationSearchPopover from '@/renderer/pages/conversation/GroupedHistory/ConversationSearchPopover';
-import { listJrBots } from './jrBots';
+import { ipcBridge } from '@/common';
+import type { TTeam } from '@/common/types/team/teamTypes';
+import { useAuth } from '@renderer/hooks/context/AuthContext';
+import JrBotTeamDialog from './JrBotTeamDialog';
+import { listJrBots, type JrBot } from './jrBots';
 import JrCharacter from './JrCharacter';
 import { useThemeContext } from '@/renderer/hooks/context/ThemeContext';
 import styles from './JrWorkspace.module.css';
@@ -19,13 +23,25 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void }> = ({ onSessionClick }
   const location = useLocation();
   const { theme, setTheme } = useThemeContext();
   const { state, logout } = useJrAccess();
+  const { user } = useAuth();
   const [connectionsOpen, setConnectionsOpen] = useState(false);
-  const { data: bots, error } = useSWR('jr.bots', listJrBots);
+  const [teamDialogOpen, setTeamDialogOpen] = useState(false);
+  const { data: bots, error } = useSWR<JrBot[]>('jr.bots', listJrBots);
+  const teamUserId = user?.id ?? 'system_default_user';
+  const { data: teams = [], mutate: refreshTeams } = useSWR<TTeam[]>(['jr.teams', teamUserId], () =>
+    ipcBridge.team.list.invoke({ user_id: teamUserId })
+  );
   const open = (path: string) => {
     void navigate(path);
     onSessionClick?.();
   };
   const activeBot = new URLSearchParams(location.search).get('bot');
+  const botIds = new Set(bots?.map((bot) => bot.id) ?? []);
+  const jrTeams = teams.filter(
+    (team) =>
+      team.assistants.length > 1 &&
+      team.assistants.every((assistant) => assistant.assistant_id && botIds.has(assistant.assistant_id))
+  );
   const profileName = state.user?.name || t('common.jr.companyShortName');
   const initials = profileName
     .trim()
@@ -117,6 +133,33 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void }> = ({ onSessionClick }
             </Button>
           ))}
         </div>
+        {bots && bots.length > 1 && (
+          <div className={styles.sidebarSection} aria-label={t('common.jr.teamChats')}>
+            <span className={styles.sidebarLabel}>{t('common.jr.teamChats')}</span>
+            <Button
+              type='text'
+              long
+              className={styles.navItem}
+              icon={<Peoples size={18} />}
+              onClick={() => setTeamDialogOpen(true)}
+            >
+              {t('common.jr.teamChat')}
+            </Button>
+            {jrTeams.map((team) => (
+              <Button
+                key={team.id}
+                type='text'
+                long
+                className={`${styles.navItem} ${location.pathname === `/team/${team.id}` ? styles.active : ''}`}
+                icon={<Peoples size={18} />}
+                onClick={() => open(`/team/${team.id}`)}
+                title={team.name}
+              >
+                {team.name}
+              </Button>
+            ))}
+          </div>
+        )}
       </div>
       <div className={styles.sidebarBottom}>
         <Dropdown trigger='click' position='top' droplist={profileMenu}>
@@ -144,6 +187,15 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void }> = ({ onSessionClick }
           <JrConnections onClose={() => setConnectionsOpen(false)} />
         </Suspense>
       )}
+      <JrBotTeamDialog
+        visible={teamDialogOpen}
+        bots={bots ?? []}
+        onClose={() => setTeamDialogOpen(false)}
+        onCreated={(team) => {
+          void refreshTeams();
+          open(`/team/${team.id}`);
+        }}
+      />
     </nav>
   );
 };

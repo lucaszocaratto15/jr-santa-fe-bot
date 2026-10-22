@@ -70,6 +70,37 @@ test('usage remains unknown when provider omits counts and foreign models are re
   assert.equal(usage.unmeteredRequests, 1);
 });
 
+test('token limit stops new model requests after the provider-reported budget is consumed', async (t) => {
+  let upstreamCalls = 0;
+  const app = await startControl(t, {
+    upstreamFetch: async () => {
+      upstreamCalls += 1;
+      return Response.json({ choices: [], usage: { prompt_tokens: 12, completion_tokens: 3 } });
+    },
+  });
+  const owner = await app.login();
+  const invitation = await app.invite(owner.token, 'Limite de tokens');
+  const employee = await app.login(invitation.code, 'token-limit');
+  const policy = await app.request(`/admin/employees/${invitation.id}/policy`, {
+    method: 'POST',
+    token: owner.token,
+    body: { tokenLimit: 15, accessStart: null, accessEnd: null },
+  });
+  assert.equal(policy.status, 200);
+  const request = {
+    method: 'POST',
+    token: employee.token,
+    body: { messages: [{ role: 'user', content: 'Olá' }] },
+  };
+  assert.equal((await app.request('/v1/chat/completions', request)).status, 200);
+  const exceeded = await app.request('/v1/chat/completions', request);
+  assert.equal(exceeded.status, 429);
+  assert.deepEqual(await exceeded.json(), { error: { code: 'token_limit_reached' } });
+  assert.equal(upstreamCalls, 1);
+  const usage = await (await app.request('/usage', { token: employee.token })).json();
+  assert.equal(usage.usage.totalTokens, 15);
+});
+
 test('stream passes through UTF-8 and split SSE frames while recording the final cumulative usage once', async (t) => {
   const encoder = new TextEncoder();
   const payload =

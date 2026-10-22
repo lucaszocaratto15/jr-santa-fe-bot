@@ -55,6 +55,8 @@ export function createControlServer(options = {}) {
     const match = /^Bearer ([a-zA-Z0-9_-]{43})$/u.exec(request.headers.authorization ?? '');
     const session = match ? store.session(match[1]) : null;
     if (!session) throw httpError(401, 'invalid_session');
+    if (session.denied === 'employee_blocked') throw httpError(403, 'employee_blocked');
+    if (session.denied === 'outside_access_hours') throw httpError(403, 'outside_access_hours');
     return session;
   };
   let closing;
@@ -90,14 +92,26 @@ export function createControlServer(options = {}) {
           if (request.method === 'POST' && path === '/admin/invites') {
             const body = await readJson(request, 16_384);
             authenticate(request);
-            return json(response, 201, store.invite(textField(body.name, 1, 120)));
+            return json(response, 201, store.invite(textField(body.name, 1, 120), body));
           }
-          const employee = /^\/admin\/employees\/([a-zA-Z0-9-]{1,64})\/(revoke|invite)$/u.exec(path);
+          const employee = /^\/admin\/employees\/([a-zA-Z0-9-]{1,64})\/(revoke|invite|block|policy)$/u.exec(path);
           if (request.method === 'POST' && employee) {
             if (employee[2] === 'invite') return json(response, 201, store.renewInvite(employee[1]));
-            store.revoke(employee[1]);
+            if (employee[2] === 'revoke') {
+              store.revoke(employee[1]);
+              proxy.revokeUser(employee[1]);
+              return json(response, 200, { revoked: true });
+            }
+            const body = await readJson(request, 16_384);
+            authenticate(request);
+            if (employee[2] === 'block') {
+              const result = store.setBlocked(employee[1], body.blocked);
+              if (result.blocked) proxy.revokeUser(employee[1]);
+              return json(response, 200, result);
+            }
+            const result = store.updatePolicy(employee[1], body);
             proxy.revokeUser(employee[1]);
-            return json(response, 200, { revoked: true });
+            return json(response, 200, result);
           }
         }
         if (request.method === 'GET' && path === '/usage')
