@@ -73,8 +73,20 @@ vi.mock('@/renderer/pages/conversation/Messages/useAutoScroll', () => ({
 }));
 
 vi.mock('@/renderer/pages/conversation/Messages/components/MessageText', () => ({
-  default: ({ message, showCopyRow }: { message: IMessageText; showCopyRow?: boolean }) => (
-    <div data-testid={`msgtext-${message.id}`} data-copy-row={String(showCopyRow ?? true)}>
+  default: ({
+    message,
+    showCopyRow,
+    streaming,
+  }: {
+    message: IMessageText;
+    showCopyRow?: boolean;
+    streaming?: boolean;
+  }) => (
+    <div
+      data-testid={`msgtext-${message.id}`}
+      data-copy-row={String(showCopyRow ?? true)}
+      data-streaming={streaming ? '1' : '0'}
+    >
       {message.content.content}
     </div>
   ),
@@ -393,6 +405,45 @@ describe('MessageList', () => {
     expect(screen.getByTestId('msgtext-user-1').getAttribute('data-copy-row')).toBe('true');
     // Turn 2's only/last text keeps the row.
     expect(screen.getByTestId('msgtext-text-c').getAttribute('data-copy-row')).toBe('true');
+  });
+
+  it('marks only the assistant reply that is still arriving', () => {
+    mockIsProcessing = true;
+    const messages = [
+      { id: 'text-a', type: 'text', position: 'left', content: { content: 'finished earlier' }, created_at: 1 },
+      { id: 'user-1', type: 'text', position: 'right', content: { content: 'q' }, created_at: 2 },
+      { id: 'text-b', type: 'text', position: 'left', content: { content: 'still arriving' }, created_at: 3 },
+    ] as unknown as IMessageText[];
+
+    render(<MessageList />, {
+      wrapper: ({ children }) => <Wrapper messages={messages}>{children}</Wrapper>,
+    });
+
+    expect(screen.getByTestId('msgtext-text-a')).toHaveAttribute('data-streaming', '0');
+    expect(screen.getByTestId('msgtext-user-1')).toHaveAttribute('data-streaming', '0');
+    expect(screen.getByTestId('msgtext-text-b')).toHaveAttribute('data-streaming', '1');
+  });
+
+  it('leaves finished replies unmarked', () => {
+    const messages = [
+      { id: 'text-a', type: 'text', position: 'left', content: { content: 'done' }, created_at: 1 },
+    ] as unknown as IMessageText[];
+    render(<MessageList />, {
+      wrapper: ({ children }) => <Wrapper messages={messages}>{children}</Wrapper>,
+    });
+    expect(screen.getByTestId('msgtext-text-a')).toHaveAttribute('data-streaming', '0');
+  });
+
+  it('does not keep a caret on text once a tool call follows it', () => {
+    mockIsProcessing = true;
+    const messages = [
+      { id: 'text-a', type: 'text', position: 'left', content: { content: 'done' }, created_at: 1 },
+      { id: 'tool-1', type: 'tool_call', position: 'left', content: { content: 't' }, created_at: 2 },
+    ] as unknown as IMessageText[];
+    render(<MessageList />, {
+      wrapper: ({ children }) => <Wrapper messages={messages}>{children}</Wrapper>,
+    });
+    expect(screen.getByTestId('msgtext-text-a')).toHaveAttribute('data-streaming', '0');
   });
 
   it('withholds the streaming turn copy row but keeps earlier finished turns', () => {

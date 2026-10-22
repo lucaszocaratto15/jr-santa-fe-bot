@@ -202,6 +202,10 @@ body[arco-theme='dark'] {
 .jr-bubble {
   box-sizing: border-box;
   color: var(--color-text-1);
+  /* A real text caret must never blink in a finished bubble. Selection stays on. */
+  caret-color: transparent;
+  user-select: text;
+  -webkit-user-select: text;
 }
 .jr-bubble-user {
   display: inline-block;
@@ -255,16 +259,6 @@ body[arco-theme='dark'] {
 .jr-working-dots i:nth-child(3) {
   animation-delay: 0.3s;
 }
-body[data-jr-streaming='1'] .jr-bubble-assistant::after {
-  content: '';
-  display: inline-block;
-  width: 2px;
-  height: 1em;
-  margin-inline-start: 2px;
-  background: currentColor;
-  vertical-align: text-bottom;
-  animation: jr-caret 1s steps(1) infinite;
-}
 .app-shell .sendbox-panel {
   border-radius: 24px;
   background: var(--jr-surface-2);
@@ -293,11 +287,6 @@ body[data-jr-streaming='1'] .jr-bubble-assistant::after {
   50% {
     opacity: 1;
     transform: scale(1);
-  }
-}
-@keyframes jr-caret {
-  50% {
-    opacity: 0;
   }
 }
 body[arco-theme='dark'] .color-black,
@@ -332,8 +321,7 @@ body:not([arco-theme='dark']) .jr-bubble-assistant {
 }
 @media (prefers-reduced-motion: reduce) {
   .jr-message-in,
-  .jr-working-dots i,
-  body[data-jr-streaming='1'] .jr-bubble-assistant::after {
+  .jr-working-dots i {
     animation: none;
   }
 }

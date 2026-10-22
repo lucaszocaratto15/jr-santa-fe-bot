@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createInitStyle } from '@renderer/components/Markdown/ShadowView';
 
@@ -57,5 +59,21 @@ describe('createInitStyle heading inline-markup sizing', () => {
     // Same (0,0,1) specificity as `strong` — source order is what lets
     // font-weight: inherit win inside a heading.
     expect(inheritance).toBeGreaterThan(strongReset);
+  });
+});
+
+describe('streaming caret', () => {
+  it('draws the caret inline at the end of the streaming text inside the shadow', () => {
+    const css = createInitStyle('light').innerHTML;
+    expect(css).toContain('.markdown-shadow-body.markdown-streaming > :last-child:not(:has(> *))::after');
+    expect(css).toContain('display: inline-block');
+    expect(css).toContain('animation: jr-caret 1s steps(1) infinite');
+  });
+
+  it('does not paint that caret on every assistant bubble', () => {
+    const css = readFileSync(resolve('packages/desktop/src/renderer/styles/jr.css'), 'utf8');
+    expect(css).not.toContain('jr-bubble-assistant::after');
+    expect(css).toMatch(/\.jr-bubble\s*\{[^}]*caret-color:\s*transparent/);
+    expect(css).toMatch(/\.jr-bubble\s*\{[^}]*user-select:\s*text/);
   });
 });

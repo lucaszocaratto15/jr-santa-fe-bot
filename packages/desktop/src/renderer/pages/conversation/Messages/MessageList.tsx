@@ -219,6 +219,25 @@ const MessageListSkeleton: React.FC<{ rowWidthClass: string }> = ({ rowWidthClas
   );
 };
 
+/** The assistant text still receiving tokens. Earlier bubbles, and a reply already followed by a tool, are finished. */
+function activeStreamingTextId(items: Array<{ type?: string; id?: string }>, processing: boolean): string | undefined {
+  if (!processing) return undefined;
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (item.type === 'artifact') continue;
+    if (item.type !== 'text' || !('position' in item) || item.position !== 'left') return undefined;
+    const content = 'content' in item && item.content && typeof item.content === 'object' ? item.content : null;
+    if (
+      content &&
+      (('teammateMessage' in content && content.teammateMessage) || ('cronMeta' in content && content.cronMeta))
+    ) {
+      return undefined;
+    }
+    return item.id;
+  }
+  return undefined;
+}
+
 const MessageItem: React.FC<{
   message: TMessage;
   highlighted?: boolean;
@@ -227,6 +246,7 @@ const MessageItem: React.FC<{
   isLastMessage?: boolean;
   hasForkAnchor?: boolean;
   turnTexts?: string[];
+  streaming?: boolean;
 }> = React.memo(
   HOC((props) => {
     const { message, highlighted, rowWidthClass } = props as {
@@ -261,6 +281,7 @@ const MessageItem: React.FC<{
       isLastMessage,
       hasForkAnchor,
       turnTexts,
+      streaming,
     }: {
       message: TMessage;
       highlighted?: boolean;
@@ -269,6 +290,7 @@ const MessageItem: React.FC<{
       isLastMessage?: boolean;
       hasForkAnchor?: boolean;
       turnTexts?: string[];
+      streaming?: boolean;
     }) => {
       const { t } = useTranslation();
       switch (message.type) {
@@ -280,6 +302,7 @@ const MessageItem: React.FC<{
               isLastMessage={isLastMessage}
               hasForkAnchor={hasForkAnchor}
               turnTexts={turnTexts}
+              streaming={streaming}
             ></MessageText>
           );
         case 'tips':
@@ -324,6 +347,7 @@ const MessageItem: React.FC<{
     prev.showCopyRow === next.showCopyRow &&
     prev.isLastMessage === next.isLastMessage &&
     prev.hasForkAnchor === next.hasForkAnchor &&
+    prev.streaming === next.streaming &&
     // Compare by content: the map is rebuilt per render, so reference equality
     // would defeat the memo for the one row that carries the copy button.
     (prev.turnTexts === next.turnTexts ||
@@ -472,6 +496,7 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
     () => collectAiCopyRows(processedList as TurnCopyItem[], isProcessing),
     [processedList, isProcessing]
   );
+  const streamingTextId = activeStreamingTextId(processedList, isProcessing);
 
   // The last REAL message in the visible timeline (pseudo entries like
   // file/tool summaries don't count). HEAD-fork backends (claude/ACP) only
@@ -721,6 +746,7 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
         isLastMessage={message.id === lastMessageId}
         hasForkAnchor={forkAnchoredIds.has(message.id)}
         turnTexts={aiTurnTextsById.get(message.id)}
+        streaming={message.id === streamingTextId}
       ></MessageItem>
     );
   };

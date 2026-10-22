@@ -104,7 +104,9 @@ const MessageText: React.FC<{
   /** All text segments of this message's turn, in order — the copy button
    * copies the whole reply, not just the segment it happens to sit on. */
   turnTexts?: string[];
-}> = ({ message, showCopyRow = true, isLastMessage = false, hasForkAnchor = false, turnTexts }) => {
+  /** This bubble is the one still receiving tokens. Finished replies stay unmarked. */
+  streaming?: boolean;
+}> = ({ message, showCopyRow = true, isLastMessage = false, hasForkAnchor = false, turnTexts, streaming = false }) => {
   const logos = useAgentLogos();
   // Filter think tags from content before rendering
   // 在渲染前过滤 think 标签
@@ -309,10 +311,12 @@ const MessageText: React.FC<{
           </div>
         )}
         <div
+          contentEditable={false}
           className={classNames('min-w-0 [&>p:first-child]:mt-0px [&>p:last-child]:mb-0px', {
             'jr-message-in jr-bubble jr-bubble-user': isUserMessage || cronMeta,
             'bg-3 p-6px md:p-8px': isTeammateMessage,
             'jr-message-in jr-bubble jr-bubble-assistant': !(isUserMessage || cronMeta || isTeammateMessage),
+            'jr-bubble-streaming': streaming && !(isUserMessage || cronMeta || isTeammateMessage),
           })}
           style={{
             ...(isTeammateMessage
@@ -339,7 +343,11 @@ const MessageText: React.FC<{
             </CollapsibleContent>
           ) : (
             <div data-testid='message-text-content'>
-              <MarkdownView codeStyle={CODE_STYLE} onLocalFileLink={handleLocalFileLink}>
+              <MarkdownView
+                codeStyle={CODE_STYLE}
+                onLocalFileLink={handleLocalFileLink}
+                streaming={streaming && !(isUserMessage || cronMeta || isTeammateMessage)}
+              >
                 {data}
               </MarkdownView>
             </div>

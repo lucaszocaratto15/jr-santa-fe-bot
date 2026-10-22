@@ -42,10 +42,21 @@ type MarkdownViewProps = {
   onLocalFileLink?: (path: string, reference?: LocalFileLinkReference) => void | Promise<void>;
   /** Enable raw HTML rendering in markdown content. Use with caution — only for trusted sources. */
   allowHtml?: boolean;
+  /** Inline caret at the end of the text. Only the message still receiving tokens. */
+  streaming?: boolean;
 };
 
 const MarkdownView: React.FC<MarkdownViewProps> = React.memo(
-  ({ hiddenCodeCopyButton, codeStyle, className, onRef, onLocalFileLink, allowHtml, children: childrenProp }) => {
+  ({
+    hiddenCodeCopyButton,
+    codeStyle,
+    className,
+    onRef,
+    onLocalFileLink,
+    allowHtml,
+    streaming = false,
+    children: childrenProp,
+  }) => {
     const { t } = useTranslation();
     const preview = useOptionalPreviewContext();
 
@@ -130,7 +141,7 @@ const MarkdownView: React.FC<MarkdownViewProps> = React.memo(
     return (
       <div className={classNames('relative w-full', className)}>
         <ShadowView>
-          <div ref={onRef} className='markdown-shadow-body'>
+          <div ref={onRef} className={classNames('markdown-shadow-body', { 'markdown-streaming': streaming })}>
             <ReactMarkdown
               remarkPlugins={MARKDOWN_REMARK_PLUGINS}
               rehypePlugins={rehypePlugins}

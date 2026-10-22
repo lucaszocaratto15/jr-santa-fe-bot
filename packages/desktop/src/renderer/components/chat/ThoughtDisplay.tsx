@@ -110,14 +110,6 @@ const ThoughtDisplay: React.FC<ThoughtDisplayProps> = ({
     return () => clearInterval(timer);
   }, [externalElapsedSource, startedAtMs, running, thought?.subject]);
 
-  useEffect(() => {
-    if (!running) return;
-    document.body.dataset.jrStreaming = '1';
-    return () => {
-      delete document.body.dataset.jrStreaming;
-    };
-  }, [running]);
-
   // Calculate final style based on style prop. The theme-aware gradient is
   // resolved via the `--thought-gradient` token so it follows light/dark and any
   // custom theme override.
