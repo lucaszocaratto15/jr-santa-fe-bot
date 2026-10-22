@@ -270,5 +270,5 @@
   "patchedDependencies": {
     "7zip-bin@5.2.0": "patches/7zip-bin@5.2.0.patch"
   },
-  "productName": "JR Santa Fé Bot"
+  "productName": "JR Bot"
 }

@@ -140,12 +140,16 @@
   color: var(--jr-on-brand) !important;
 }
 .admin {
-  max-width: 1024px;
+  min-height: 100%;
+  box-sizing: border-box;
+  max-width: 880px;
   margin: 0 auto;
-  padding: 40px;
+  padding: 48px 40px 56px;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 16px;
+  background: var(--jr-modal-content);
+  color: var(--color-text-1);
 }
 .heading {
   display: flex;
@@ -153,20 +157,54 @@
   justify-content: space-between;
   gap: 16px;
 }
-.heading h1,
+.pageTitle {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  color: var(--color-text-1);
+}
+.card,
+.person {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px 22px;
+  border: 1px solid var(--jr-hairline);
+  border-radius: 16px;
+  background: var(--jr-surface-2);
+}
+.cardTitle,
 .person h2 {
   margin: 0;
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--color-text-1);
+}
+.admin .hint {
+  text-align: start;
+  color: var(--color-text-3);
 }
 .inviteForm {
   display: flex;
   gap: 12px;
   align-items: end;
 }
-.field {
+.adminField {
   flex: 1;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  color: var(--color-text-2);
+  font-size: 13px;
+}
+.adminField :global(.arco-input),
+.adminField :global(.arco-input-inner-wrapper) {
+  min-height: 40px;
+  border-radius: 12px !important;
+  background: var(--jr-surface) !important;
+  border: 1px solid var(--jr-hairline) !important;
+  color: var(--color-text-1) !important;
 }
 .code {
   overflow-wrap: anywhere;
@@ -175,23 +213,16 @@
   background: var(--jr-brand-soft);
   border-radius: 8px;
   user-select: all;
-}
-.person {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 20px;
-  border: 1px solid var(--jr-border);
-  border-radius: 12px;
+  color: var(--color-text-1);
 }
 .actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 8px;
 }
 @media (max-width: 768px) {
   .admin {
-    padding: 24px;
+    padding: 24px 16px 40px;
   }
   .inviteForm {
     flex-direction: column;
@@ -200,5 +231,8 @@
   .heading {
     align-items: start;
     flex-direction: column;
+  }
+  .pageTitle {
+    font-size: 26px;
   }
 }

@@ -91,6 +91,22 @@ describe('company access state', () => {
     expect(store.write).not.toHaveBeenCalled();
   });
 
+  it('blocks the app and local agent when the administrator blocks an employee, then restores access after unblock', async () => {
+    const { controller, request, stopCore, configureCore, store } = setup(stored);
+    request.mockResolvedValueOnce(Response.json({ error: { code: 'employee_blocked' } }, { status: 403 }));
+    await controller.initialize();
+    expect(controller.state).toEqual({ status: 'blocked', user: null });
+    expect(stopCore).toHaveBeenCalledOnce();
+    expect(configureCore).not.toHaveBeenCalled();
+    expect(store.write).not.toHaveBeenCalled();
+
+    request.mockResolvedValueOnce(Response.json({ user }));
+    request.mockResolvedValueOnce(Response.json({ data: [{ id: 'MiniMax-M3.1-Flash' }] }));
+    await controller.accessStatus();
+    expect(controller.state).toEqual({ status: 'authenticated', user });
+    expect(configureCore).toHaveBeenCalledWith({ url: url + '/v1', token, model: 'MiniMax-M3.1-Flash' });
+  });
+
   it('rejects a different employee before configuring the core and sends the original binding to the server', async () => {
     const { controller, request, configureCore } = setup({ ...stored, token: null });
     await controller.initialize();

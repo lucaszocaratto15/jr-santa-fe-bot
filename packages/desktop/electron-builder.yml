@@ -1,5 +1,5 @@
 appId: br.com.jrsantafe.bot
-productName: JR Santa Fe Bot
+productName: JR Bot
 executableName: JRSantaFeBot
 copyright: Copyright © 2024 AionUi
 
@@ -130,6 +130,7 @@ nsis:
   differentialPackage: false
 
 mac:
+  executableName: JR Bot
   target:
     - dmg
     - zip

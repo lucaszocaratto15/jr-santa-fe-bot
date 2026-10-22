@@ -4,7 +4,7 @@ import { isAionrsAssistant } from '@/common/types/agent/assistantTypes';
 import { getClientBusinessSetting, setClientBusinessSetting } from '@/renderer/services/clientBusinessSettings';
 import type { JrAppearance } from '@/common/config/clientSettings';
 import { normalizeAppearance } from './botAppearance';
-import { isGmailServer } from './Connections/connections';
+import { connectionPayload, createChromeDraft, isGmailServer, isJrChromeServer } from './Connections/connections';
 import { toSessionMcpServer } from '@/renderer/hooks/mcp/catalog';
 import { getConversationOrNull } from '@/renderer/pages/conversation/utils/conversationCache';
 
@@ -13,12 +13,26 @@ export const JR_PROVIDER = 'JR MiniMax';
 
 export const JR_DEFAULT_INSTRUCTIONS =
   'Responda sempre em português do Brasil, inclusive nas mensagens de andamento. Seja claro e breve. Ajude nas tarefas de escritório e projetos desta pasta. Use as ferramentas necessárias e aguarde as confirmações de escrita e execução. Reaproveite resultados já obtidos. Se um campo não existir, informe a ausência sem repetir consultas equivalentes. Verifique cada resultado uma vez e conclua quando o pedido estiver atendido. Não apresente raciocínio interno como resposta.';
-export type JrBotInput = { name: string; instructions: string; workspace: string; appearance?: JrAppearance };
-export type JrBot = JrBotInput & { id: string };
+export type JrBotInput = {
+  name: string;
+  instructions: string;
+  workspace: string;
+  appearance?: JrAppearance;
+  learning?: string;
+  skillIds?: string[];
+  /** Defaults to on. Set false to leave Chrome out of this bot's conversation. */
+  useChrome?: boolean;
+};
+export type JrBot = JrBotInput & { id: string; teamSelectable?: boolean };
 
-export function validateJrBot(input: JrBotInput): 'name' | 'instructions' | 'workspace' | null {
+function instructionWithLearning(instructions: string, learning: string): string {
+  return learning ? `${instructions.trim()}\n\n## Aprendizados deste bot\n${learning}` : instructions;
+}
+
+export function validateJrBot(input: JrBotInput): 'name' | 'instructions' | 'learning' | 'workspace' | null {
   if (!input.name.trim() || input.name.trim().length > 80) return 'name';
   if (!input.instructions.trim() || input.instructions.length > 12000) return 'instructions';
+  if ((input.learning?.length ?? 0) > 12000) return 'learning';
   if (!/^(?:\/|[A-Za-z]:[\\/]|\\\\[^\\/]+[\\/][^\\/]+)/.test(input.workspace)) return 'workspace';
   return null;
 }
@@ -33,9 +47,13 @@ export async function listJrBots(): Promise<JrBot[]> {
     .map((assistant) => ({
       id: assistant.id,
       name: assistant.name,
-      instructions: assistant.context || '',
+      instructions: workspaces![assistant.id].instructions ?? assistant.context ?? '',
       workspace: workspaces![assistant.id].workspace,
       appearance: normalizeAppearance(workspaces![assistant.id].appearance),
+      learning: workspaces![assistant.id].learning ?? '',
+      skillIds: workspaces![assistant.id].skillIds ?? [],
+      useChrome: workspaces![assistant.id].useChrome !== false,
+      teamSelectable: assistant.team_selectable,
     }));
 }
 
@@ -50,9 +68,13 @@ export async function getJrBot(id: string): Promise<JrBot> {
   return {
     id,
     name: detail.profile.name,
-    instructions: detail.rules.content,
+    instructions: workspaces[id].instructions ?? detail.rules.content,
     workspace: workspaces[id].workspace,
     appearance: normalizeAppearance(workspaces[id].appearance),
+    learning: workspaces[id].learning ?? '',
+    skillIds: workspaces[id].skillIds ?? [],
+    useChrome: workspaces[id].useChrome !== false,
+    teamSelectable: detail.team_selectable,
   };
 }
 
@@ -60,6 +82,11 @@ export async function saveJrBot(input: JrBotInput, id?: string): Promise<JrBot> 
   const invalid = validateJrBot(input);
   if (invalid) throw new Error(`Invalid bot ${invalid}`);
   const name = input.name.trim();
+  const learning = input.learning?.trim() ?? '';
+  const skillIds = Array.from(
+    new Set((input.skillIds ?? []).filter((skill) => skill.trim()).map((skill) => skill.trim()))
+  );
+  const useChrome = input.useChrome !== false;
   const workspaces = (await getClientBusinessSetting('jr.botWorkspaces')) || {};
   const previous = id ? await getJrBot(id) : null;
   if (!id) {
@@ -70,6 +97,7 @@ export async function saveJrBot(input: JrBotInput, id?: string): Promise<JrBot> 
       name,
       agent_id: runtime.agent_id,
       avatar: '🤖',
+      defaults: { skills: { mode: 'fixed', value: skillIds } },
     });
     id = created.id;
   }
@@ -77,7 +105,7 @@ export async function saveJrBot(input: JrBotInput, id?: string): Promise<JrBot> 
     const written = await ipcBridge.fs.writeAssistantRule.invoke({
       assistant_id: id,
       locale: 'pt-BR',
-      content: input.instructions,
+      content: instructionWithLearning(input.instructions, learning),
     });
     if (!written) throw new Error('Bot instructions were not saved');
     if (previous)
@@ -85,16 +113,21 @@ export async function saveJrBot(input: JrBotInput, id?: string): Promise<JrBot> 
         id,
         name,
         avatar: '🤖',
+        defaults: { skills: { mode: 'fixed', value: skillIds } },
       });
     await setClientBusinessSetting('jr.botWorkspaces', {
       ...workspaces,
       [id]: {
         ...workspaces[id],
         workspace: input.workspace,
+        instructions: input.instructions,
+        learning,
+        skillIds,
+        useChrome,
         ...(input.appearance ? { appearance: normalizeAppearance(input.appearance) } : {}),
       },
     });
-    return { ...input, name, id };
+    return { ...input, name, learning, skillIds, useChrome, id };
   } catch (error) {
     if (!previous) {
       await ipcBridge.assistants.delete.invoke({ id });
@@ -102,11 +135,12 @@ export async function saveJrBot(input: JrBotInput, id?: string): Promise<JrBot> 
       await ipcBridge.fs.writeAssistantRule.invoke({
         assistant_id: id,
         locale: 'pt-BR',
-        content: previous.instructions,
+        content: instructionWithLearning(previous.instructions, previous.learning ?? ''),
       });
       await ipcBridge.assistants.update.invoke({
         id,
         name: previous.name,
+        defaults: { skills: { mode: 'fixed', value: previous.skillIds ?? [] } },
       });
     }
     throw error;
@@ -126,6 +160,20 @@ export function selectJrModel(providers: IProvider[]): TProviderWithModel | null
     (item) => item.name === JR_PROVIDER && item.enabled !== false && item.models.includes(JR_MODEL)
   );
   return provider ? { ...provider, api_key: '', use_model: JR_MODEL } : null;
+}
+
+/** Create or enable the app Chrome connector so a new bot can use it immediately. */
+async function ensureJrChromeServer(): Promise<void> {
+  const servers = await ipcBridge.mcpService.listServers.invoke();
+  const existing = servers.find(isJrChromeServer);
+  if (existing?.enabled) return;
+  if (existing) {
+    await ipcBridge.mcpService.toggleServer.invoke({ id: existing.id });
+    return;
+  }
+  const { cacheDir } = await ipcBridge.application.systemInfo.invoke();
+  const created = await ipcBridge.mcpService.createServer.invoke(connectionPayload(createChromeDraft(cacheDir)));
+  if (!created.enabled) await ipcBridge.mcpService.toggleServer.invoke({ id: created.id });
 }
 
 const openingConversations = new Map<string, Promise<TChatConversation>>();
@@ -177,19 +225,31 @@ async function resolveJrConversation(bot: JrBot): Promise<TChatConversation> {
   const history = await ipcBridge.database.getUserConversations.invoke({ limit: 10000 });
   const previous = history.items
     .filter(matchesBot)
-    .sort((a, b) => b.modified_at - a.modified_at || b.created_at - a.created_at)[0];
+    .toSorted((a, b) => b.modified_at - a.modified_at || b.created_at - a.created_at)[0];
   if (previous) return bind(previous);
   if (history.has_more) throw new Error('Conversation history is incomplete');
   const model = selectJrModel(await ipcBridge.mode.listProviders.invoke());
   if (!model) throw new Error('JR MiniMax connection is unavailable');
+  const includeChrome = bot.useChrome !== false;
+  if (includeChrome) {
+    try {
+      await ensureJrChromeServer();
+    } catch {
+      // Chrome is the default connector, but a missing runtime must not block the chat.
+    }
+  }
   // shortcut: Gmail OAuth is incomplete; admit it after real client authorization is supported.
   const servers = (await ipcBridge.mcpService.listServers.invoke()).filter(
-    (server) => server.enabled && !isGmailServer(server)
+    (server) => server.enabled && !isGmailServer(server) && (includeChrome || !isJrChromeServer(server))
   );
   const conversation = await ipcBridge.conversation.create.invoke({
     name: bot.name,
     model,
-    assistant: { id: bot.id, locale: 'pt-BR', conversation_overrides: { mcp_ids: servers.map((server) => server.id) } },
+    assistant: {
+      id: bot.id,
+      locale: 'pt-BR',
+      conversation_overrides: { skill_ids: bot.skillIds ?? [], mcp_ids: servers.map((server) => server.id) },
+    },
     extra: {
       workspace: bot.workspace,
       custom_workspace: true,

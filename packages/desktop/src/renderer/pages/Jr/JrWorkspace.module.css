@@ -397,6 +397,39 @@
   font-size: 13px;
   line-height: 18px;
 }
+.botSettings {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: start;
+}
+.botSettings > label {
+  color: var(--color-text-2);
+  font-size: 12px;
+}
+.skillHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.skillHeader > label {
+  color: var(--color-text-2);
+  font-size: 12px;
+}
+.skillToggle:global(.arco-btn) {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  color: var(--color-text-2);
+}
+.botHint {
+  margin: 0 0 4px;
+  color: var(--color-text-3);
+  font-size: 11px;
+  line-height: 1.45;
+}
 .shapePicker {
   width: min(100%, 272px);
   display: flex;
@@ -467,6 +500,8 @@
   line-height: 20px;
 }
 .characterDialog :global(.arco-modal-body) {
+  max-height: 75vh;
+  overflow-y: auto;
   padding: 16px 20px;
 }
 .characterDialog :global(.arco-modal-footer) {

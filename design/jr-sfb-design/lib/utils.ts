@@ -21,5 +21,8 @@ export function ensureLightMode() {
  * @returns The class string with dark mode classes removed
  */
 export function removeDarkClasses(className: string): string {
-  return className.split(' ').filter(cls => !cls.startsWith('dark:')).join(' ');
+  return className
+    .split(' ')
+    .filter((cls) => !cls.startsWith('dark:'))
+    .join(' ');
 }

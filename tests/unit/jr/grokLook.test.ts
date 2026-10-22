@@ -1,16 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import unoConfig from '../../../uno.config';
-import { groupBots, UNSECTIONED_ID, workspaceFolderLabel } from '@/renderer/pages/Jr/JrSidebar/groupBots';
-import { readSpellcheck, type KeyValueStore } from '@/renderer/pages/Jr/JrSidebar/preferences';
-import { setConnectorStatus } from '@/renderer/pages/Jr/JrSidebar/connectors';
 import {
-  quotaPercent,
-  quotaTone,
-  readUsageQuota,
-  renewalParts,
+  groupBots,
+  teamChatsForBots,
+  UNSECTIONED_ID,
+  workspaceFolderLabel,
+} from '@/renderer/pages/Jr/JrSidebar/groupBots';
+import { readSpellcheck, type KeyValueStore } from '@/renderer/pages/Jr/JrSidebar/preferences';
+import {
+  applyLiveConnectorStatus,
+  readConnectorRecords,
+  setConnectorStatus,
+} from '@/renderer/pages/Jr/JrSidebar/connectors';
+import {
+  readUsageConsumption,
+  reportedTokenUse,
   usageMeterFromSnapshot,
-  WEEKLY_LIMIT,
-  WINDOW_5H_LIMIT,
 } from '@/renderer/pages/Jr/JrSidebar/usageMeter';
 
 const memoryStore = (): KeyValueStore => {
@@ -69,38 +74,67 @@ describe('usageMeterFromSnapshot', () => {
   });
 });
 
-describe('readUsageQuota', () => {
-  const now = Date.parse('2026-10-22T18:00:00.000Z');
-
-  it('mocks the 5-hour and weekly ceilings when nothing was reported', () => {
-    const quota = readUsageQuota(null, now);
-    expect(quota.source).toBe('mock');
-    expect(quota.window5h).toMatchObject({ used: 0, limit: WINDOW_5H_LIMIT });
-    expect(quota.weekly.limit).toBe(WEEKLY_LIMIT);
-    expect(Date.parse(quota.window5h.resetAt)).toBeGreaterThan(now);
+describe('readUsageConsumption', () => {
+  it('shows zero consumption when nothing was reported', () => {
+    expect(readUsageConsumption(null)).toEqual({ last5h: 0, thisWeek: 0, total: 0 });
+    expect(readUsageConsumption(undefined)).toEqual({ last5h: 0, thisWeek: 0, total: 0 });
   });
 
-  it('maps used tokens onto the mock windows', () => {
-    const quota = readUsageQuota(
-      {
-        promptTokens: 2_400_000,
-        completionTokens: 600_000,
-        cachedPromptTokens: 0,
-        modelRequests: 4,
-        startedAt: '2026-10-22T14:00:00.000Z',
-      },
-      now
+  it('uses reported windows and the metered total without a ceiling', () => {
+    const snapshot = {
+      promptTokens: 40,
+      completionTokens: 10,
+      totalTokens: 15,
+      tokensLast5h: 6,
+      tokensThisWeek: 15,
+      cachedPromptTokens: 0,
+      modelRequests: 1,
+      startedAt: '2026-10-22T14:00:00.000Z',
+    };
+    expect(reportedTokenUse(snapshot)).toBe(15);
+    expect(readUsageConsumption(snapshot)).toEqual({ last5h: 6, thisWeek: 15, total: 15 });
+  });
+
+  it('leaves a missing window unreported instead of inventing a limit', () => {
+    const snapshot = {
+      promptTokens: 4,
+      completionTokens: 6,
+      totalTokens: null,
+      cachedPromptTokens: 0,
+      modelRequests: 1,
+      startedAt: '2026-10-22T14:00:00.000Z',
+    };
+    expect(reportedTokenUse(snapshot)).toBe(10);
+    expect(readUsageConsumption(snapshot)).toEqual({ last5h: null, thisWeek: null, total: 10 });
+  });
+});
+
+describe('teamChatsForBots', () => {
+  it('keeps only teams whose members are all listed bots', () => {
+    const chats = teamChatsForBots(
+      [
+        { id: 'ok', assistants: [{ assistant_id: 'a' }, { assistant_id: 'b' }] },
+        { id: 'short', assistants: [{ assistant_id: 'a' }] },
+        { id: 'stranger', assistants: [{ assistant_id: 'a' }, { assistant_id: 'missing' }] },
+        { id: 'empty', assistants: [] },
+      ],
+      new Set(['a', 'b'])
     );
-    expect(quota.window5h.used).toBe(3_000_000);
-    expect(quotaPercent(quota.window5h.used, quota.window5h.limit)).toBe(100);
-    expect(quotaTone(100)).toBe('amber');
-    expect(quotaTone(80)).toBe('accent');
-    const parts = renewalParts(quota.weekly.resetAt, now);
-    expect(parts.days).toBeGreaterThan(0);
+    expect(chats.map((chat) => chat.id)).toEqual(['ok']);
   });
 });
 
 describe('connector mock', () => {
+  it('replaces gmail and chrome with live MCP status and leaves the other rows local', () => {
+    const store = memoryStore();
+    const stored = readConnectorRecords(store);
+    const live = applyLiveConnectorStatus(stored, { gmail: 'disconnected', chrome: 'connected' });
+    expect(live.find((item) => item.id === 'gmail')?.status).toBe('disconnected');
+    expect(live.find((item) => item.id === 'chrome')?.status).toBe('connected');
+    expect(live.find((item) => item.id === 'calendar')?.status).toBe('disconnected');
+    expect(readConnectorRecords(store).find((item) => item.id === 'gmail')?.status).toBe('connected');
+  });
+
   it('leaves the catalog unchanged for an unknown connector id', () => {
     const store = memoryStore();
     const before = setConnectorStatus('gmail', 'disconnected', store);

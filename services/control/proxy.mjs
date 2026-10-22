@@ -56,6 +56,20 @@ export function createModelProxy({ store, upstreamUrl, upstreamKey, model, upstr
         ) {
           throw httpError(400, 'invalid_request');
         }
+        const tokenPolicy = store.tokenPolicy(session.user.id);
+        if (tokenPolicy) {
+          if ([...active.values()].filter((entry) => entry.userId === session.user.id).length > 1)
+            throw httpError(429, 'token_limit_request_in_progress');
+          if (tokenPolicy.unmeteredRequests > 0) throw httpError(429, 'token_usage_unavailable');
+          if (tokenPolicy.remaining <= 0) throw httpError(429, 'token_limit_reached');
+          const requestedMax = body.max_completion_tokens ?? body.max_tokens;
+          const outputLimit =
+            Number.isSafeInteger(requestedMax) && requestedMax >= 0
+              ? Math.min(tokenPolicy.remaining, requestedMax)
+              : tokenPolicy.remaining;
+          body.max_tokens = outputLimit;
+          if (body.max_completion_tokens !== undefined) body.max_completion_tokens = outputLimit;
+        }
         const policy =
           'Responda sempre em português do Brasil, inclusive nas mensagens de andamento. Seja claro e breve. Não apresente raciocínio interno. Preserve literalmente arquivos, comandos, parâmetros, endereços e resultados das ferramentas. Mantenha todas as regras de confirmação e segurança anteriores.';
         const system = body.messages.find(

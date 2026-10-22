@@ -5,10 +5,58 @@ import { DatabaseSync } from 'node:sqlite';
 import { httpError } from './validation.mjs';
 
 const DAY = 86_400_000;
+const ACCESS_TIME_ZONE = 'America/Sao_Paulo';
 const hash = (value) => createHash('sha256').update(value).digest();
 const keyHash = (value) => hash(value).toString('hex');
 const iso = (value) => (value === null || value === undefined ? null : new Date(value).toISOString());
 const publicUser = (row) => ({ id: row.id, name: row.name, role: row.role });
+
+function clockMinutes(value) {
+  if (typeof value !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/u.test(value)) return null;
+  const [hour, minute] = value.split(':').map(Number);
+  return hour * 60 + minute;
+}
+
+function validatePolicy(value = {}) {
+  const tokenLimit = value.tokenLimit ?? null;
+  const accessStart = value.accessStart ?? null;
+  const accessEnd = value.accessEnd ?? null;
+  if (tokenLimit !== null && (!Number.isSafeInteger(tokenLimit) || tokenLimit < 0))
+    throw httpError(400, 'invalid_policy');
+  if (
+    (accessStart === null) !== (accessEnd === null) ||
+    (accessStart !== null && clockMinutes(accessStart) === null) ||
+    (accessEnd !== null && clockMinutes(accessEnd) === null) ||
+    (accessStart !== null && accessStart === accessEnd)
+  ) {
+    throw httpError(400, 'invalid_policy');
+  }
+  return { tokenLimit, accessStart, accessEnd };
+}
+
+function isWithinAccessHours(start, end, timestamp) {
+  if (start === null || end === null) return true;
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: ACCESS_TIME_ZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date(timestamp));
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const current = Number(values.hour) * 60 + Number(values.minute);
+  const lower = clockMinutes(start);
+  const upper = clockMinutes(end);
+  return lower < upper ? current >= lower && current < upper : current >= lower || current < upper;
+}
+
+/**
+ * Usage is reported only. The token_limit column and tokenPolicy() stay so a
+ * later decision can turn enforcement back on without a schema change.
+ */
+export const TOKEN_LIMITS_ENFORCED = false;
+
+const FIVE_HOURS_MS = 5 * 60 * 60 * 1000;
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** Open the private control database; only hashes and aggregate usage are persisted. */
 export function createStore({ databasePath, adminCode, model, now = Date.now }) {
@@ -23,7 +71,8 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
     PRAGMA journal_mode = WAL;
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY, name TEXT NOT NULL, role TEXT NOT NULL CHECK (role IN ('admin', 'employee')),
-      created_at INTEGER NOT NULL, revoked_at INTEGER
+      created_at INTEGER NOT NULL, revoked_at INTEGER, blocked_at INTEGER,
+      token_limit INTEGER, access_start TEXT, access_end TEXT
     );
     CREATE TABLE IF NOT EXISTS invites (
       hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), expires_at INTEGER NOT NULL, used_at INTEGER
@@ -40,6 +89,20 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
     );
     CREATE INDEX IF NOT EXISTS requests_user ON requests(user_id, started_at);
   `);
+  const userColumns = new Set(
+    db
+      .prepare('PRAGMA table_info(users)')
+      .all()
+      .map((column) => column.name)
+  );
+  for (const [name, type] of [
+    ['blocked_at', 'INTEGER'],
+    ['token_limit', 'INTEGER'],
+    ['access_start', 'TEXT'],
+    ['access_end', 'TEXT'],
+  ]) {
+    if (!userColumns.has(name)) db.exec(`ALTER TABLE users ADD COLUMN ${name} ${type}`);
+  }
   db.prepare("INSERT OR IGNORE INTO users (id,name,role,created_at) VALUES ('owner','Administrador','admin',?)").run(
     now()
   );
@@ -62,16 +125,26 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
     db.prepare('INSERT INTO invites (hash,user_id,expires_at) VALUES (?,?,?)').run(keyHash(code), userId, expiresAt);
     return { id: userId, code, expiresAt: iso(expiresAt) };
   };
+  const windowTokens = (sum, unmetered) => (unmetered > 0 && sum == null ? null : (sum ?? 0));
   const usageFor = (userId) => {
+    const timestamp = now();
+    const since5h = timestamp - FIVE_HOURS_MS;
+    const sinceWeek = timestamp - WEEK_MS;
     const row = db
       .prepare(`SELECT COUNT(*) AS requests, MIN(started_at) AS first_request, MAX(started_at) AS last_request,
       SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed,
       SUM(CASE WHEN prompt_tokens IS NOT NULL AND completion_tokens IS NOT NULL THEN 1 ELSE 0 END) AS metered,
       SUM(prompt_tokens) AS prompt, SUM(completion_tokens) AS completion, SUM(cached_prompt_tokens) AS cached,
       AVG(CASE WHEN finished_at IS NOT NULL THEN MAX(0, finished_at-started_at) END) AS latency,
-      AVG(first_byte_ms) AS first_byte
+      AVG(first_byte_ms) AS first_byte,
+      SUM(CASE WHEN started_at >= ? AND prompt_tokens IS NOT NULL AND completion_tokens IS NOT NULL
+        THEN prompt_tokens + completion_tokens END) AS tokens_5h,
+      SUM(CASE WHEN started_at >= ? AND (prompt_tokens IS NULL OR completion_tokens IS NULL) THEN 1 ELSE 0 END) AS unmetered_5h,
+      SUM(CASE WHEN started_at >= ? AND prompt_tokens IS NOT NULL AND completion_tokens IS NOT NULL
+        THEN prompt_tokens + completion_tokens END) AS tokens_week,
+      SUM(CASE WHEN started_at >= ? AND (prompt_tokens IS NULL OR completion_tokens IS NULL) THEN 1 ELSE 0 END) AS unmetered_week
       FROM requests WHERE user_id = ?`)
-      .get(userId);
+      .get(since5h, since5h, sinceWeek, sinceWeek, userId);
     if (row.requests === 0) return null;
     return {
       startedAt: iso(row.first_request),
@@ -83,6 +156,12 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
       unmeteredRequests: row.requests - row.metered,
       promptTokens: row.prompt,
       completionTokens: row.completion,
+      totalTokens:
+        row.metered === row.requests && row.prompt !== null && row.completion !== null
+          ? row.prompt + row.completion
+          : null,
+      tokensLast5h: windowTokens(row.tokens_5h, row.unmetered_5h),
+      tokensThisWeek: windowTokens(row.tokens_week, row.unmetered_week),
       cachedPromptTokens: row.cached,
       averageLatencyMs: row.latency === null ? null : Math.round(row.latency),
       averageFirstByteMs: row.first_byte === null ? null : Math.round(row.first_byte),
@@ -105,6 +184,9 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
         }
         if (!user) throw httpError(401, 'invalid_credentials');
         if (employeeId && user.id !== employeeId) throw httpError(403, 'device_bound_to_other_employee');
+        if (user.blocked_at !== null) throw httpError(403, 'employee_blocked');
+        if (!isWithinAccessHours(user.access_start, user.access_end, timestamp))
+          throw httpError(403, 'outside_access_hours');
         if (!isOwner) db.prepare('UPDATE invites SET used_at = ? WHERE hash = ?').run(timestamp, user.invite_hash);
         const token = randomBytes(32).toString('base64url');
         db.prepare(
@@ -117,20 +199,31 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
       if (typeof token !== 'string' || !/^[a-zA-Z0-9_-]{43}$/u.test(token)) return null;
       const sessionHash = keyHash(token);
       const user = db
-        .prepare(`SELECT users.* FROM sessions JOIN users ON users.id = sessions.user_id
+        .prepare(`SELECT users.*, sessions.hash AS session_hash FROM sessions JOIN users ON users.id = sessions.user_id
         WHERE sessions.hash = ? AND sessions.revoked_at IS NULL AND sessions.expires_at > ? AND users.revoked_at IS NULL`)
         .get(sessionHash, now());
       if (!user) return null;
+      if (user.blocked_at !== null) return { denied: 'employee_blocked' };
+      if (!isWithinAccessHours(user.access_start, user.access_end, now())) return { denied: 'outside_access_hours' };
       db.prepare('UPDATE sessions SET last_seen_at = ? WHERE hash = ?').run(now(), sessionHash);
-      return { user: publicUser(user), sessionHash };
+      return { user: publicUser(user), sessionHash: user.session_hash };
     },
     logout(sessionHash) {
       db.prepare('UPDATE sessions SET revoked_at = ? WHERE hash = ?').run(now(), sessionHash);
     },
-    invite(name) {
+    invite(name, input = {}) {
+      const policy = validatePolicy(input);
       return transaction(() => {
         const id = randomUUID();
-        db.prepare("INSERT INTO users (id,name,role,created_at) VALUES (?,?,'employee',?)").run(id, name, now());
+        db.prepare(`INSERT INTO users (id,name,role,created_at,token_limit,access_start,access_end)
+          VALUES (?,?,'employee',?,?,?,?)`).run(
+          id,
+          name,
+          now(),
+          policy.tokenLimit,
+          policy.accessStart,
+          policy.accessEnd
+        );
         return issueInvite(id);
       });
     },
@@ -152,6 +245,45 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
         db.prepare('DELETE FROM invites WHERE user_id = ?').run(id);
       });
     },
+    setBlocked(id, blocked) {
+      if (typeof blocked !== 'boolean') throw httpError(400, 'invalid_request');
+      return transaction(() => {
+        const user = db.prepare("SELECT * FROM users WHERE id = ? AND role = 'employee'").get(id);
+        if (!user) throw httpError(404, 'not_found');
+        if (user.revoked_at !== null) throw httpError(409, 'employee_revoked');
+        const blockedAt = blocked ? (user.blocked_at ?? now()) : null;
+        db.prepare('UPDATE users SET blocked_at = ? WHERE id = ?').run(blockedAt, id);
+        return { blocked };
+      });
+    },
+    updatePolicy(id, input) {
+      const policy = validatePolicy(input);
+      return transaction(() => {
+        const user = db.prepare("SELECT * FROM users WHERE id = ? AND role = 'employee'").get(id);
+        if (!user) throw httpError(404, 'not_found');
+        if (user.revoked_at !== null) throw httpError(409, 'employee_revoked');
+        db.prepare('UPDATE users SET token_limit = ?, access_start = ?, access_end = ? WHERE id = ?').run(
+          policy.tokenLimit,
+          policy.accessStart,
+          policy.accessEnd,
+          id
+        );
+        return policy;
+      });
+    },
+    tokenPolicy(userId) {
+      if (!TOKEN_LIMITS_ENFORCED) return null;
+      const row = db.prepare('SELECT token_limit FROM users WHERE id = ?').get(userId);
+      if (!row || row.token_limit === null) return null;
+      const usage = usageFor(userId);
+      const used = usage?.totalTokens ?? 0;
+      return {
+        limit: row.token_limit,
+        used,
+        remaining: Math.max(0, row.token_limit - used),
+        unmeteredRequests: usage?.unmeteredRequests ?? 0,
+      };
+    },
     employees() {
       return db
         .prepare("SELECT * FROM users WHERE role = 'employee' ORDER BY created_at,id")
@@ -161,6 +293,11 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
           createdAt: iso(row.created_at),
           revoked: row.revoked_at !== null,
           revokedAt: iso(row.revoked_at),
+          blocked: row.blocked_at !== null,
+          blockedAt: iso(row.blocked_at),
+          tokenLimit: row.token_limit,
+          accessStart: row.access_start,
+          accessEnd: row.access_end,
           devices: db
             .prepare(
               'SELECT device_id,device_name,last_seen_at,expires_at,revoked_at FROM sessions WHERE user_id = ? ORDER BY last_seen_at DESC'

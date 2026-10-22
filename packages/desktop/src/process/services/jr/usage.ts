@@ -31,9 +31,18 @@ export function parseJrConnectionStatus(value: unknown): JrConnectionStatus {
     startedAt: raw.startedAt,
     promptTokens: raw.promptTokens as number | null,
     completionTokens: raw.completionTokens as number | null,
+    ...(raw.totalTokens === undefined ? {} : { totalTokens: raw.totalTokens as number | null }),
     cachedPromptTokens: raw.cachedPromptTokens as number | null,
     modelRequests: raw.modelRequests,
   };
+  if (raw.totalTokens !== undefined && raw.totalTokens !== null && !counter(raw.totalTokens))
+    throw new Error('Invalid reported usage');
+  for (const key of ['tokensLast5h', 'tokensThisWeek'] as const) {
+    if (raw[key] !== undefined) {
+      if (raw[key] !== null && !counter(raw[key])) throw new Error('Invalid reported usage');
+      usage[key] = raw[key] as number | null;
+    }
+  }
   for (const key of ['requests', 'completedRequests', 'meteredRequests', 'unmeteredRequests'] as const) {
     if (raw[key] !== undefined) {
       if (!counter(raw[key])) throw new Error('Invalid reported usage');

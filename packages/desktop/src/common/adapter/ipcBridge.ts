@@ -173,9 +173,19 @@ export const jr = {
   personalUsage: bridge.buildProvider<JrConnectionStatus, void>('jr-personal-usage'),
   admin: {
     list: bridge.buildProvider<JrEmployee[], void>('jr-admin-list'),
-    createInvite: bridge.buildProvider<JrInvite, { name: string }>('jr-admin-create-invite'),
+    createInvite: bridge.buildProvider<
+      JrInvite,
+      { name: string; tokenLimit?: number | null; accessStart?: string | null; accessEnd?: string | null }
+    >('jr-admin-create-invite'),
     reissue: bridge.buildProvider<JrInvite, { employeeId: string }>('jr-admin-reissue-invite'),
     revoke: bridge.buildProvider<void, { employeeId: string }>('jr-admin-revoke'),
+    setBlocked: bridge.buildProvider<{ blocked: boolean }, { employeeId: string; blocked: boolean }>(
+      'jr-admin-set-blocked'
+    ),
+    updatePolicy: bridge.buildProvider<
+      { tokenLimit: number | null; accessStart: string | null; accessEnd: string | null },
+      { employeeId: string; tokenLimit: number | null; accessStart: string | null; accessEnd: string | null }
+    >('jr-admin-update-policy'),
   },
 };
 

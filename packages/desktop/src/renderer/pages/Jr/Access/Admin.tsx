@@ -36,7 +36,12 @@ const AdminContent: React.FC = () => {
     try {
       const result = employeeId
         ? await ipcBridge.jr.admin.reissue.invoke({ employeeId })
-        : await ipcBridge.jr.admin.createInvite.invoke({ name: name.trim() });
+        : await ipcBridge.jr.admin.createInvite.invoke({
+            name: name.trim(),
+            tokenLimit: null,
+            accessStart: null,
+            accessEnd: null,
+          });
       setInvite(result);
       if (!employeeId) setName('');
       void mutate().catch(() => {});
@@ -60,6 +65,19 @@ const AdminContent: React.FC = () => {
       setPending('');
     }
   };
+  const setBlocked = async (person: JrAdminEmployee) => {
+    if (pending || person.revoked) return;
+    setPending(person.id);
+    setFailed(false);
+    try {
+      await ipcBridge.jr.admin.setBlocked.invoke({ employeeId: person.id, blocked: !person.blocked });
+      await mutate();
+    } catch {
+      setFailed(true);
+    } finally {
+      setPending('');
+    }
+  };
   const copy = async () => {
     if (!invite) return;
     try {
@@ -72,32 +90,38 @@ const AdminContent: React.FC = () => {
   return (
     <main className={styles.admin}>
       <div className={styles.heading}>
-        <h1>{t('common.jr.access.adminTitle')}</h1>
-        <Button onClick={() => void mutate()}>{t('common.reload')}</Button>
-      </div>
-      <Alert type='info' content={t('common.jr.access.noLimit')} />
-      <div className={styles.inviteForm}>
-        <div className={styles.field}>
-          <label htmlFor='jr-employee-name'>{t('common.jr.access.employeeName')}</label>
-          <Input
-            id='jr-employee-name'
-            value={name}
-            onChange={setName}
-            maxLength={80}
-            disabled={Boolean(pending)}
-            onPressEnter={() => void generate()}
-          />
-        </div>
-        <Button
-          type='primary'
-          className={styles.primary}
-          loading={pending === 'invite'}
-          disabled={!name.trim() || Boolean(pending)}
-          onClick={() => void generate()}
-        >
-          {t('common.jr.access.generateCode')}
+        <h1 className={styles.pageTitle}>{t('common.jr.access.adminTitle')}</h1>
+        <Button shape='round' onClick={() => void mutate()}>
+          {t('common.reload')}
         </Button>
       </div>
+      <section className={styles.card}>
+        <h2 className={styles.cardTitle}>{t('common.jr.access.generateCode')}</h2>
+        <p className={styles.hint}>{t('common.jr.access.openAccess')}</p>
+        <div className={styles.inviteForm}>
+          <label className={styles.adminField} htmlFor='jr-employee-name'>
+            <span>{t('common.jr.access.employeeName')}</span>
+            <Input
+              id='jr-employee-name'
+              value={name}
+              onChange={setName}
+              maxLength={80}
+              disabled={Boolean(pending)}
+              onPressEnter={() => void generate()}
+            />
+          </label>
+          <Button
+            type='primary'
+            shape='round'
+            className={styles.primary}
+            loading={pending === 'invite'}
+            disabled={!name.trim() || Boolean(pending)}
+            onClick={() => void generate()}
+          >
+            {t('common.jr.access.generateCode')}
+          </Button>
+        </div>
+      </section>
       {failed && <Alert type='error' content={t('common.jr.access.actionError')} />}
       {invite && (
         <section className={styles.person} aria-label={t('common.jr.access.generatedCode')}>
@@ -125,8 +149,14 @@ const AdminContent: React.FC = () => {
           <article key={person.id} className={styles.person}>
             <div className={styles.heading}>
               <h2>{person.name}</h2>
-              <Tag color={person.revoked ? 'red' : 'green'}>
-                {t(person.revoked ? 'common.jr.access.revokedStatus' : 'common.jr.access.activeStatus')}
+              <Tag color={person.revoked ? 'red' : person.blocked ? 'orange' : 'green'}>
+                {t(
+                  person.revoked
+                    ? 'common.jr.access.revokedStatus'
+                    : person.blocked
+                      ? 'common.jr.access.blockedStatus'
+                      : 'common.jr.access.activeStatus'
+                )}
               </Tag>
             </div>
             <p className={styles.hint}>
@@ -136,6 +166,11 @@ const AdminContent: React.FC = () => {
                 requests: tokens(person.usage?.modelRequests),
               })}
             </p>
+            <p className={styles.hint}>
+              {t('common.jr.access.tokensUsed', {
+                used: tokens(person.usage?.totalTokens),
+              })}
+            </p>
             {!!person.devices?.length && (
               <p className={styles.hint}>
                 {t('common.jr.access.devices', { names: person.devices.map((device) => device.name).join(', ') })}
@@ -143,6 +178,13 @@ const AdminContent: React.FC = () => {
             )}
             {person.role === 'employee' && !person.revoked && (
               <div className={styles.actions}>
+                <Button
+                  disabled={Boolean(pending)}
+                  loading={pending === person.id}
+                  onClick={() => void setBlocked(person)}
+                >
+                  {t(person.blocked ? 'common.jr.access.unblockAction' : 'common.jr.access.blockAction')}
+                </Button>
                 <Button
                   disabled={Boolean(pending)}
                   loading={pending === person.id}

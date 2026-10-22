@@ -260,11 +260,19 @@ const SendBox: React.FC<{
   addToDraftDisabled?: boolean;
   addToDraftTooltip?: React.ReactNode;
   sendDisabledTooltip?: React.ReactNode;
+  /** Replaces the default send tooltip, including while a run is still active. */
+  sendTooltip?: React.ReactNode;
   slash_commands?: SlashCommandItem[];
   onSlashBuiltinCommand?: (name: string) => void;
   hasPendingAttachments?: boolean;
   enableBtw?: boolean;
   allowSendWhileLoading?: boolean;
+  /**
+   * Keep the stop control visible while the user composes the next message.
+   * The send control stays beside it and the caller decides whether that send
+   * queues or interrupts.
+   */
+  showStopWhileComposing?: boolean;
   compactActions?: boolean;
   selectedWorkspaceItems?: FileSelectionItem[];
   /** `@@` session references the user has picked. Authoritative; the visible
@@ -320,11 +328,13 @@ const SendBox: React.FC<{
   addToDraftDisabled = false,
   addToDraftTooltip,
   sendDisabledTooltip,
+  sendTooltip,
   slash_commands = [],
   onSlashBuiltinCommand,
   hasPendingAttachments = false,
   enableBtw = false,
   allowSendWhileLoading = false,
+  showStopWhileComposing = false,
   compactActions = false,
   selectedWorkspaceItems,
   selectedSessions,
@@ -1586,7 +1596,10 @@ const SendBox: React.FC<{
       message.warning(t('messages.conversationInProgress'));
       return;
     }
-    if (!input.trim() && domSnippets.length === 0) {
+    const canSendAttachmentsOnly = Boolean(
+      showStopWhileComposing && (isLoading || loading) && hasPendingAttachments && !input.trim()
+    );
+    if (!input.trim() && domSnippets.length === 0 && !canSendAttachmentsOnly) {
       return;
     }
     console.info('[sendbox]', {
@@ -1672,7 +1685,10 @@ const SendBox: React.FC<{
   );
   const { handleLiveTranscript } = useLiveTranscriptInsertion(speechDispatch.dispatch);
 
-  const hasDraftToSend = input.trim().length > 0 || domSnippets.length > 0;
+  const hasDraftToSend =
+    input.trim().length > 0 ||
+    domSnippets.length > 0 ||
+    Boolean(showStopWhileComposing && (isLoading || loading) && hasPendingAttachments);
 
   const addToDraftLabel = t('conversation.commandQueue.addToQueue', { defaultValue: 'Save to Draft box' });
   const sendNowLabel = t('conversation.commandQueue.sendNow', { defaultValue: 'Send now' });
@@ -1681,7 +1697,8 @@ const SendBox: React.FC<{
     defaultValue: isMacOS() ? '⌘ + Enter' : 'Ctrl + Enter',
   });
   const sendActionTooltip =
-    sendDisabled && sendDisabledTooltip ? sendDisabledTooltip : `${sendNowLabel} · ${enterShortcutLabel}`;
+    sendTooltip ??
+    (sendDisabled && sendDisabledTooltip ? sendDisabledTooltip : `${sendNowLabel} · ${enterShortcutLabel}`);
   const draftActionBaseTooltip = addToDraftTooltip ?? addToDraftLabel;
 
   const handlePrimaryAction = () => {
@@ -1776,11 +1793,21 @@ const SendBox: React.FC<{
       className='bg-animate sendbox-stop-button'
       icon={<div className='mx-auto size-12px bg-6'></div>}
       onClick={stopHandler}
+      aria-label={t('conversation.terminal.stop')}
+      data-testid='sendbox-stop-btn'
     ></Button>
   );
 
   const renderActionButtons = () => {
     if (allowSendWhileLoading && (isLoading || loading)) {
+      if (showStopWhileComposing) {
+        return (
+          <>
+            {stopButton}
+            {!compactActions && hasDraftToSend && !disabled && !isUploading ? primaryActionButton : null}
+          </>
+        );
+      }
       // Keep a single action slot while processing: show stop when the draft is empty,
       // and only switch back to send once the user has prepared a queued message.
       if (compactActions || !hasDraftToSend || disabled || isUploading) {

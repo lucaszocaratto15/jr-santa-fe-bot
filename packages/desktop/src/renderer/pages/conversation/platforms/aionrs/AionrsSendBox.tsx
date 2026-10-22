@@ -45,7 +45,6 @@ import { type ChatFileRef, isChatFileRef, uploadFileRef } from '@/common/types/c
 import { localSelectionItems, mergeFileSelectionItems } from '@/renderer/utils/file/fileSelection';
 import { collectChatFileRefs, splitChatFileRefs } from '@/renderer/utils/file/messageFiles';
 import { Button, Message, Tag } from '@arco-design/web-react';
-import { Lightning } from '@icon-park/react';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { classifyConversationBusyError } from '../conversationBusyError';
@@ -345,44 +344,32 @@ const AionrsSendBox: React.FC<{
   const [selectedSessions, setSelectedSessions] = useState<SessionRef[]>([]);
   const { enabled: crossSessionEnabled } = useCrossSessionMessageEnabled();
 
-  // aionrs backends never support mid-turn delivery: while the agent is
-  // replying, sending is hard-blocked with a toast instead of implicitly
-  // enqueuing. The only way to queue a message while busy is the explicit
-  // "add to queue" entry (handleAddToQueue below).
-  const onSendHandler = async (message: string): Promise<void | false> => {
-    if (isBusy) {
-      Message.warning(
-        t('conversation.commandQueue.midturnBlocked', {
-          defaultValue:
-            'This agent is still working, so the message can’t be sent directly. Save it to Draft box and send it later.',
-        })
-      );
-      return false;
-    }
-
-    const filesToSend = collectChatFileRefs(uploadFile, atPath);
-    const sessions = selectedSessions.length > 0 ? selectedSessions : undefined;
+  const releaseComposer = useCallback(() => {
+    setContent('');
     clearFiles();
     setSelectedSessions([]);
     emitter.emit('aionrs.selected.file.clear');
+  }, [clearFiles, setContent]);
+
+  // While a run is active, Send stores the draft — text and files — in the
+  // visible queue. The queue sends it when the run ends. Send now is the
+  // separate action that interrupts the run.
+  const onSendHandler = async (message: string): Promise<void | false> => {
+    const filesToSend = collectChatFileRefs(uploadFile, atPath);
+    const sessions = selectedSessions.length > 0 ? selectedSessions : undefined;
+    if (isBusy) {
+      const queued = enqueue({ input: message, files: filesToSend, sessions });
+      if (!queued) return false;
+      releaseComposer();
+      return;
+    }
+
+    releaseComposer();
     await executeCommand({ input: message, files: filesToSend, sessions });
   };
 
   const [interrupting, setInterrupting] = useState(false);
-  const handleInterruptSend = async () => {
-    if (!teamRuntime?.onInterruptSend || !content.trim() || interrupting) return;
-    const files = collectChatFileRefs(uploadFile, atPath);
-    const input = content;
-    setContent('');
-    clearFiles();
-    emitter.emit('aionrs.selected.file.clear');
-    setInterrupting(true);
-    try {
-      await teamRuntime.onInterruptSend({ input, files });
-    } finally {
-      setInterrupting(false);
-    }
-  };
+  const hasComposerDraft = content.trim().length > 0 || uploadFile.length > 0 || atPath.length > 0;
 
   // Explicit "add to queue" entry — visibility is keyed only to the user's
   // own input (non-empty draft), never to the agent's busy/replying state:
@@ -491,6 +478,27 @@ const AionrsSendBox: React.FC<{
     }
   };
   const effectiveHandleStop = teamRuntime?.onStop ?? handleStop;
+  const handleSendNow = async () => {
+    if (!hasComposerDraft || interrupting) return;
+    const files = collectChatFileRefs(uploadFile, atPath);
+    const input = content;
+    const sessions = selectedSessions.length > 0 ? selectedSessions : undefined;
+    setInterrupting(true);
+    try {
+      if (teamRuntime?.onInterruptSend && input.trim()) {
+        releaseComposer();
+        await teamRuntime.onInterruptSend({ input, files });
+        return;
+      }
+      const queued = enqueue({ input, files, sessions });
+      if (!queued) return;
+      releaseComposer();
+      await effectiveHandleStop();
+      prioritize(queued.id);
+    } finally {
+      setInterrupting(false);
+    }
+  };
   const handleSendNowQueued = useCallback(
     async (item: ConversationCommandQueueItem) => {
       // Stop the current reply (best-effort), then promote the chosen command
@@ -555,12 +563,10 @@ const AionrsSendBox: React.FC<{
         active={teamRuntime?.isActive}
         onFocused={teamRuntime?.onFocus}
         disabled={!current_model?.use_model}
-        sendDisabled={isBusy}
-        sendDisabledTooltip={
+        sendTooltip={
           isBusy
-            ? t('conversation.commandQueue.midturnBlockedSendHint', {
-                defaultValue:
-                  'The current agent is still working and cannot receive another message yet. Add it to Draft box instead.',
+            ? t('conversation.commandQueue.addToQueueBusyHint', {
+                defaultValue: 'Save to Draft box and send it later.',
               })
             : undefined
         }
@@ -643,16 +649,11 @@ const AionrsSendBox: React.FC<{
             : t('conversation.commandQueue.addToQueue', { defaultValue: 'Save to Draft box' })
         }
         allowSendWhileLoading
+        showStopWhileComposing
         sendButtonPrefix={
-          teamRuntime?.onInterruptSend && content.trim() ? (
-            <Button
-              size='mini'
-              type='secondary'
-              icon={<Lightning />}
-              loading={interrupting}
-              onClick={() => void handleInterruptSend()}
-            >
-              {t('team.interruptAndSend')}
+          isBusy && hasComposerDraft ? (
+            <Button size='mini' type='secondary' loading={interrupting} onClick={() => void handleSendNow()}>
+              {t('conversation.commandQueue.sendNow', { defaultValue: 'Send now' })}
             </Button>
           ) : undefined
         }

@@ -72,6 +72,32 @@ it('shows the service error under the code field when the code is rejected', asy
   expect(await screen.findByRole('alert')).toHaveTextContent('common.jr.access.invalidCode');
   expect(screen.queryByText('private content')).not.toBeInTheDocument();
 });
+it('shows a blocked login on the access card without opening the workspace', async () => {
+  mocks.login.mockRejectedValue(new Error('JR_ACCESS_BLOCKED'));
+  render(
+    <JrAccessGate>
+      <div>private content</div>
+    </JrAccessGate>
+  );
+  fireEvent.change(await screen.findByLabelText('common.jr.access.code'), { target: { value: 'bad-code' } });
+  fireEvent.click(screen.getByRole('button', { name: 'common.jr.access.enter' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('common.jr.access.blocked');
+  expect(screen.queryByText('private content')).not.toBeInTheDocument();
+});
+it('keeps the workspace closed when access is outside the allowed hours', async () => {
+  mocks.status.mockResolvedValue({ status: 'authenticated', user: { id: 'person', name: 'Pessoa', role: 'employee' } });
+  render(
+    <JrAccessGate>
+      <div>private content</div>
+    </JrAccessGate>
+  );
+  await screen.findByText('private content');
+  await act(async () => {
+    mocks.listener.mock.calls[0][0]({ status: 'outside-hours', user: null } satisfies JrAccessState);
+  });
+  expect(screen.queryByText('private content')).not.toBeInTheDocument();
+  expect(await screen.findByText('common.jr.access.outsideHours')).toBeInTheDocument();
+});
 it('keeps offline contents blocked and allows a new connection check', async () => {
   mocks.status.mockResolvedValue({ status: 'offline', user: null });
   render(

@@ -11,7 +11,19 @@ export type ImageGenerationModelSetting = TProviderWithModel & {
 
 export type ClientBusinessSettingMap = {
   'jr.botWorkspaces':
-    | Record<string, { workspace: string; appearance?: JrAppearance; conversationId?: string }>
+    | Record<
+        string,
+        {
+          workspace: string;
+          appearance?: JrAppearance;
+          conversationId?: string;
+          instructions?: string;
+          learning?: string;
+          skillIds?: string[];
+          /** Chrome is on unless a bot was saved with this set to false. */
+          useChrome?: boolean;
+        }
+      >
     | undefined;
   'google.config': GoogleClientSetting;
   'mcp.config': IMcpServer[] | undefined;
@@ -68,6 +80,11 @@ export type JrUsageSnapshot = {
   startedAt: string;
   promptTokens: number | null;
   completionTokens: number | null;
+  totalTokens?: number | null;
+  /** Reported tokens in the last 5 hours. Absent when the server did not send a window. */
+  tokensLast5h?: number | null;
+  /** Reported tokens in the last 7 days. Absent when the server did not send a window. */
+  tokensThisWeek?: number | null;
   cachedPromptTokens: number | null;
   modelRequests: number;
   requests?: number;
@@ -81,13 +98,27 @@ export type JrUsageSnapshot = {
 
 export type JrAccessUser = { id: string; name: string; role: 'admin' | 'employee' };
 export type JrAccessState = {
-  status: 'checking' | 'signed-out' | 'authenticated' | 'revoked' | 'offline' | 'unconfigured' | 'pilot';
+  status:
+    | 'checking'
+    | 'signed-out'
+    | 'authenticated'
+    | 'revoked'
+    | 'blocked'
+    | 'outside-hours'
+    | 'offline'
+    | 'unconfigured'
+    | 'pilot';
   user: JrAccessUser | null;
 };
 export type JrAdminEmployee = JrAccessUser & {
   revoked: boolean;
   createdAt: string;
   revokedAt: string | null;
+  blocked: boolean;
+  blockedAt: string | null;
+  tokenLimit: number | null;
+  accessStart: string | null;
+  accessEnd: string | null;
   devices: Array<{ id: string; name: string; lastSeenAt: string; expiresAt: string; revokedAt: string | null }>;
   usage: JrUsageSnapshot | null;
 };

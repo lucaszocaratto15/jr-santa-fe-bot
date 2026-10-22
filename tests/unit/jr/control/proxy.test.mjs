@@ -35,6 +35,8 @@ test('model proxy uses only configured credentials and records real non-stream u
   assert.equal(usage.promptTokens, 25);
   assert.equal(usage.completionTokens, 7);
   assert.equal(usage.cachedPromptTokens, 10);
+  assert.equal(usage.tokensLast5h, 32);
+  assert.equal(usage.tokensThisWeek, 32);
   assert.equal((await (await app.request('/usage', { token: owner.token })).json()).usage, null);
 });
 
@@ -68,6 +70,39 @@ test('usage remains unknown when provider omits counts and foreign models are re
   assert.equal(usage.promptTokens, null);
   assert.equal(usage.completionTokens, null);
   assert.equal(usage.unmeteredRequests, 1);
+});
+
+test('a stored token limit is kept but does not block further model requests', async (t) => {
+  let upstreamCalls = 0;
+  const app = await startControl(t, {
+    upstreamFetch: async () => {
+      upstreamCalls += 1;
+      return Response.json({ choices: [], usage: { prompt_tokens: 12, completion_tokens: 3 } });
+    },
+  });
+  const owner = await app.login();
+  const invitation = await app.invite(owner.token, 'Limite de tokens');
+  const employee = await app.login(invitation.code, 'token-limit');
+  const policy = await app.request(`/admin/employees/${invitation.id}/policy`, {
+    method: 'POST',
+    token: owner.token,
+    body: { tokenLimit: 15, accessStart: null, accessEnd: null },
+  });
+  assert.equal(policy.status, 200);
+  const request = {
+    method: 'POST',
+    token: employee.token,
+    body: { messages: [{ role: 'user', content: 'Olá' }] },
+  };
+  assert.equal((await app.request('/v1/chat/completions', request)).status, 200);
+  const continued = await app.request('/v1/chat/completions', request);
+  assert.equal(continued.status, 200);
+  assert.equal(upstreamCalls, 2);
+  const usage = await (await app.request('/usage', { token: employee.token })).json();
+  assert.equal(usage.usage.totalTokens, 30);
+  assert.equal(usage.usage.tokensLast5h, 30);
+  const listed = await (await app.request('/admin/employees', { token: owner.token })).json();
+  assert.equal(listed.employees[0].tokenLimit, 15);
 });
 
 test('stream passes through UTF-8 and split SSE frames while recording the final cumulative usage once', async (t) => {

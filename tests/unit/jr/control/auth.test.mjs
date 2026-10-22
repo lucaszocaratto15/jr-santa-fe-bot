@@ -106,6 +106,80 @@ test('revocation immediately blocks existing sessions and unused invites without
   assert.equal((await app.request('/auth/session', { token: owner.token })).status, 200);
 });
 
+test('administrator can temporarily block and restore an employee without consuming a new invitation', async (t) => {
+  let upstreamCalls = 0;
+  const app = await startControl(t, {
+    upstreamFetch: async () => {
+      upstreamCalls += 1;
+      return Response.json({ choices: [], usage: { prompt_tokens: 2, completion_tokens: 1 } });
+    },
+  });
+  const owner = await app.login();
+  const invitation = await app.invite(owner.token, 'Bloqueio temporário');
+  const employee = await app.login(invitation.code, 'temporary-block');
+  const block = await app.request(`/admin/employees/${invitation.id}/block`, {
+    method: 'POST',
+    token: owner.token,
+    body: { blocked: true },
+  });
+  assert.equal(block.status, 200);
+  assert.deepEqual(await block.json(), { blocked: true });
+  for (const response of [
+    await app.request('/auth/session', { token: employee.token }),
+    await app.request('/v1/chat/completions', {
+      method: 'POST',
+      token: employee.token,
+      body: { messages: [{ role: 'user', content: 'Olá' }] },
+    }),
+  ]) {
+    assert.equal(response.status, 403);
+    assert.deepEqual(await response.json(), { error: { code: 'employee_blocked' } });
+  }
+  assert.equal(upstreamCalls, 0);
+  const listed = await (await app.request('/admin/employees', { token: owner.token })).json();
+  assert.equal(listed.employees[0].blocked, true);
+  assert.ok(listed.employees[0].blockedAt);
+  const unblock = await app.request(`/admin/employees/${invitation.id}/block`, {
+    method: 'POST',
+    token: owner.token,
+    body: { blocked: false },
+  });
+  assert.equal(unblock.status, 200);
+  assert.deepEqual(await unblock.json(), { blocked: false });
+  assert.equal((await app.request('/auth/session', { token: employee.token })).status, 200);
+});
+
+test('administrator can set and edit token limits and daily access hours', async (t) => {
+  let timestamp = Date.parse('2026-10-22T15:00:00Z');
+  const app = await startControl(t, { now: () => timestamp });
+  const owner = await app.login();
+  const invitation = await app.invite(owner.token, 'Horário e limite');
+  const employee = await app.login(invitation.code, 'schedule-policy');
+  const policy = await app.request(`/admin/employees/${invitation.id}/policy`, {
+    method: 'POST',
+    token: owner.token,
+    body: { tokenLimit: 9000, accessStart: '13:00', accessEnd: '18:00' },
+  });
+  assert.equal(policy.status, 200);
+  const list = await (await app.request('/admin/employees', { token: owner.token })).json();
+  assert.equal(list.employees[0].tokenLimit, 9000);
+  assert.equal(list.employees[0].accessStart, '13:00');
+  assert.equal(list.employees[0].accessEnd, '18:00');
+  assert.equal((await app.request('/auth/session', { token: employee.token })).status, 403);
+  timestamp += 60 * 60_000;
+  assert.equal((await app.request('/auth/session', { token: employee.token })).status, 200);
+  const edited = await app.request(`/admin/employees/${invitation.id}/policy`, {
+    method: 'POST',
+    token: owner.token,
+    body: { tokenLimit: null, accessStart: null, accessEnd: null },
+  });
+  assert.equal(edited.status, 200);
+  const cleared = await (await app.request('/admin/employees', { token: owner.token })).json();
+  assert.equal(cleared.employees[0].tokenLimit, null);
+  assert.equal(cleared.employees[0].accessStart, null);
+  assert.equal(cleared.employees[0].accessEnd, null);
+});
+
 test('invites expire after seven days and sessions expire after thirty days', async (t) => {
   let timestamp = Date.parse('2026-10-22T12:00:00Z');
   const app = await startControl(t, { now: () => timestamp });

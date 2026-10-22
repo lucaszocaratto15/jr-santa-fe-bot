@@ -48,6 +48,9 @@ vi.mock('@/renderer/hooks/context/ThemeContext', () => ({
 vi.mock('@/renderer/pages/Jr/Access/context', () => ({
   useJrAccess: () => ({ state: { status: 'active', user: mocks.user }, logout: mocks.logout }),
 }));
+vi.mock('@renderer/hooks/context/AuthContext', () => ({
+  useAuth: () => ({ user: { id: 'employee-1', username: 'func' } }),
+}));
 vi.mock('@/renderer/pages/conversation/GroupedHistory/ConversationSearchPopover', () => ({
   default: ({
     renderTrigger,
