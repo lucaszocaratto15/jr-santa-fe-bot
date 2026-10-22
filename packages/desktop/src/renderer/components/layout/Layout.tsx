@@ -39,7 +39,7 @@ import { isElectronDesktop } from '@renderer/utils/platform';
 import { IS_DISCONTINUED_BUILD } from '@/renderer/utils/discontinuedBuild';
 import UpdateMigrationDialog from '@/renderer/components/settings/UpdateMigrationDialog';
 import '@renderer/styles/layout.css';
-import jrLogo from '@renderer/assets/logos/jr-logo.png';
+import { JrLogo } from '@renderer/pages/Jr/JrCharacter';
 
 const SidebarIcon: React.FC<{ size?: number; strokeWidth?: number }> = ({ size = 18, strokeWidth = 4 }) => (
   <svg
@@ -92,7 +92,7 @@ const useDebug = () => {
 
 const UpdateModal = React.lazy(() => import('@/renderer/components/settings/UpdateModal'));
 
-const DEFAULT_SIDER_WIDTH = 280;
+const DEFAULT_SIDER_WIDTH = 270;
 const DESKTOP_COLLAPSED_WIDTH = 0;
 // Match the reference sidebar's 240–400px range; dragging below the minimum collapses it.
 const SIDER_MIN_WIDTH = 240;
@@ -377,12 +377,7 @@ const Layout: React.FC<{
                 )}
               >
                 <div className='jr-brand-symbol' onClick={onClick}>
-                  <div
-                    role='img'
-                    aria-label={t('common.jr.companyName')}
-                    className='jr-brand-logo'
-                    style={{ maskImage: `url("${jrLogo}")` }}
-                  />
+                  <JrLogo height={28} className='jr-brand-logo' />
                 </div>
                 {isMobile && !collapsed && (
                   <Button

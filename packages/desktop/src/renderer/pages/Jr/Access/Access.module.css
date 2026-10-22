@@ -21,12 +21,11 @@
   text-align: center;
 }
 .brand {
-  height: 48px;
-  width: 60px;
-  background: var(--jr-logo);
-  mask-size: 144px 48px;
-  mask-repeat: no-repeat;
+  height: auto;
+  width: auto;
+  max-width: 220px;
   align-self: center;
+  background: none;
 }
 .hint {
   margin: 0;

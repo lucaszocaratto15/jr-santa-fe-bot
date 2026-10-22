@@ -139,16 +139,44 @@ vi.mock('@/renderer/utils/ui/clipboard', () => ({
   copyText: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('@arco-design/web-react', () => ({
-  Alert: () => null,
-  Message: {
-    error: vi.fn(),
-  },
-  Tooltip: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
-}));
+vi.mock('@arco-design/web-react', () => {
+  const Menu = ({ children }: { children?: React.ReactNode }) => <div>{children}</div>;
+  Menu.Item = ({ children, onClick }: { children?: React.ReactNode; onClick?: () => void }) => (
+    <button type='button' onClick={onClick}>
+      {children}
+    </button>
+  );
+  return {
+    Alert: () => null,
+    Button: ({
+      children,
+      onClick,
+      icon,
+      'aria-label': ariaLabel,
+    }: {
+      children?: React.ReactNode;
+      onClick?: () => void;
+      icon?: React.ReactNode;
+      'aria-label'?: string;
+    }) => (
+      <button type='button' aria-label={ariaLabel} onClick={onClick}>
+        {icon}
+        {children}
+      </button>
+    ),
+    Dropdown: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+    Menu,
+    Message: {
+      error: vi.fn(),
+    },
+    Tooltip: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+  };
+});
 
 vi.mock('@icon-park/react', () => ({
   Copy: () => <span data-testid='copy-icon' />,
+  ThumbsUp: () => <span data-testid='react-icon' />,
+  Comment: () => <span data-testid='reply-icon' />,
 }));
 
 vi.mock('react-i18next', () => ({

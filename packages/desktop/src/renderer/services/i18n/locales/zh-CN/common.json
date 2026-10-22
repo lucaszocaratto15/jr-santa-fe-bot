@@ -423,6 +423,88 @@
       "deviceBound": "Este computador está vinculado a outro funcionário. Peça ajuda ao administrador.",
       "storageUnavailable": "Não foi possível proteger o acesso neste sistema. Peça ajuda ao administrador para configurar o armazenamento seguro."
     },
+    "executing": "Working",
+    "look": {
+      "unsectioned": "No folder",
+      "closeSettings": "Close settings",
+      "settingsNav": "Settings",
+      "tabs": {
+        "general": "General",
+        "computer": "Computer",
+        "usage": "Usage and billing",
+        "updates": "Updates",
+        "connectors": "Connectors"
+      },
+      "generalTitle": "General",
+      "account": "Account",
+      "appearance": "Appearance",
+      "theme": "Theme",
+      "themeSystem": "Follow system",
+      "themeLight": "Light",
+      "themeDark": "Dark",
+      "accent": "Accent",
+      "accentBot": "JR Bot",
+      "language": "Language",
+      "languagePt": "Portuguese (Brazil)",
+      "spellcheck": "Spellcheck",
+      "computerTitle": "Computer",
+      "yourComputer": "This computer",
+      "computerMock": "Computer name unavailable",
+      "execution": "Execution",
+      "executionHint": "How the bot asks before acting on this computer.",
+      "allowAlways": "Always allow",
+      "askAlways": "Always ask",
+      "routeTraffic": "Route traffic",
+      "routeTrafficHint": "Saved on this computer. It does not change the bot engine yet.",
+      "botComputer": "Bot computer",
+      "updateBotComputer": "Update the bot computer",
+      "updateBotComputerHint": "Keeps this app aligned with the company version.",
+      "upToDateBanner": "This computer is up to date.",
+      "usageTitle": "Usage and billing",
+      "sessionUsage": "Reported usage",
+      "inputShare": "Input {{percent}}%",
+      "outputShare": "Output {{percent}}%",
+      "noUsage": "No usage has been reported for this session yet.",
+      "requestsLabel": "Requests",
+      "tokensLabel": "Tokens",
+      "usageCaption": "These numbers are reported usage. This screen has no weekly quota or reset date.",
+      "updatesTitle": "Updates",
+      "checking": "Checking for updates…",
+      "versionLabel": "Version {{version}}",
+      "checkUpdates": "Check for updates",
+      "connectorsTitle": "Connectors",
+      "connectorsIntro": "Services the bot can use once they are connected.",
+      "mockNote": "Connection status on this screen stays on this computer until the integration is ready.",
+      "connect": "Connect",
+      "disconnect": "Disconnect",
+      "connected": "Connected",
+      "disconnected": "Disconnected",
+      "advancedConnections": "Advanced connections",
+      "react": "React",
+      "reply": "Reply",
+      "connector": {
+        "gmail": {
+          "name": "Gmail",
+          "description": "Read and draft mail from the connected account."
+        },
+        "chrome": {
+          "name": "Chrome",
+          "description": "Use the browser on this computer."
+        },
+        "calendar": {
+          "name": "Calendar",
+          "description": "See events from the connected calendar."
+        },
+        "files": {
+          "name": "Files",
+          "description": "Work with folders on this computer."
+        },
+        "whatsapp": {
+          "name": "WhatsApp",
+          "description": "Draft messages in the connected WhatsApp."
+        }
+      }
+    },
     "search": "Buscar",
     "newBot": "Novo Bot"
   }

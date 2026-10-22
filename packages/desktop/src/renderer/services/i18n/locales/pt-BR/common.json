@@ -423,6 +423,88 @@
       "deviceBound": "Este computador está vinculado a outro funcionário. Peça ajuda ao administrador.",
       "storageUnavailable": "Não foi possível proteger o acesso neste sistema. Peça ajuda ao administrador para configurar o armazenamento seguro."
     },
+    "executing": "Executando",
+    "look": {
+      "unsectioned": "Sem pasta",
+      "closeSettings": "Fechar configurações",
+      "settingsNav": "Configurações",
+      "tabs": {
+        "general": "Geral",
+        "computer": "Computador",
+        "usage": "Uso e cobrança",
+        "updates": "Atualizações",
+        "connectors": "Conectores"
+      },
+      "generalTitle": "Geral",
+      "account": "Conta",
+      "appearance": "Aparência",
+      "theme": "Tema",
+      "themeSystem": "Seguir o sistema",
+      "themeLight": "Claro",
+      "themeDark": "Escuro",
+      "accent": "Cor de destaque",
+      "accentBot": "Bot JR",
+      "language": "Idioma",
+      "languagePt": "Português (Brasil)",
+      "spellcheck": "Corretor ortográfico",
+      "computerTitle": "Computador",
+      "yourComputer": "Este computador",
+      "computerMock": "Nome do computador indisponível",
+      "execution": "Execução",
+      "executionHint": "Como o bot pede permissão antes de agir neste computador.",
+      "allowAlways": "Permitir sempre",
+      "askAlways": "Perguntar sempre",
+      "routeTraffic": "Rotear tráfego",
+      "routeTrafficHint": "Preferência neste computador. Ainda não altera o motor do bot.",
+      "botComputer": "Computador do bot",
+      "updateBotComputer": "Atualizar o computador do bot",
+      "updateBotComputerHint": "Mantém este aplicativo alinhado com a versão da empresa.",
+      "upToDateBanner": "Este computador está atualizado.",
+      "usageTitle": "Uso e cobrança",
+      "sessionUsage": "Uso informado",
+      "inputShare": "Entrada {{percent}}%",
+      "outputShare": "Saída {{percent}}%",
+      "noUsage": "Ainda não há consumo informado nesta sessão.",
+      "requestsLabel": "Chamadas",
+      "tokensLabel": "Tokens",
+      "usageCaption": "Estes números são o uso informado. Esta tela não tem cota semanal nem data de renovação.",
+      "updatesTitle": "Atualizações",
+      "checking": "Verificando atualizações…",
+      "versionLabel": "Versão {{version}}",
+      "checkUpdates": "Verificar atualizações",
+      "connectorsTitle": "Conectores",
+      "connectorsIntro": "Serviços que o bot pode usar quando estiverem conectados.",
+      "mockNote": "O estado de conexão desta tela fica neste computador até a integração ficar pronta.",
+      "connect": "Conectar",
+      "disconnect": "Desconectar",
+      "connected": "Conectado",
+      "disconnected": "Desconectado",
+      "advancedConnections": "Conexões avançadas",
+      "react": "Reagir",
+      "reply": "Responder",
+      "connector": {
+        "gmail": {
+          "name": "Gmail",
+          "description": "Ler e preparar e-mails da conta conectada."
+        },
+        "chrome": {
+          "name": "Chrome",
+          "description": "Usar o navegador neste computador."
+        },
+        "calendar": {
+          "name": "Calendário",
+          "description": "Ver compromissos da agenda conectada."
+        },
+        "files": {
+          "name": "Arquivos",
+          "description": "Trabalhar com pastas deste computador."
+        },
+        "whatsapp": {
+          "name": "WhatsApp",
+          "description": "Preparar mensagens no WhatsApp conectado."
+        }
+      }
+    },
     "search": "Buscar",
     "newBot": "Novo Bot"
   }
