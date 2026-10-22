@@ -442,7 +442,8 @@
     },
     "executing": "Working",
     "look": {
-      "unsectioned": "No folder",
+      "unsectioned": "Sin sección",
+      "pinnedBots": "Bots fijados",
       "closeSettings": "Close settings",
       "settingsNav": "Settings",
       "tabs": {

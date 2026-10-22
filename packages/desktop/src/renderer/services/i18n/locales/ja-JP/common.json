@@ -442,7 +442,8 @@
     },
     "executing": "Working",
     "look": {
-      "unsectioned": "No folder",
+      "unsectioned": "セクションなし",
+      "pinnedBots": "ピン留めしたボット",
       "closeSettings": "Close settings",
       "settingsNav": "Settings",
       "tabs": {

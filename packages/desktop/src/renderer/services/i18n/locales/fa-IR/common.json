@@ -442,7 +442,8 @@
     },
     "executing": "Working",
     "look": {
-      "unsectioned": "No folder",
+      "unsectioned": "بدون بخش",
+      "pinnedBots": "ربات‌های سنجاق‌شده",
       "closeSettings": "Close settings",
       "settingsNav": "Settings",
       "tabs": {

@@ -24,9 +24,24 @@
 
 .pinned {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex-direction: column;
+  gap: 4px;
   min-width: 0;
+}
+
+.pinned:empty {
+  display: none;
+}
+
+.pinDrop {
+  height: 64px;
+  border-radius: 12px;
+  border: 1px dashed var(--jr-hairline);
+}
+
+.pinOver {
+  background: var(--jr-tab-active);
+  border-radius: 12px;
 }
 
 .iconButton:global(.arco-btn) {
@@ -51,52 +66,22 @@
   background: var(--bg-hover);
 }
 
-.pin:global(.arco-btn) {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  width: 72px;
-  height: auto;
-  min-height: 0;
-  padding: 4px 2px;
-  border-radius: 16px;
-  color: var(--color-text-2);
-  gap: 6px;
-  transition: background-color 160ms ease-out;
-}
-
-.pin:global(.arco-btn):hover,
 .pinActive:global(.arco-btn) {
   background: var(--jr-tab-active);
   color: var(--color-text-1);
 }
 
-.pin :global(.arco-btn-icon) {
-  display: none;
-}
-
 .avatar {
-  width: 52px;
-  height: 52px;
-  border-radius: 999px;
-  overflow: hidden;
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
   display: grid;
   place-items: center;
-  background: var(--jr-surface-2);
 }
 
-.pinActive .avatar {
+.botActive .avatar {
+  border-radius: 16px;
   box-shadow: 0 0 0 2px var(--jr-accent);
-}
-
-.pinName {
-  max-width: 68px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
-  line-height: 16px;
 }
 
 .list {
@@ -111,12 +96,13 @@
 .sectionToggle:global(.arco-btn) {
   display: flex;
   width: 100%;
-  height: 36px;
+  height: 40px;
   justify-content: space-between;
   padding: 0 8px;
   border-radius: 8px;
-  color: var(--color-text-2);
+  color: var(--color-text-3);
   font-size: 14px;
+  font-weight: 500;
   transition: background-color 160ms ease-out;
 }
 
@@ -148,12 +134,21 @@
   width: 100%;
   height: 44px;
   justify-content: flex-start;
+  align-items: center;
   gap: 10px;
   padding: 0 8px;
   border-radius: 12px;
   color: var(--color-text-1);
   font-size: 14px;
+  text-align: start;
   transition: background-color 160ms ease-out;
+}
+
+.botCard:global(.arco-btn) {
+  height: auto;
+  min-height: 64px;
+  gap: 12px;
+  padding: 8px;
 }
 
 .botRow:global(.arco-btn):hover,
@@ -161,10 +156,39 @@
   background: var(--jr-tab-active);
 }
 
+.botCopy {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
 .botName {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.botCopy .botName {
+  width: 100%;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 22px;
+  color: var(--color-text-1);
+}
+
+.preview {
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 400;
+  color: var(--color-text-3);
 }
 
 .hint {
@@ -504,7 +528,6 @@
   .panel,
   .sectionBody,
   .iconButton:global(.arco-btn),
-  .pin:global(.arco-btn),
   .bar > span,
   .sectionToggle:global(.arco-btn),
   .botRow:global(.arco-btn),

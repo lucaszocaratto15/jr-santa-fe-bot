@@ -442,7 +442,8 @@
     },
     "executing": "Executando",
     "look": {
-      "unsectioned": "Sem pasta",
+      "unsectioned": "Sem seção",
+      "pinnedBots": "Bots fixados",
       "closeSettings": "Fechar configurações",
       "settingsNav": "Configurações",
       "tabs": {

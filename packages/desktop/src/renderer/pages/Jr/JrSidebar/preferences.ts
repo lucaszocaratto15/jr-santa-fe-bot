@@ -1,3 +1,5 @@
+import { sanitizeSidebarLayout, type SidebarLayout } from './groupBots';
+
 export type KeyValueStore = {
   getItem: (key: string) => string | null;
   setItem: (key: string, value: string) => void;
@@ -20,6 +22,7 @@ export function browserStore(): KeyValueStore {
 const EXECUTION_KEY = 'jr.executionPreference';
 const ROUTE_KEY = 'jr.routeTraffic';
 const SPELLCHECK_KEY = 'jr.spellcheck';
+const SIDEBAR_KEY = 'jr.sidebarLayout';
 
 export const SPELLCHECK_EVENT = 'jr-spellcheck-change';
 
@@ -56,6 +59,21 @@ export function readSpellcheck(store: KeyValueStore = browserStore()): boolean {
 export function writeSpellcheck(enabled: boolean, store: KeyValueStore = browserStore()): void {
   store.setItem(SPELLCHECK_KEY, enabled ? '1' : '0');
   if (typeof window !== 'undefined') window.dispatchEvent(new Event(SPELLCHECK_EVENT));
+}
+
+/** Pins, row order, and collapsed sections. Corrupt JSON reads as an empty layout. */
+export function readSidebarLayout(store: KeyValueStore = browserStore()): SidebarLayout {
+  const raw = store.getItem(SIDEBAR_KEY);
+  if (!raw) return { pinnedIds: [], order: [], collapsed: {} };
+  try {
+    return sanitizeSidebarLayout(JSON.parse(raw));
+  } catch {
+    return { pinnedIds: [], order: [], collapsed: {} };
+  }
+}
+
+export function writeSidebarLayout(layout: SidebarLayout, store: KeyValueStore = browserStore()): void {
+  store.setItem(SIDEBAR_KEY, JSON.stringify(sanitizeSidebarLayout(layout)));
 }
 
 export type ComputerIdentity = {

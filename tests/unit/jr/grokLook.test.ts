@@ -33,7 +33,7 @@ describe('groupBots', () => {
     expect(groupBots([])).toEqual({ pinned: [], sections: [] });
   });
 
-  it('pins at most the first three bots and groups the rest by folder', () => {
+  it('keeps every bot in a folder section until that bot is pinned', () => {
     const bots = [
       { id: '1', name: 'A', workspace: 'C:\\work\\compras' },
       { id: '2', name: 'B', workspace: '/tmp/vendas' },
@@ -42,9 +42,10 @@ describe('groupBots', () => {
       { id: '5', name: 'E', workspace: 'D:\\' },
     ];
     const grouped = groupBots(bots);
-    expect(grouped.pinned.map((bot) => bot.id)).toEqual(['1', '2', '3']);
+    expect(grouped.pinned).toEqual([]);
     expect(grouped.sections).toEqual([
-      { id: 'vendas', label: 'vendas', bots: [bots[3]] },
+      { id: 'compras', label: 'compras', bots: [bots[0]] },
+      { id: 'vendas', label: 'vendas', bots: [bots[1], bots[2], bots[3]] },
       { id: UNSECTIONED_ID, label: UNSECTIONED_ID, bots: [bots[4]] },
     ]);
   });

@@ -23,7 +23,7 @@ export type JrBotInput = {
   /** Defaults to on. Set false to leave Chrome out of this bot's conversation. */
   useChrome?: boolean;
 };
-export type JrBot = JrBotInput & { id: string; teamSelectable?: boolean };
+export type JrBot = JrBotInput & { id: string; teamSelectable?: boolean; conversationId?: string };
 
 function instructionWithLearning(instructions: string, learning: string): string {
   return learning ? `${instructions.trim()}\n\n## Aprendizados deste bot\n${learning}` : instructions;
@@ -54,6 +54,7 @@ export async function listJrBots(): Promise<JrBot[]> {
       skillIds: workspaces![assistant.id].skillIds ?? [],
       useChrome: workspaces![assistant.id].useChrome !== false,
       teamSelectable: assistant.team_selectable,
+      conversationId: workspaces![assistant.id].conversationId,
     }));
 }
 
@@ -75,6 +76,7 @@ export async function getJrBot(id: string): Promise<JrBot> {
     skillIds: workspaces[id].skillIds ?? [],
     useChrome: workspaces[id].useChrome !== false,
     teamSelectable: detail.team_selectable,
+    conversationId: workspaces[id].conversationId,
   };
 }
 

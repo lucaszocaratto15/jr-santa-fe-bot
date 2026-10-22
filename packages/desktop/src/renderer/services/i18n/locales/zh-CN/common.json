@@ -442,7 +442,8 @@
     },
     "executing": "Working",
     "look": {
-      "unsectioned": "No folder",
+      "unsectioned": "未分组",
+      "pinnedBots": "已固定的机器人",
       "closeSettings": "Close settings",
       "settingsNav": "Settings",
       "tabs": {

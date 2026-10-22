@@ -445,7 +445,8 @@
     },
     "executing": "Working",
     "look": {
-      "unsectioned": "No folder",
+      "unsectioned": "Без розділу",
+      "pinnedBots": "Закріплені боти",
       "closeSettings": "Close settings",
       "settingsNav": "Settings",
       "tabs": {

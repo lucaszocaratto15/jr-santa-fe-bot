@@ -442,7 +442,8 @@
     },
     "executing": "Working",
     "look": {
-      "unsectioned": "No folder",
+      "unsectioned": "Bölüm yok",
+      "pinnedBots": "Sabitlenmiş botlar",
       "closeSettings": "Close settings",
       "settingsNav": "Settings",
       "tabs": {

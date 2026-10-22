@@ -445,6 +445,7 @@ export type I18nKey =
   | 'common.jr.look.noUsage'
   | 'common.jr.look.outputShare'
   | 'common.jr.look.percentUsed'
+  | 'common.jr.look.pinnedBots'
   | 'common.jr.look.quotaMockNote'
   | 'common.jr.look.react'
   | 'common.jr.look.renewDays'
