@@ -15,7 +15,6 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
-import { readConnectorRecords, setConnectorStatus, type ConnectorId, type ConnectorRecord } from './connectors';
 import {
   readComputerIdentity,
   readExecutionPreference,
@@ -38,46 +37,8 @@ import styles from './JrSidebar.module.css';
 
 declare const __APP_VERSION__: string;
 
-const MARK: Record<ConnectorId, { letter: string; background: string; color: string }> = {
-  gmail: { letter: 'G', background: '#ffffff', color: '#c5221f' },
-  chrome: { letter: 'C', background: '#ffffff', color: '#1a73e8' },
-  calendar: { letter: 'A', background: '#90182c', color: '#ffffff' },
-  files: { letter: 'F', background: '#3d5a80', color: '#ffffff' },
-  whatsapp: { letter: 'W', background: '#1f7a4d', color: '#ffffff' },
-};
-
 const isConnectionStatus = (value: unknown): value is JrConnectionStatus =>
   Boolean(value) && typeof value === 'object' && value !== null && 'connected' in value;
-
-const connectorName = (id: ConnectorId) => {
-  switch (id) {
-    case 'gmail':
-      return 'common.jr.look.connector.gmail.name' as const;
-    case 'chrome':
-      return 'common.jr.look.connector.chrome.name' as const;
-    case 'calendar':
-      return 'common.jr.look.connector.calendar.name' as const;
-    case 'files':
-      return 'common.jr.look.connector.files.name' as const;
-    case 'whatsapp':
-      return 'common.jr.look.connector.whatsapp.name' as const;
-  }
-};
-
-const connectorDescription = (id: ConnectorId) => {
-  switch (id) {
-    case 'gmail':
-      return 'common.jr.look.connector.gmail.description' as const;
-    case 'chrome':
-      return 'common.jr.look.connector.chrome.description' as const;
-    case 'calendar':
-      return 'common.jr.look.connector.calendar.description' as const;
-    case 'files':
-      return 'common.jr.look.connector.files.description' as const;
-    case 'whatsapp':
-      return 'common.jr.look.connector.whatsapp.description' as const;
-  }
-};
 
 export const GeneralPanel: React.FC = () => {
   const { t } = useTranslation();
@@ -452,51 +413,6 @@ export const UpdatesPanel: React.FC = () => {
           {t('common.jr.look.checkUpdates')}
         </Button>
       </section>
-    </div>
-  );
-};
-
-export const ConnectorsPanel: React.FC<{ onOpenAdvanced: () => void }> = ({ onOpenAdvanced }) => {
-  const { t } = useTranslation();
-  const [records, setRecords] = useState<ConnectorRecord[]>(() => readConnectorRecords());
-
-  return (
-    <div>
-      <h1 className={styles.pageTitle}>{t('common.jr.look.connectorsTitle')}</h1>
-      <p className={styles.muted}>{t('common.jr.look.connectorsIntro')}</p>
-      <p className={styles.muted}>{t('common.jr.look.mockNote')}</p>
-      <ul className={styles.connectorList}>
-        {records.map((record) => {
-          const mark = MARK[record.id];
-          const connected = record.status === 'connected';
-          return (
-            <li key={record.id} className={styles.connectorRow}>
-              <span className={styles.connectorMark} style={{ background: mark.background, color: mark.color }}>
-                {mark.letter}
-              </span>
-              <div className={styles.rowCopy}>
-                <strong>{t(connectorName(record.id))}</strong>
-                <p className={styles.muted}>{t(connectorDescription(record.id))}</p>
-                <span className={styles.muted}>
-                  {connected ? t('common.jr.look.connected') : t('common.jr.look.disconnected')}
-                </span>
-              </div>
-              <Button
-                type={connected ? 'outline' : 'primary'}
-                onClick={() => {
-                  const next = setConnectorStatus(record.id, connected ? 'disconnected' : 'connected');
-                  setRecords(next);
-                }}
-              >
-                {connected ? t('common.jr.look.disconnect') : t('common.jr.look.connect')}
-              </Button>
-            </li>
-          );
-        })}
-      </ul>
-      <Button type='outline' onClick={onOpenAdvanced}>
-        {t('common.jr.look.advancedConnections')}
-      </Button>
     </div>
   );
 };

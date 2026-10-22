@@ -1,13 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import unoConfig from '../../../uno.config';
-import { groupBots, UNSECTIONED_ID, workspaceFolderLabel } from '@/renderer/pages/Jr/JrSidebar/groupBots';
+import {
+  groupBots,
+  teamChatsForBots,
+  UNSECTIONED_ID,
+  workspaceFolderLabel,
+} from '@/renderer/pages/Jr/JrSidebar/groupBots';
 import { readSpellcheck, type KeyValueStore } from '@/renderer/pages/Jr/JrSidebar/preferences';
-import { setConnectorStatus } from '@/renderer/pages/Jr/JrSidebar/connectors';
+import {
+  applyLiveConnectorStatus,
+  readConnectorRecords,
+  setConnectorStatus,
+} from '@/renderer/pages/Jr/JrSidebar/connectors';
 import {
   quotaPercent,
   quotaTone,
   readUsageQuota,
   renewalParts,
+  reportedTokenUse,
   usageMeterFromSnapshot,
   WEEKLY_LIMIT,
   WINDOW_5H_LIMIT,
@@ -80,6 +90,32 @@ describe('readUsageQuota', () => {
     expect(Date.parse(quota.window5h.resetAt)).toBeGreaterThan(now);
   });
 
+  it('uses the metered total from the control service when it is present', () => {
+    const snapshot = {
+      promptTokens: 40,
+      completionTokens: 10,
+      totalTokens: 15,
+      cachedPromptTokens: 0,
+      modelRequests: 1,
+      startedAt: '2026-10-22T14:00:00.000Z',
+    };
+    expect(reportedTokenUse(snapshot)).toBe(15);
+    expect(readUsageQuota(snapshot, now).window5h.used).toBe(15);
+  });
+
+  it('falls back to prompt plus completion when the metered total is missing', () => {
+    const snapshot = {
+      promptTokens: 4,
+      completionTokens: 6,
+      totalTokens: null,
+      cachedPromptTokens: 0,
+      modelRequests: 1,
+      startedAt: '2026-10-22T14:00:00.000Z',
+    };
+    expect(reportedTokenUse(snapshot)).toBe(10);
+    expect(readUsageQuota(snapshot, now).source).toBe('mock');
+  });
+
   it('maps used tokens onto the mock windows', () => {
     const quota = readUsageQuota(
       {
@@ -100,7 +136,32 @@ describe('readUsageQuota', () => {
   });
 });
 
+describe('teamChatsForBots', () => {
+  it('keeps only teams whose members are all listed bots', () => {
+    const chats = teamChatsForBots(
+      [
+        { id: 'ok', assistants: [{ assistant_id: 'a' }, { assistant_id: 'b' }] },
+        { id: 'short', assistants: [{ assistant_id: 'a' }] },
+        { id: 'stranger', assistants: [{ assistant_id: 'a' }, { assistant_id: 'missing' }] },
+        { id: 'empty', assistants: [] },
+      ],
+      new Set(['a', 'b'])
+    );
+    expect(chats.map((chat) => chat.id)).toEqual(['ok']);
+  });
+});
+
 describe('connector mock', () => {
+  it('replaces gmail and chrome with live MCP status and leaves the other rows local', () => {
+    const store = memoryStore();
+    const stored = readConnectorRecords(store);
+    const live = applyLiveConnectorStatus(stored, { gmail: 'disconnected', chrome: 'connected' });
+    expect(live.find((item) => item.id === 'gmail')?.status).toBe('disconnected');
+    expect(live.find((item) => item.id === 'chrome')?.status).toBe('connected');
+    expect(live.find((item) => item.id === 'calendar')?.status).toBe('disconnected');
+    expect(readConnectorRecords(store).find((item) => item.id === 'gmail')?.status).toBe('connected');
+  });
+
   it('leaves the catalog unchanged for an unknown connector id', () => {
     const store = memoryStore();
     const before = setConnectorStatus('gmail', 'disconnected', store);

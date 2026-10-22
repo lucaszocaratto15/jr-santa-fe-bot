@@ -55,6 +55,14 @@ export type UsageQuota = {
   source: 'mock';
 };
 
+/** Metered total from the control service, otherwise prompt + completion. */
+export function reportedTokenUse(snapshot: JrUsageSnapshot | null | undefined): number {
+  if (!snapshot) return 0;
+  if (typeof snapshot.totalTokens === 'number' && Number.isFinite(snapshot.totalTokens)) return snapshot.totalTokens;
+  if (snapshot.promptTokens == null && snapshot.completionTokens == null) return 0;
+  return (snapshot.promptTokens ?? 0) + (snapshot.completionTokens ?? 0);
+}
+
 function nextBoundary(now: number, windowMs: number, anchorMs: number): string {
   const anchor = Number.isFinite(anchorMs) ? anchorMs : now;
   const elapsed = now - anchor;
@@ -64,12 +72,12 @@ function nextBoundary(now: number, windowMs: number, anchorMs: number): string {
 
 /**
  * Quota cards for the usage tab.
- * Reported prompt + completion tokens fill `used`. The 3M / 15M ceilings and
- * the renewal instants are mocked from `startedAt` (or from now).
+ * `used` is the control-service total when `totalTokens` is present, otherwise
+ * prompt + completion. The 3M / 15M ceilings and renewal instants stay mocked:
+ * `JrUsageSnapshot` has no 5-hour or weekly window.
  */
 export function readUsageQuota(snapshot: JrUsageSnapshot | null | undefined, now = Date.now()): UsageQuota {
-  const hasTokens = snapshot != null && (snapshot.promptTokens != null || snapshot.completionTokens != null);
-  const used = hasTokens ? (snapshot.promptTokens ?? 0) + (snapshot.completionTokens ?? 0) : 0;
+  const used = reportedTokenUse(snapshot);
   const anchor = snapshot?.startedAt ? Date.parse(snapshot.startedAt) : now;
   return {
     window5h: { used, limit: WINDOW_5H_LIMIT, resetAt: nextBoundary(now, FIVE_HOURS_MS, anchor) },

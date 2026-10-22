@@ -43,3 +43,20 @@ export function groupBots<T extends GroupableBot>(bots: readonly T[]): { pinned:
     sections: [...groups.entries()].map(([label, items]) => ({ id: label, label, bots: items })),
   };
 }
+
+export type TeamChatRef = {
+  id: string;
+  assistants?: Array<{ assistant_id?: string | null }>;
+};
+
+/** Team rows whose members are all bots in this sidebar. */
+export function teamChatsForBots<T extends TeamChatRef>(teams: readonly T[], botIds: ReadonlySet<string>): T[] {
+  return teams.filter(
+    (team) =>
+      Array.isArray(team.assistants) &&
+      team.assistants.length > 1 &&
+      team.assistants.every(
+        (assistant) => typeof assistant.assistant_id === 'string' && botIds.has(assistant.assistant_id)
+      )
+  );
+}

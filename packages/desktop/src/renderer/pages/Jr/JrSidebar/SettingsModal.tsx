@@ -1,10 +1,12 @@
 import { Button } from '@arco-design/web-react';
 import { ChartHistogram, Close, Computer, Download, LinkOne, SettingTwo } from '@icon-park/react';
-import React, { useEffect } from 'react';
+import React, { lazy, Suspense, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { ComputerPanel, ConnectorsPanel, GeneralPanel, UpdatesPanel, UsagePanel } from './panels';
+import { ComputerPanel, GeneralPanel, UpdatesPanel, UsagePanel } from './panels';
 import styles from './JrSidebar.module.css';
+
+const LiveConnectors = lazy(() => import('./LiveConnectors'));
 
 export const SETTINGS_TABS = ['general', 'computer', 'usage', 'updates', 'connectors'] as const;
 export type SettingsTab = (typeof SETTINGS_TABS)[number];
@@ -78,7 +80,11 @@ const JrSettingsModal: React.FC<{
           {tab === 'computer' && <ComputerPanel />}
           {tab === 'usage' && <UsagePanel />}
           {tab === 'updates' && <UpdatesPanel />}
-          {tab === 'connectors' && <ConnectorsPanel onOpenAdvanced={onOpenAdvanced} />}
+          {tab === 'connectors' && (
+            <Suspense fallback={null}>
+              <LiveConnectors onOpenAdvanced={onOpenAdvanced} />
+            </Suspense>
+          )}
         </div>
       </div>
     </div>,

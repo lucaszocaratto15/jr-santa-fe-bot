@@ -42,11 +42,23 @@ function parseRecords(raw: string | null): ConnectorRecord[] {
 
 /**
  * Connector catalog for the settings screen.
- * Status lives in localStorage until a desktop bridge owns real account state.
- * Replace `readConnectorRecords` and `setConnectorStatus` without changing `ConnectorRecord`.
+ * Calendar, files, and WhatsApp still use localStorage. Gmail and Chrome are
+ * overlaid with MCP server state by `applyLiveConnectorStatus`.
  */
 export function readConnectorRecords(store: KeyValueStore = browserStore()): ConnectorRecord[] {
   return parseRecords(store.getItem(STORAGE_KEY));
+}
+
+/** Real MCP status replaces the local mock for connectors the desktop process owns. */
+export function applyLiveConnectorStatus(
+  records: readonly ConnectorRecord[],
+  live: Partial<Record<ConnectorId, ConnectorStatus>>
+): ConnectorRecord[] {
+  return records.map((record) => {
+    const status = live[record.id];
+    if (status !== 'connected' && status !== 'disconnected') return record;
+    return status === record.status ? record : { ...record, status };
+  });
 }
 
 export function setConnectorStatus(
