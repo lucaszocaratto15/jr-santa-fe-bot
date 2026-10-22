@@ -1,9 +1,15 @@
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { SWRConfig } from 'swr';
 import type { JrAccessState } from '@/common/config/clientSettings';
-const mocks = vi.hoisted(() => ({ list: vi.fn(), invite: vi.fn(), reissue: vi.fn(), revoke: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  list: vi.fn(),
+  invite: vi.fn(),
+  reissue: vi.fn(),
+  revoke: vi.fn(),
+  updatePolicy: vi.fn(),
+}));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'pt-BR' } }) }));
 vi.mock('@/common', () => ({
   ipcBridge: {
@@ -13,6 +19,7 @@ vi.mock('@/common', () => ({
         createInvite: { invoke: mocks.invite },
         reissue: { invoke: mocks.reissue },
         revoke: { invoke: mocks.revoke },
+        updatePolicy: { invoke: mocks.updatePolicy },
       },
     },
   },
@@ -59,7 +66,7 @@ it('creates a real one-time invitation and displays the returned code only after
     accessEnd: null,
   });
 });
-it('sends the token limit and daily access window with the invitation', async () => {
+it('sends a token limit with no access window', async () => {
   mocks.invite.mockResolvedValue({
     id: 'person',
     code: 'policy-code',
@@ -68,14 +75,39 @@ it('sends the token limit and daily access window with the invitation', async ()
   show('admin');
   fireEvent.change(await screen.findByLabelText('common.jr.access.employeeName'), { target: { value: 'Turno' } });
   fireEvent.change(screen.getByLabelText('common.jr.access.tokenLimit'), { target: { value: '1200' } });
-  fireEvent.change(screen.getByLabelText('common.jr.access.startTime'), { target: { value: '08:00' } });
-  fireEvent.change(screen.getByLabelText('common.jr.access.endTime'), { target: { value: '18:00' } });
+  expect(screen.queryByLabelText('common.jr.access.startTime')).not.toBeInTheDocument();
+  expect(screen.queryByLabelText('common.jr.access.endTime')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'common.jr.access.generateCode' }));
   expect(await screen.findByText('policy-code')).toBeInTheDocument();
   expect(mocks.invite).toHaveBeenCalledWith({
     name: 'Turno',
     tokenLimit: 1200,
-    accessStart: '08:00',
-    accessEnd: '18:00',
+    accessStart: null,
+    accessEnd: null,
   });
+});
+it('saves a per-user token limit without an access window', async () => {
+  mocks.list.mockResolvedValue([
+    {
+      id: 'person-1',
+      name: 'Ana',
+      role: 'employee',
+      revoked: false,
+      blocked: false,
+      tokenLimit: null,
+    },
+  ]);
+  mocks.updatePolicy.mockResolvedValue(undefined);
+  show('admin');
+  const limit = await screen.findByLabelText('common.jr.access.tokenLimit', { selector: '#jr-limit-person-1' });
+  fireEvent.change(limit, { target: { value: '5000' } });
+  fireEvent.click(screen.getByRole('button', { name: 'common.jr.access.savePolicy' }));
+  await waitFor(() =>
+    expect(mocks.updatePolicy).toHaveBeenCalledWith({
+      employeeId: 'person-1',
+      tokenLimit: 5000,
+      accessStart: null,
+      accessEnd: null,
+    })
+  );
 });

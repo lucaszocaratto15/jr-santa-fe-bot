@@ -18,6 +18,7 @@ const {
   markSendAcceptedMock,
   sendBoxPropsSpy,
   enqueueMock,
+  prioritizeMock,
   clearFilesMock,
   draftMutateMock,
   draftContentRef,
@@ -39,6 +40,7 @@ const {
   markSendAcceptedMock: vi.fn(),
   sendBoxPropsSpy: vi.fn(),
   enqueueMock: vi.fn(),
+  prioritizeMock: vi.fn(),
   clearFilesMock: vi.fn(),
   draftMutateMock: vi.fn(),
   draftContentRef: { current: '' },
@@ -72,6 +74,7 @@ vi.mock('@/renderer/components/chat/SendBox', () => ({
     onFocused,
     disabled,
     sendDisabled,
+    showStopWhileComposing,
     rightTools,
     sendButtonPrefix,
     topRightOverlay,
@@ -88,6 +91,7 @@ vi.mock('@/renderer/components/chat/SendBox', () => ({
     onFocused?: () => void;
     disabled?: boolean;
     sendDisabled?: boolean;
+    showStopWhileComposing?: boolean;
     rightTools?: React.ReactNode;
     sendButtonPrefix?: React.ReactNode;
     topRightOverlay?: React.ReactNode;
@@ -103,6 +107,7 @@ vi.mock('@/renderer/components/chat/SendBox', () => ({
       onFocused,
       disabled,
       sendDisabled,
+      showStopWhileComposing,
       onAddToDraft,
       addToDraftDisabled,
       selectedSessions,
@@ -220,6 +225,7 @@ vi.mock('@/renderer/pages/conversation/platforms/useConversationCommandQueue', (
     isInteractionLocked: false,
     hasPendingCommands: false,
     enqueue: enqueueMock,
+    prioritize: prioritizeMock,
     remove: vi.fn(),
     clear: vi.fn(),
     reorder: vi.fn(),
@@ -502,26 +508,47 @@ describe('AionrsSendBox', () => {
   });
 
   describe('mid-turn interjection controls', () => {
-    it('disables the send button and blocks Enter with a toast while replying, without implicitly enqueuing', async () => {
+    it('queues the draft, including files, while the agent is replying and keeps send available', async () => {
       runtimeViewIsProcessingRef.current = true;
       draftContentRef.current = 'hello world';
+      enqueueMock.mockReturnValue({ id: 'queued-1' });
 
       render(<AionrsSendBox conversation_id='conv-1' modelSelection={modelSelection} />);
       await waitFor(() => expect(ensureConversationRuntimeMock).toHaveBeenCalledWith('conv-1'));
 
-      const props = sendBoxPropsSpy.mock.calls.at(-1)?.[0] as { sendDisabled?: boolean };
-      expect(props.sendDisabled).toBe(true);
+      const props = sendBoxPropsSpy.mock.calls.at(-1)?.[0] as {
+        sendDisabled?: boolean;
+        showStopWhileComposing?: boolean;
+      };
+      expect(props.sendDisabled).toBeFalsy();
+      expect(props.showStopWhileComposing).toBe(true);
+      expect(screen.getByRole('button', { name: 'Send now' })).toBeInTheDocument();
 
       await act(async () => {
         screen.getByRole('button', { name: 'send' }).click();
       });
 
       expect(sendMessageInvokeMock).not.toHaveBeenCalled();
-      expect(enqueueMock).not.toHaveBeenCalled();
-      expect(clearFilesMock).not.toHaveBeenCalled();
-      expect(Message.warning).toHaveBeenCalledWith(
-        'This agent is still working, so the message can’t be sent directly. Save it to Draft box and send it later.'
-      );
+      expect(enqueueMock).toHaveBeenCalledWith({ input: 'Hello', files: [], sessions: undefined });
+      expect(clearFilesMock).toHaveBeenCalled();
+      expect(Message.warning).not.toHaveBeenCalled();
+    });
+
+    it('send now stops the current run and moves the draft to the front of the queue', async () => {
+      runtimeViewIsProcessingRef.current = true;
+      draftContentRef.current = 'do this next';
+      enqueueMock.mockReturnValue({ id: 'queued-now' });
+
+      render(<AionrsSendBox conversation_id='conv-1' modelSelection={modelSelection} />);
+      await waitFor(() => expect(ensureConversationRuntimeMock).toHaveBeenCalledWith('conv-1'));
+
+      await act(async () => {
+        screen.getByRole('button', { name: 'Send now' }).click();
+      });
+
+      expect(enqueueMock).toHaveBeenCalledWith({ input: 'do this next', files: [], sessions: undefined });
+      expect(prioritizeMock).toHaveBeenCalledWith('queued-now');
+      expect(sendMessageInvokeMock).not.toHaveBeenCalled();
     });
 
     it('sends normally while idle', async () => {
@@ -531,7 +558,7 @@ describe('AionrsSendBox', () => {
       await waitFor(() => expect(ensureConversationRuntimeMock).toHaveBeenCalledWith('conv-1'));
 
       const props = sendBoxPropsSpy.mock.calls.at(-1)?.[0] as { sendDisabled?: boolean };
-      expect(props.sendDisabled).toBe(false);
+      expect(props.sendDisabled).toBeFalsy();
 
       await act(async () => {
         screen.getByRole('button', { name: 'send' }).click();

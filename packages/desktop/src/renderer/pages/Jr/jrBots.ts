@@ -4,7 +4,7 @@ import { isAionrsAssistant } from '@/common/types/agent/assistantTypes';
 import { getClientBusinessSetting, setClientBusinessSetting } from '@/renderer/services/clientBusinessSettings';
 import type { JrAppearance } from '@/common/config/clientSettings';
 import { normalizeAppearance } from './botAppearance';
-import { isGmailServer } from './Connections/connections';
+import { connectionPayload, createChromeDraft, isGmailServer, isJrChromeServer } from './Connections/connections';
 import { toSessionMcpServer } from '@/renderer/hooks/mcp/catalog';
 import { getConversationOrNull } from '@/renderer/pages/conversation/utils/conversationCache';
 
@@ -20,6 +20,8 @@ export type JrBotInput = {
   appearance?: JrAppearance;
   learning?: string;
   skillIds?: string[];
+  /** Defaults to on. Set false to leave Chrome out of this bot's conversation. */
+  useChrome?: boolean;
 };
 export type JrBot = JrBotInput & { id: string; teamSelectable?: boolean };
 
@@ -50,6 +52,7 @@ export async function listJrBots(): Promise<JrBot[]> {
       appearance: normalizeAppearance(workspaces![assistant.id].appearance),
       learning: workspaces![assistant.id].learning ?? '',
       skillIds: workspaces![assistant.id].skillIds ?? [],
+      useChrome: workspaces![assistant.id].useChrome !== false,
       teamSelectable: assistant.team_selectable,
     }));
 }
@@ -70,6 +73,7 @@ export async function getJrBot(id: string): Promise<JrBot> {
     appearance: normalizeAppearance(workspaces[id].appearance),
     learning: workspaces[id].learning ?? '',
     skillIds: workspaces[id].skillIds ?? [],
+    useChrome: workspaces[id].useChrome !== false,
     teamSelectable: detail.team_selectable,
   };
 }
@@ -82,6 +86,7 @@ export async function saveJrBot(input: JrBotInput, id?: string): Promise<JrBot> 
   const skillIds = Array.from(
     new Set((input.skillIds ?? []).filter((skill) => skill.trim()).map((skill) => skill.trim()))
   );
+  const useChrome = input.useChrome !== false;
   const workspaces = (await getClientBusinessSetting('jr.botWorkspaces')) || {};
   const previous = id ? await getJrBot(id) : null;
   if (!id) {
@@ -118,10 +123,11 @@ export async function saveJrBot(input: JrBotInput, id?: string): Promise<JrBot> 
         instructions: input.instructions,
         learning,
         skillIds,
+        useChrome,
         ...(input.appearance ? { appearance: normalizeAppearance(input.appearance) } : {}),
       },
     });
-    return { ...input, name, learning, skillIds, id };
+    return { ...input, name, learning, skillIds, useChrome, id };
   } catch (error) {
     if (!previous) {
       await ipcBridge.assistants.delete.invoke({ id });
@@ -154,6 +160,20 @@ export function selectJrModel(providers: IProvider[]): TProviderWithModel | null
     (item) => item.name === JR_PROVIDER && item.enabled !== false && item.models.includes(JR_MODEL)
   );
   return provider ? { ...provider, api_key: '', use_model: JR_MODEL } : null;
+}
+
+/** Create or enable the app Chrome connector so a new bot can use it immediately. */
+async function ensureJrChromeServer(): Promise<void> {
+  const servers = await ipcBridge.mcpService.listServers.invoke();
+  const existing = servers.find(isJrChromeServer);
+  if (existing?.enabled) return;
+  if (existing) {
+    await ipcBridge.mcpService.toggleServer.invoke({ id: existing.id });
+    return;
+  }
+  const { cacheDir } = await ipcBridge.application.systemInfo.invoke();
+  const created = await ipcBridge.mcpService.createServer.invoke(connectionPayload(createChromeDraft(cacheDir)));
+  if (!created.enabled) await ipcBridge.mcpService.toggleServer.invoke({ id: created.id });
 }
 
 const openingConversations = new Map<string, Promise<TChatConversation>>();
@@ -205,14 +225,22 @@ async function resolveJrConversation(bot: JrBot): Promise<TChatConversation> {
   const history = await ipcBridge.database.getUserConversations.invoke({ limit: 10000 });
   const previous = history.items
     .filter(matchesBot)
-    .sort((a, b) => b.modified_at - a.modified_at || b.created_at - a.created_at)[0];
+    .toSorted((a, b) => b.modified_at - a.modified_at || b.created_at - a.created_at)[0];
   if (previous) return bind(previous);
   if (history.has_more) throw new Error('Conversation history is incomplete');
   const model = selectJrModel(await ipcBridge.mode.listProviders.invoke());
   if (!model) throw new Error('JR MiniMax connection is unavailable');
+  const includeChrome = bot.useChrome !== false;
+  if (includeChrome) {
+    try {
+      await ensureJrChromeServer();
+    } catch {
+      // Chrome is the default connector, but a missing runtime must not block the chat.
+    }
+  }
   // shortcut: Gmail OAuth is incomplete; admit it after real client authorization is supported.
   const servers = (await ipcBridge.mcpService.listServers.invoke()).filter(
-    (server) => server.enabled && !isGmailServer(server)
+    (server) => server.enabled && !isGmailServer(server) && (includeChrome || !isJrChromeServer(server))
   );
   const conversation = await ipcBridge.conversation.create.invoke({
     name: bot.name,

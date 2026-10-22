@@ -408,6 +408,22 @@
   color: var(--color-text-2);
   font-size: 12px;
 }
+.skillHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.skillHeader > label {
+  color: var(--color-text-2);
+  font-size: 12px;
+}
+.skillToggle:global(.arco-btn) {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  color: var(--color-text-2);
+}
 .botHint {
   margin: 0 0 4px;
   color: var(--color-text-3);

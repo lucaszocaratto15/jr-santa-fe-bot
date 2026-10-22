@@ -16,6 +16,9 @@ const mocks = vi.hoisted(() => ({
   getConversation: vi.fn(),
   conversations: vi.fn(),
   mcps: vi.fn(),
+  systemInfo: vi.fn(),
+  createMcp: vi.fn(),
+  toggleMcp: vi.fn(),
 }));
 vi.mock('@/common', () => ({
   ipcBridge: {
@@ -30,7 +33,12 @@ vi.mock('@/common', () => ({
     mode: { listProviders: { invoke: mocks.providers } },
     conversation: { create: { invoke: mocks.conversation }, get: { invoke: mocks.getConversation } },
     database: { getUserConversations: { invoke: mocks.conversations } },
-    mcpService: { listServers: { invoke: mocks.mcps } },
+    application: { systemInfo: { invoke: mocks.systemInfo } },
+    mcpService: {
+      listServers: { invoke: mocks.mcps },
+      createServer: { invoke: mocks.createMcp },
+      toggleServer: { invoke: mocks.toggleMcp },
+    },
   },
 }));
 vi.mock('@/renderer/services/clientBusinessSettings', () => ({
@@ -72,6 +80,8 @@ beforeEach(() => {
   mocks.writeRules.mockResolvedValue(true);
   mocks.providers.mockResolvedValue([provider]);
   mocks.mcps.mockResolvedValue([]);
+  mocks.systemInfo.mockResolvedValue({ cacheDir: '/tmp/jr-cache' });
+  mocks.createMcp.mockRejectedValue(new Error('chrome-unavailable'));
   mocks.conversations.mockResolvedValue({ items: [], total: 0, has_more: false });
   mocks.getConversation.mockResolvedValue(null);
   mocks.conversation.mockResolvedValue({ id: 'real-conversation' });
@@ -101,7 +111,13 @@ describe('JR bot persistence', () => {
       content: input.instructions,
     });
     expect(mocks.writeSetting).toHaveBeenCalledWith('jr.botWorkspaces', {
-      'jr-bot': { workspace: input.workspace, instructions: input.instructions, learning: '', skillIds: [] },
+      'jr-bot': {
+        workspace: input.workspace,
+        instructions: input.instructions,
+        learning: '',
+        skillIds: [],
+        useChrome: true,
+      },
     });
     expect(bot.id).toBe('jr-bot');
   });
@@ -157,6 +173,46 @@ describe('JR bot persistence', () => {
   });
 });
 
+it('enables Chrome by default and attaches it to the new conversation', async () => {
+  const created = {
+    id: 'chrome-jr-1',
+    name: 'chrome-jr',
+    enabled: true,
+    builtin: false,
+    transport: { type: 'stdio', command: 'npx', args: ['chrome-devtools-mcp@1.12.0'] },
+  };
+  mocks.createMcp.mockResolvedValue(created);
+  mocks.mcps.mockResolvedValueOnce([]).mockResolvedValue([created]);
+  await startJrConversation({ id: 'jr-bot', ...input });
+  expect(mocks.createMcp).toHaveBeenCalled();
+  expect(mocks.conversation).toHaveBeenCalledWith(
+    expect.objectContaining({
+      assistant: expect.objectContaining({
+        conversation_overrides: expect.objectContaining({ mcp_ids: ['chrome-jr-1'] }),
+      }),
+    })
+  );
+});
+
+it('leaves Chrome out when the bot turns it off', async () => {
+  mocks.mcps.mockResolvedValue([
+    {
+      id: 'chrome-jr-1',
+      name: 'chrome-jr',
+      enabled: true,
+      builtin: false,
+      transport: { type: 'stdio', command: 'npx', args: [] },
+    },
+  ]);
+  await startJrConversation({ id: 'jr-bot', ...input, useChrome: false });
+  expect(mocks.createMcp).not.toHaveBeenCalled();
+  expect(mocks.conversation).toHaveBeenCalledWith(
+    expect.objectContaining({
+      assistant: expect.objectContaining({ conversation_overrides: { skill_ids: [], mcp_ids: [] } }),
+    })
+  );
+});
+
 it('passes enabled MCP connections into the actual embedded-agent conversation', async () => {
   const chrome = {
     id: 'chrome-1',
@@ -190,6 +246,7 @@ it('keeps animated appearance outside the native emoji or local-file avatar cont
       instructions: input.instructions,
       learning: '',
       skillIds: [],
+      useChrome: true,
       appearance: { shape: 'star', color: 'blue' },
     },
   });

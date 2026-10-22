@@ -20,6 +20,8 @@ export type ClientBusinessSettingMap = {
           instructions?: string;
           learning?: string;
           skillIds?: string[];
+          /** Chrome is on unless a bot was saved with this set to false. */
+          useChrome?: boolean;
         }
       >
     | undefined;

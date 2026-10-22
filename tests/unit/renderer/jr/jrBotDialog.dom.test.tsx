@@ -45,8 +45,25 @@ it('provisions the local folder and saves the selected character', async () => {
       name: 'Compras',
       workspace: '/tmp/novo-bot',
       appearance: { shape: 'heart', color: 'blue' },
+      useChrome: true,
     }),
     undefined
+  );
+});
+it('selects every skill by default and can clear them, with Chrome checked', async () => {
+  mocks.skills.mockResolvedValue([
+    { name: 'planilhas', description: 'Planilhas' },
+    { name: 'pesquisa-jr', description: 'Pesquisa' },
+  ]);
+  render(<JrBotDialog visible onClose={vi.fn()} onSaved={vi.fn()} />);
+  expect(screen.getByRole('checkbox', { name: 'common.jr.chromeEnabled' })).toBeChecked();
+  fireEvent.change(screen.getByLabelText('common.jr.botName'), { target: { value: 'Compras' } });
+  await waitFor(() => expect(screen.getByRole('button', { name: 'common.jr.skillsSelectNone' })).toBeInTheDocument());
+  fireEvent.click(screen.getByRole('button', { name: 'common.jr.skillsSelectNone' }));
+  fireEvent.click(screen.getByRole('checkbox', { name: 'common.jr.chromeEnabled' }));
+  fireEvent.click(screen.getByText('common.jr.createAction'));
+  await waitFor(() =>
+    expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ skillIds: [], useChrome: false }), undefined)
   );
 });
 it('retains the name and character after a failed save', async () => {

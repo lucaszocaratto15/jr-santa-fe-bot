@@ -434,7 +434,10 @@
       "tokenUsage": "Tokens: {{used}} de {{limit}}",
       "savePolicy": "Salvar regras",
       "blockAction": "Bloquear agora",
-      "unblockAction": "Desbloquear"
+      "unblockAction": "Desbloquear",
+      "openAccess": "Sem horário de início ou de fim. O limite de tokens é opcional.",
+      "noLimitPlaceholder": "Sem limite",
+      "unlimited": "Sem limite"
     },
     "executing": "Working",
     "look": {
@@ -549,6 +552,10 @@
     "teamCreateError": "Não foi possível iniciar a conversa entre bots. Tente novamente.",
     "recentFolders": "Pastas recentes",
     "chooseAnotherFolder": "Escolher outra pasta",
-    "teamUnavailable": "Ainda não há dois bots habilitados para conversar em equipe."
+    "teamUnavailable": "Ainda não há dois bots habilitados para conversar em equipe.",
+    "skillsSelectAll": "Selecionar todas",
+    "skillsSelectNone": "Limpar seleção",
+    "chromeEnabled": "Chrome",
+    "chromeEnabledHint": "O Chrome começa ligado neste bot. Desmarque para criar a conversa sem ele."
   }
 }

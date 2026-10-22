@@ -20,11 +20,7 @@ const AdminContent: React.FC = () => {
   });
   const [name, setName] = useState('');
   const [tokenLimit, setTokenLimit] = useState('');
-  const [accessStart, setAccessStart] = useState('');
-  const [accessEnd, setAccessEnd] = useState('');
-  const [policyDrafts, setPolicyDrafts] = useState<
-    Record<string, { tokenLimit: string; accessStart: string; accessEnd: string }>
-  >({});
+  const [policyDrafts, setPolicyDrafts] = useState<Record<string, string>>({});
   const [invite, setInvite] = useState<JrInvite>();
   const [pending, setPending] = useState('');
   const [failed, setFailed] = useState(false);
@@ -33,28 +29,11 @@ const AdminContent: React.FC = () => {
   const numeric = new Intl.NumberFormat(i18n.language);
   const tokens = (value: number | null | undefined) =>
     value == null ? t('common.jr.access.unreported') : numeric.format(value);
-  const policyFor = (person: JrAdminEmployee) =>
-    policyDrafts[person.id] ?? {
-      tokenLimit: person.tokenLimit == null ? '' : String(person.tokenLimit),
-      accessStart: person.accessStart ?? '',
-      accessEnd: person.accessEnd ?? '',
-    };
-  const updatePolicyDraft = (
-    person: JrAdminEmployee,
-    field: 'tokenLimit' | 'accessStart' | 'accessEnd',
-    value: string
-  ) =>
-    setPolicyDrafts((current) => ({
-      ...current,
-      [person.id]: { ...policyFor(person), [field]: value },
-    }));
+  const limitDraft = (person: JrAdminEmployee) =>
+    policyDrafts[person.id] ?? (person.tokenLimit == null ? '' : String(person.tokenLimit));
   const generate = async (employeeId?: string) => {
     if (pending || (!employeeId && !name.trim())) return;
-    if (
-      !employeeId &&
-      ((accessStart === '') !== (accessEnd === '') ||
-        (tokenLimit !== '' && (!/^\d+$/u.test(tokenLimit) || !Number.isSafeInteger(Number(tokenLimit)))))
-    ) {
+    if (!employeeId && tokenLimit !== '' && (!/^\d+$/u.test(tokenLimit) || !Number.isSafeInteger(Number(tokenLimit)))) {
       setFailed(true);
       return;
     }
@@ -68,15 +47,13 @@ const AdminContent: React.FC = () => {
         : await ipcBridge.jr.admin.createInvite.invoke({
             name: name.trim(),
             tokenLimit: tokenLimit === '' ? null : Number(tokenLimit),
-            accessStart: accessStart || null,
-            accessEnd: accessEnd || null,
+            accessStart: null,
+            accessEnd: null,
           });
       setInvite(result);
       if (!employeeId) {
         setName('');
         setTokenLimit('');
-        setAccessStart('');
-        setAccessEnd('');
       }
       void mutate().catch(() => {});
     } catch {
@@ -113,15 +90,9 @@ const AdminContent: React.FC = () => {
     }
   };
   const savePolicy = async (person: JrAdminEmployee) => {
-    const draft = policyFor(person);
-    const limit = draft.tokenLimit === '' ? null : Number(draft.tokenLimit);
-    if (
-      pending ||
-      person.revoked ||
-      (limit !== null && (!Number.isSafeInteger(limit) || limit < 0)) ||
-      (draft.accessStart === '') !== (draft.accessEnd === '') ||
-      (draft.accessStart !== '' && draft.accessStart === draft.accessEnd)
-    ) {
+    const draft = limitDraft(person);
+    const limit = draft === '' ? null : Number(draft);
+    if (pending || person.revoked || (limit !== null && (!Number.isSafeInteger(limit) || limit < 0))) {
       setFailed(true);
       return;
     }
@@ -131,8 +102,8 @@ const AdminContent: React.FC = () => {
       await ipcBridge.jr.admin.updatePolicy.invoke({
         employeeId: person.id,
         tokenLimit: limit,
-        accessStart: draft.accessStart || null,
-        accessEnd: draft.accessEnd || null,
+        accessStart: null,
+        accessEnd: null,
       });
       await mutate();
       setPolicyDrafts((current) => {
@@ -158,57 +129,39 @@ const AdminContent: React.FC = () => {
   return (
     <main className={styles.admin}>
       <div className={styles.heading}>
-        <h1>{t('common.jr.access.adminTitle')}</h1>
-        <Button onClick={() => void mutate()}>{t('common.reload')}</Button>
+        <h1 className={styles.pageTitle}>{t('common.jr.access.adminTitle')}</h1>
+        <Button shape='round' onClick={() => void mutate()}>
+          {t('common.reload')}
+        </Button>
       </div>
-      <Alert type='info' content={t('common.jr.access.noLimit')} />
-      <div className={styles.inviteForm}>
-        <div className={styles.field}>
-          <label htmlFor='jr-employee-name'>{t('common.jr.access.employeeName')}</label>
-          <Input
-            id='jr-employee-name'
-            value={name}
-            onChange={setName}
-            maxLength={80}
-            disabled={Boolean(pending)}
-            onPressEnter={() => void generate()}
-          />
-        </div>
-        <div className={styles.invitePolicy}>
-          <label className={styles.field}>
+      <section className={styles.card}>
+        <h2 className={styles.cardTitle}>{t('common.jr.access.generateCode')}</h2>
+        <p className={styles.hint}>{t('common.jr.access.openAccess')}</p>
+        <div className={styles.inviteForm}>
+          <label className={styles.adminField} htmlFor='jr-employee-name'>
+            <span>{t('common.jr.access.employeeName')}</span>
+            <Input
+              id='jr-employee-name'
+              value={name}
+              onChange={setName}
+              maxLength={80}
+              disabled={Boolean(pending)}
+              onPressEnter={() => void generate()}
+            />
+          </label>
+          <label className={styles.adminField} htmlFor='jr-invite-limit'>
             <span>{t('common.jr.access.tokenLimit')}</span>
-            <input
-              type='number'
-              min={0}
-              step={1}
+            <Input
+              id='jr-invite-limit'
               value={tokenLimit}
-              onChange={(event) => setTokenLimit(event.target.value)}
+              onChange={setTokenLimit}
               disabled={Boolean(pending)}
-              className={styles.policyInput}
-            />
-          </label>
-          <label className={styles.field}>
-            <span>{t('common.jr.access.startTime')}</span>
-            <input
-              type='time'
-              value={accessStart}
-              onChange={(event) => setAccessStart(event.target.value)}
-              disabled={Boolean(pending)}
-              className={styles.policyInput}
-            />
-          </label>
-          <label className={styles.field}>
-            <span>{t('common.jr.access.endTime')}</span>
-            <input
-              type='time'
-              value={accessEnd}
-              onChange={(event) => setAccessEnd(event.target.value)}
-              disabled={Boolean(pending)}
-              className={styles.policyInput}
+              placeholder={t('common.jr.access.noLimitPlaceholder')}
             />
           </label>
           <Button
             type='primary'
+            shape='round'
             className={styles.primary}
             loading={pending === 'invite'}
             disabled={!name.trim() || Boolean(pending)}
@@ -217,10 +170,7 @@ const AdminContent: React.FC = () => {
             {t('common.jr.access.generateCode')}
           </Button>
         </div>
-      </div>
-      <p className={styles.hint}>
-        {t('common.jr.access.policyHint')} {t('common.jr.access.accessTimezone')}
-      </p>
+      </section>
       {failed && <Alert type='error' content={t('common.jr.access.actionError')} />}
       {invite && (
         <section className={styles.person} aria-label={t('common.jr.access.generatedCode')}>
@@ -268,43 +218,21 @@ const AdminContent: React.FC = () => {
             <p className={styles.hint}>
               {t('common.jr.access.tokenUsage', {
                 used: tokens(person.usage?.totalTokens),
-                limit: person.tokenLimit == null ? t('common.jr.access.noLimit') : tokens(person.tokenLimit),
+                limit: person.tokenLimit == null ? t('common.jr.access.unlimited') : tokens(person.tokenLimit),
               })}
             </p>
-            <div className={styles.policyForm}>
-              <label className={styles.field}>
+            {person.role === 'employee' && !person.revoked && (
+              <label className={styles.adminField} htmlFor={`jr-limit-${person.id}`}>
                 <span>{t('common.jr.access.tokenLimit')}</span>
-                <input
-                  type='number'
-                  min={0}
-                  step={1}
-                  value={policyFor(person).tokenLimit}
-                  onChange={(event) => updatePolicyDraft(person, 'tokenLimit', event.target.value)}
-                  disabled={Boolean(pending) || person.revoked}
-                  className={styles.policyInput}
+                <Input
+                  id={`jr-limit-${person.id}`}
+                  value={limitDraft(person)}
+                  onChange={(value) => setPolicyDrafts((current) => ({ ...current, [person.id]: value }))}
+                  disabled={Boolean(pending)}
+                  placeholder={t('common.jr.access.noLimitPlaceholder')}
                 />
               </label>
-              <label className={styles.field}>
-                <span>{t('common.jr.access.startTime')}</span>
-                <input
-                  type='time'
-                  value={policyFor(person).accessStart}
-                  onChange={(event) => updatePolicyDraft(person, 'accessStart', event.target.value)}
-                  disabled={Boolean(pending) || person.revoked}
-                  className={styles.policyInput}
-                />
-              </label>
-              <label className={styles.field}>
-                <span>{t('common.jr.access.endTime')}</span>
-                <input
-                  type='time'
-                  value={policyFor(person).accessEnd}
-                  onChange={(event) => updatePolicyDraft(person, 'accessEnd', event.target.value)}
-                  disabled={Boolean(pending) || person.revoked}
-                  className={styles.policyInput}
-                />
-              </label>
-            </div>
+            )}
             {!!person.devices?.length && (
               <p className={styles.hint}>
                 {t('common.jr.access.devices', { names: person.devices.map((device) => device.name).join(', ') })}
@@ -313,6 +241,9 @@ const AdminContent: React.FC = () => {
             {person.role === 'employee' && !person.revoked && (
               <div className={styles.actions}>
                 <Button
+                  type='primary'
+                  shape='round'
+                  className={styles.primary}
                   disabled={Boolean(pending)}
                   loading={pending === `policy:${person.id}`}
                   onClick={() => void savePolicy(person)}
