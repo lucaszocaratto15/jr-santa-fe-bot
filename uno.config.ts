@@ -18,6 +18,7 @@ const textColors = {
 // Usage: Status indicators, buttons, tags, etc.
 const semanticColors = {
   primary: 'var(--primary)', // bg-primary, text-primary, border-primary
+  accent: 'var(--accent)', // bg-accent, text-accent, border-accent
   success: 'var(--success)', // bg-success, text-success
   warning: 'var(--warning)', // bg-warning, text-warning
   danger: 'var(--danger)', // bg-danger, text-danger

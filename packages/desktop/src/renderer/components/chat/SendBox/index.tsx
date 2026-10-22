@@ -66,6 +66,7 @@ import { useAbortUploadsOnConversationChange } from '@renderer/hooks/file/useAbo
 import UploadProgressBar from '@renderer/components/media/UploadProgressBar';
 import { allSupportedExts } from '@renderer/services/FileService';
 import SpeechInputButton from '@/renderer/components/chat/SpeechInputButton';
+import { readSpellcheck, SPELLCHECK_EVENT } from '@/renderer/pages/Jr/JrSidebar/preferences';
 import { appendSpeechTranscript } from '@/renderer/hooks/system/useSpeechInput';
 import { createChainedDispatch, useLiveTranscriptInsertion } from '@/renderer/hooks/system/useLiveTranscriptInsertion';
 import { getConversationInputHistory, isCaretOnFirstLine } from '@/renderer/utils/chat/messageHistory';
@@ -350,6 +351,7 @@ const SendBox: React.FC<{
   const conversationContext = useConversationContextSafe();
   const { t, i18n } = useTranslation();
   const [isLoading, setIsLoading] = useState(false);
+  const [spellcheck, setSpellcheck] = useState(() => readSpellcheck());
   const [isSingleLine, setIsSingleLine] = useState(!effectiveDefaultMultiLine);
   const [isInputFocused, setIsInputFocused] = useState(false);
   const isInputActive = isInputFocused;
@@ -388,6 +390,12 @@ const SendBox: React.FC<{
   const suppressedExternalAppendPathsRef = useRef<Set<string>>(new Set());
   const fetchedAtFileSessionKeyRef = useRef<string | null>(null);
   const highlightScrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const sync = () => setSpellcheck(readSpellcheck());
+    window.addEventListener(SPELLCHECK_EVENT, sync);
+    return () => window.removeEventListener(SPELLCHECK_EVENT, sync);
+  }, []);
 
   // Listen for reply events from message actions
   useAddEventListener('sendbox.reply', (quote) => setReplyQuote(quote), []);
@@ -2151,7 +2159,7 @@ const SendBox: React.FC<{
             <Input.TextArea
               autoFocus={active && !isMobile}
               disabled={disabled}
-              spellCheck={false}
+              spellCheck={spellcheck}
               value={input}
               placeholder={
                 isMobileCompact

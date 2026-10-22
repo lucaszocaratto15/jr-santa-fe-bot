@@ -12,8 +12,8 @@ import { useConversationContextSafe } from '@/renderer/hooks/context/Conversatio
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { useLocalFilePreview } from '@/renderer/pages/conversation/Preview/hooks/useLocalFilePreview';
 import { iconColors } from '@/renderer/styles/colors';
-import { Alert, Message, Tooltip } from '@arco-design/web-react';
-import { Copy } from '@icon-park/react';
+import { Alert, Button, Dropdown, Menu, Message, Tooltip } from '@arco-design/web-react';
+import { Comment, Copy, ThumbsUp } from '@icon-park/react';
 import classNames from 'classnames';
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -28,6 +28,7 @@ import { stripSkillSuggest, hasSkillSuggest } from '@renderer/utils/chat/skillSu
 import { isForkEnabled } from '@/common/chat/forkConversation';
 import { useForkConversation } from '@/renderer/hooks/chat/useForkConversation';
 import ForkBranchIcon from '@renderer/components/base/ForkBranchIcon';
+import { emitter } from '@/renderer/utils/emitter';
 
 /**
  * Format a timestamp for message display.
@@ -124,6 +125,7 @@ const MessageText: React.FC<{
 
   const { t } = useTranslation();
   const [showCopyAlert, setShowCopyAlert] = useState(false);
+  const [reaction, setReaction] = useState<string | null>(null);
   const isUserMessage = message.position === 'right';
   // Delivered-but-not-yet-consumed marker for messages sent mid-turn to a
   // supporting backend (claude/codex). The message already reached the
@@ -308,19 +310,17 @@ const MessageText: React.FC<{
         )}
         <div
           className={classNames('min-w-0 [&>p:first-child]:mt-0px [&>p:last-child]:mb-0px', {
-            'bg-aou-2 p-6px md:p-8px': isUserMessage || cronMeta,
+            'jr-message-in jr-bubble jr-bubble-user': isUserMessage || cronMeta,
             'bg-3 p-6px md:p-8px': isTeammateMessage,
-            'w-full': !(isUserMessage || cronMeta || isTeammateMessage),
+            'jr-message-in jr-bubble jr-bubble-assistant': !(isUserMessage || cronMeta || isTeammateMessage),
           })}
           style={{
-            ...(isUserMessage || cronMeta
-              ? { borderRadius: '8px 0 8px 8px', color: 'var(--text-primary)' }
-              : isTeammateMessage
-                ? {
-                    borderRadius: '0 8px 8px 8px',
-                    ...(teammateColor ? { borderLeft: `3px solid ${teammateColor}` } : {}),
-                  }
-                : undefined),
+            ...(isTeammateMessage
+              ? {
+                  borderRadius: '0 8px 8px 8px',
+                  ...(teammateColor ? { borderLeft: `3px solid ${teammateColor}` } : {}),
+                }
+              : undefined),
           }}
         >
           {/* JSON 内容使用折叠组件 Use CollapsibleContent for JSON content */}
@@ -362,6 +362,43 @@ const MessageText: React.FC<{
           >
             {copyButton}
             {forkButton}
+            <Dropdown
+              trigger='click'
+              droplist={
+                <Menu
+                  onClickMenuItem={(key) => {
+                    setReaction(key);
+                  }}
+                >
+                  <Menu.Item key='👍'>👍</Menu.Item>
+                  <Menu.Item key='❤️'>❤️</Menu.Item>
+                  <Menu.Item key='😂'>😂</Menu.Item>
+                </Menu>
+              }
+            >
+              <Button
+                type='text'
+                size='mini'
+                className='opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto'
+                aria-label={t('common.jr.look.react')}
+                icon={reaction ? <span aria-hidden='true'>{reaction}</span> : <ThumbsUp theme='outline' size='16' />}
+              />
+            </Dropdown>
+            <Button
+              type='text'
+              size='mini'
+              className='opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto'
+              aria-label={t('common.jr.look.reply')}
+              icon={<Comment theme='outline' size='16' />}
+              onClick={() => {
+                const content = typeof message.content.content === 'string' ? message.content.content : '';
+                emitter.emit('sendbox.reply', {
+                  messageId: message.msg_id ?? message.id,
+                  content,
+                  position: message.position ?? 'left',
+                });
+              }}
+            />
             {message.created_at && (
               <span className='text-12px text-t-secondary opacity-0 group-hover:opacity-100 transition-opacity select-none'>
                 {formatMessageTime(message.created_at)}

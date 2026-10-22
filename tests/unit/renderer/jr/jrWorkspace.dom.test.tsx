@@ -107,17 +107,21 @@ it('keeps search and new bot controls first, with real search and creation actio
   expect(mocks.navigate).toHaveBeenCalledWith('/guid?create=1');
 });
 
-it('keeps theme, administration, usage and logout available in the profile menu', async () => {
+it('opens settings from the user row with theme, administration, usage and logout', async () => {
   render(<JrSidebar />);
-  expect(screen.queryByText('common.jr.usage')).not.toBeInTheDocument();
+  expect(screen.queryByRole('dialog', { name: 'common.jr.look.settingsNav' })).not.toBeInTheDocument();
   await act(async () => fireEvent.click(screen.getByRole('button', { name: /Funcionário JR/ })));
-  expect(await screen.findByText('common.jr.access.adminTitle')).toBeInTheDocument();
+  expect(await screen.findByRole('dialog', { name: 'common.jr.look.settingsNav' })).toBeInTheDocument();
+  expect(screen.getByText('common.jr.access.adminTitle')).toBeInTheDocument();
   expect(screen.getByText('common.jr.access.exit')).toBeInTheDocument();
-  fireEvent.click(await screen.findByText('common.jr.darkMode'));
+  fireEvent.click(screen.getByRole('button', { name: 'common.jr.look.theme' }));
+  fireEvent.click(await screen.findByText('common.jr.look.themeDark'));
   expect(mocks.theme).toHaveBeenCalledWith('dark');
-  await act(async () => fireEvent.click(screen.getByRole('button', { name: /Funcionário JR/ })));
-  fireEvent.click(await screen.findByText('common.jr.usage'));
-  expect(mocks.navigate).toHaveBeenCalledWith('/usage');
+  fireEvent.click(screen.getByRole('button', { name: 'common.jr.look.tabs.usage' }));
+  expect(await screen.findByRole('heading', { name: 'common.jr.look.usageTitle' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'common.jr.look.tabs.general' }));
+  fireEvent.click(screen.getByRole('button', { name: 'common.jr.access.exit' }));
+  expect(mocks.logout).toHaveBeenCalled();
 });
 
 it('opens and closes connections over the current chat without navigation', async () => {

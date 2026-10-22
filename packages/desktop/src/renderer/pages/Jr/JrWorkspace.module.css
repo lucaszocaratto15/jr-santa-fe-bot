@@ -366,6 +366,14 @@
   flex-shrink: 0;
   object-fit: contain;
 }
+.logo {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  object-fit: contain;
+  object-position: center;
+}
 .characterEditor {
   display: flex;
   align-items: center;

@@ -1,0 +1,19 @@
+import { Bell, Plus, Search } from 'lucide-react';
+export const MainSidebar = () => {
+  return <aside className="flex h-full w-[270px] shrink-0 flex-col border-r border-white/[0.06] bg-[#0D0D0D] max-md:w-[76px]">
+      <div className="flex items-start justify-between px-6 pb-5 pt-7 max-md:flex-col max-md:items-center max-md:gap-6 max-md:px-3">
+        <div className="flex gap-5 max-md:flex-col max-md:gap-4">
+          <div className="text-center"><div className="relative flex h-14 w-14 items-center justify-center rounded-full bg-white text-3xl text-black">👻<span className="absolute -bottom-0.5 -right-1 flex h-5 w-5 items-center justify-center rounded-full border-2 border-[#0D0D0D] bg-[#f59e0b] text-[10px] text-white">★</span></div><span className="mt-2 block text-xs text-zinc-300 max-md:hidden">CEO</span></div>
+          <div className="text-center"><div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#17b5a5] text-3xl">👻</div><span className="mt-2 block max-w-[68px] truncate text-xs text-zinc-300 max-md:hidden">Founder Le...</span></div>
+        </div>
+        <div className="flex gap-2 max-md:flex-col"><button aria-label="Pesquisar" className="rounded-full border border-white/[0.08] bg-[#1c1c1c] p-3 text-zinc-300 hover:bg-[#282828]"><Search size={19} /></button><button aria-label="Nova conversa" className="rounded-full border border-white/[0.08] bg-[#1c1c1c] p-3 text-zinc-300 hover:bg-[#282828]"><Plus size={19} /></button></div>
+      </div>
+      <nav className="flex-1 overflow-y-auto px-5 py-4 max-md:px-2">
+        <p className="mb-4 text-sm font-medium text-zinc-500 max-md:hidden">Mercado Livre</p>
+        <button className="mb-3 flex w-full items-center gap-3 rounded-xl px-1 py-1 text-left hover:bg-white/[0.04]"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#f72585] text-xl">👻</span><span className="max-md:hidden"><strong className="block text-sm font-medium text-zinc-100">3D Mercado Livre</strong><small className="block max-w-[170px] truncate text-xs text-zinc-500">Reparo salva-abas para caixin...</small></span></button>
+        <button className="mb-10 flex w-full items-center gap-3 rounded-xl px-1 py-1 text-left hover:bg-white/[0.04]"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#1683f8] text-xl">◆</span><span className="max-md:hidden"><strong className="block text-sm font-medium text-zinc-100">Gestor Mercado Livre</strong><small className="block max-w-[170px] truncate text-xs text-zinc-500">O Salva Abas é impresso em 3...</small></span></button>
+        <div className="space-y-1 text-sm text-zinc-400"><button className="flex w-full items-center justify-between rounded-lg px-1 py-2 hover:bg-white/[0.04]"><span>Jr Santa Fé</span><span>6</span></button><button className="flex w-full items-center justify-between rounded-lg px-1 py-2 hover:bg-white/[0.04]"><span>Strata Certa</span><span>2</span></button><button className="flex w-full items-center justify-between rounded-lg px-1 py-2 hover:bg-white/[0.04]"><span>Sem seção</span><span>1</span></button><button className="flex w-full items-center justify-between rounded-lg px-1 py-2 hover:bg-white/[0.04]"><span>Bots ocultos</span><span>5</span></button></div>
+      </nav>
+      <div className="flex items-center gap-3 border-t border-white/[0.06] px-5 py-5 max-md:justify-center max-md:px-2"><div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#a855f7] text-xl font-bold text-white">✚</div><span className="flex-1 truncate text-sm font-medium text-zinc-200 max-md:hidden">Lucas Zocaratto</span><Bell size={17} className="text-zinc-500 max-md:hidden" /></div>
+    </aside>;
+};

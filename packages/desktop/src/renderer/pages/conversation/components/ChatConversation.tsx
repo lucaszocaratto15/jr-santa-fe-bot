@@ -175,7 +175,9 @@ const AionrsConversationPanel: React.FC<{ conversation: AionrsConversation; slid
   // Project conversations get the Layout-level Explorer column (stage3 FULL);
   // ChatLayout's own right sider is only for no-project (legacy tree), so it does
   // not double up or reserve an empty column.
-  const workspaceEnabled = Boolean(conversation.extra?.workspace) && !conversation.project_id;
+  // JR chats are one left sidebar plus the transcript. The workspace tree was
+  // the leftover right rail; the titlebar toggle stays mounted for other routes.
+  const workspaceEnabled = false;
   const cronJobId = resolveCronJobId(conversation.extra);
   const { info: presetAssistantInfo } = usePresetAssistantInfo(conversation);
   const aionrsAssistantId = presetAssistantInfo?.assistantId;
@@ -184,7 +186,7 @@ const AionrsConversationPanel: React.FC<{ conversation: AionrsConversation; slid
   );
   const chatLayoutProps = {
     title: jrBot ? <span className='jr-chat-bot-title'>{jrBot.name}</span> : conversation.name,
-    headerLeading: jrBot ? <JrCharacter appearance={jrBot.appearance} size={24} /> : undefined,
+    headerLeading: jrBot ? <JrCharacter appearance={jrBot.appearance} size={28} /> : undefined,
     siderTitle: sliderTitle,
     sider: <ChatSlider conversation={conversation} />,
     headerExtra: (

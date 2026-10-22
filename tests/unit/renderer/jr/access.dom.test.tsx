@@ -49,6 +49,29 @@ it('hides active contents when the native service reports revocation', async () 
   expect(screen.queryByText('private content')).not.toBeInTheDocument();
   expect(await screen.findByText('common.jr.access.revoked')).toBeInTheDocument();
 });
+it('shows the code field and keeps enter disabled until a code is typed', async () => {
+  render(
+    <JrAccessGate>
+      <div>private content</div>
+    </JrAccessGate>
+  );
+  expect(await screen.findByPlaceholderText('common.jr.access.codePlaceholder')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'common.jr.access.enter' })).toBeDisabled();
+  fireEvent.change(screen.getByLabelText('common.jr.access.code'), { target: { value: 'one-time-code' } });
+  expect(screen.getByRole('button', { name: 'common.jr.access.enter' })).toBeEnabled();
+});
+it('shows the service error under the code field when the code is rejected', async () => {
+  mocks.login.mockRejectedValue(new Error('nope'));
+  render(
+    <JrAccessGate>
+      <div>private content</div>
+    </JrAccessGate>
+  );
+  fireEvent.change(await screen.findByLabelText('common.jr.access.code'), { target: { value: 'bad-code' } });
+  fireEvent.click(screen.getByRole('button', { name: 'common.jr.access.enter' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('common.jr.access.invalidCode');
+  expect(screen.queryByText('private content')).not.toBeInTheDocument();
+});
 it('keeps offline contents blocked and allows a new connection check', async () => {
   mocks.status.mockResolvedValue({ status: 'offline', user: null });
   render(
