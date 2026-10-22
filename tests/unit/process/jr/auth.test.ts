@@ -2,7 +2,13 @@ import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createJrSessionStore, getJrControlUrl, JrAccessController } from '@/process/services/jr/auth';
+import {
+  applyJrProxyDenial,
+  createJrSessionStore,
+  getJrControlUrl,
+  JR_SESSION_CHECK_INTERVAL_MS,
+  JrAccessController,
+} from '@/process/services/jr/auth';
 import type { JrStoredSession } from '@/process/services/jr/auth';
 
 const url = 'https://company.example/bot';
@@ -69,6 +75,79 @@ describe('company access state', () => {
     expect(configureCore).toHaveBeenCalledWith({ url: url + '/v1', token, model: 'MiniMax-M3.1-Flash' });
     expect(JSON.stringify(controller.state)).not.toContain(token);
     expect(store.write).toHaveBeenCalledWith(expect.objectContaining({ issuer: url, ownerId: user.id, token }));
+  });
+
+  it('opens the next launch already signed in from the encrypted session and does not ask for the invite again', async () => {
+    const first = setup();
+    await first.controller.initialize();
+    await first.controller.login({ code: 'a-company-invite' });
+    const saved = first.store.write.mock.calls.at(-1)?.[0];
+    expect(saved?.token).toBe(token);
+    const second = setup(saved);
+    await second.controller.initialize();
+    expect(second.controller.state).toEqual({ status: 'authenticated', user });
+    expect(second.request.mock.calls.some((call) => String(call[0]).endsWith('/auth/login'))).toBe(false);
+    expect(JSON.stringify(second.controller.state)).not.toContain(token);
+  });
+
+  it('rejects a revoked session during startup before the local agent starts and clears the stored token', async () => {
+    const { controller, request, configureCore, store } = setup(stored);
+    request.mockImplementation(async (input: string | URL | Request) => {
+      if (String(input).endsWith('/auth/session')) return new Response(null, { status: 401 });
+      return Response.json({ data: [{ id: 'MiniMax-M3.1-Flash' }] });
+    });
+    await controller.initialize();
+    expect(controller.state).toEqual({ status: 'revoked', user: null });
+    expect(configureCore).not.toHaveBeenCalled();
+    expect(store.write).toHaveBeenLastCalledWith({ ...stored, token: null });
+  });
+
+  it('rechecks the stored session once a minute and clears it when that check is revoked', async () => {
+    const { controller, request, store } = setup(stored);
+    await controller.initialize();
+    let tick: (() => void) | undefined;
+    const timer = setInterval(() => {}, 60_000);
+    timer.unref();
+    const interval = vi.spyOn(global, 'setInterval').mockImplementation(((handler: () => void, ms?: number) => {
+      expect(ms).toBe(JR_SESSION_CHECK_INTERVAL_MS);
+      tick = handler;
+      return timer;
+    }) as typeof setInterval);
+    request.mockClear();
+    controller.startHeartbeat();
+    interval.mockRestore();
+    expect(tick).toEqual(expect.any(Function));
+    request.mockResolvedValueOnce(new Response(null, { status: 401 }));
+    tick?.();
+    await vi.waitFor(() => expect(controller.state.status).toBe('revoked'));
+    expect(String(request.mock.calls[0]?.[0])).toContain('/auth/session');
+    expect(store.write).toHaveBeenLastCalledWith({ ...stored, token: null });
+    controller.dispose();
+  });
+
+  it('drops the encrypted token when a gateway response says the session was revoked', async () => {
+    const { controller, store, stopCore } = setup(stored);
+    await controller.initialize();
+    applyJrProxyDenial(controller, 'not-the-saved-token', { status: 401, code: 'invalid_session' });
+    await Promise.resolve();
+    expect(controller.state.status).toBe('authenticated');
+    applyJrProxyDenial(controller, token, { status: 401, code: 'invalid_session' });
+    await vi.waitFor(() => expect(store.write).toHaveBeenLastCalledWith({ ...stored, token: null }));
+    expect(controller.state.status).toBe('revoked');
+    expect(stopCore).toHaveBeenCalledOnce();
+  });
+
+  it('hides the workspace when a gateway response says the employee is blocked and keeps the token', async () => {
+    const { controller, store, stopCore } = setup(stored);
+    await controller.initialize();
+    applyJrProxyDenial(controller, token, { status: 403, code: 'forbidden' });
+    await Promise.resolve();
+    expect(controller.state.status).toBe('authenticated');
+    expect(store.write).not.toHaveBeenCalled();
+    applyJrProxyDenial(controller, token, { status: 403, code: 'employee_blocked' });
+    await vi.waitFor(() => expect(stopCore).toHaveBeenCalledOnce());
+    expect(controller.state.status).toBe('blocked');
+    expect(store.write).not.toHaveBeenCalled();
   });
 
   it('revocation stops all local tasks, clears the token and preserves the installation binding', async () => {

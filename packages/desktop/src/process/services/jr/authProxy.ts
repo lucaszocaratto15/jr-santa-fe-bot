@@ -2,14 +2,46 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { createServer } from 'node:http';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import type { JrProxyDenial } from './auth';
 import type { JrRelayConfig } from './bootstrap';
 
 type JrAuthProxy = { connection: JrRelayConfig; close: () => Promise<void> };
 
+async function readDenialCode(response: Response): Promise<string | null> {
+  const declared = Number(response.headers.get('content-length') ?? 0);
+  if (declared > 4096) {
+    await response.body?.cancel();
+    return null;
+  }
+  const reader = response.body?.getReader();
+  if (!reader) return null;
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    while (size <= 4096) {
+      const next = await reader.read();
+      if (next.done) break;
+      size += next.value.byteLength;
+      if (size > 4096) return null;
+      chunks.push(next.value);
+    }
+  } finally {
+    await reader.cancel().catch(() => {});
+  }
+  try {
+    const value: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    if (!value || typeof value !== 'object' || !('error' in value)) return null;
+    const error = (value as { error?: { code?: unknown } }).error;
+    return error && typeof error.code === 'string' ? error.code : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Exchange a renderer-visible local capability for the native-only remote session. */
 export async function startJrAuthProxy(
   remote: JrRelayConfig,
-  onUnauthorized: () => void,
+  onDenied: (notice: JrProxyDenial) => void,
   request: typeof fetch = fetch
 ): Promise<JrAuthProxy> {
   const capability = randomBytes(32).toString('hex');
@@ -75,9 +107,11 @@ export async function startJrAuthProxy(
         return;
       }
       if (!response.ok) {
-        await response.body?.cancel();
-        outgoing.writeHead(response.status === 401 ? 401 : 502).end();
-        if (response.status === 401) onUnauthorized();
+        const code = await readDenialCode(response);
+        const restriction = response.status === 403 && (code === 'employee_blocked' || code === 'outside_access_hours');
+        const revoked = response.status === 401;
+        outgoing.writeHead(revoked || restriction ? response.status : 502).end();
+        if (revoked || restriction) onDenied({ status: response.status, code });
         return;
       }
       outgoing.writeHead(response.status, {

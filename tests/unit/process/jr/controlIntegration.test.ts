@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { createControlServer } from '../../../../services/control/server.mjs';
-import { JrAccessController } from '@/process/services/jr/auth';
+import { applyJrProxyDenial, JrAccessController } from '@/process/services/jr/auth';
 import type { JrStoredSession } from '@/process/services/jr/auth';
 import { startJrAuthProxy } from '@/process/services/jr/authProxy';
 
@@ -46,8 +46,8 @@ async function fixture() {
       onChange: () => {},
       stopCore,
       configureCore: async (remote) => {
-        proxy = await startJrAuthProxy(remote, () => {
-          void controller.rejectSession();
+        proxy = await startJrAuthProxy(remote, (notice) => {
+          applyJrProxyDenial(controller, remote.token, notice);
         });
       },
     });
@@ -99,6 +99,28 @@ it('authenticates real invites, meters the actual model proxy and stops the clie
   expect(denied.status).toBe(401);
   expect(employee.controller.state).toEqual({ status: 'revoked', user: null });
   expect(employee.stopCore).toHaveBeenCalledOnce();
+  expect(employee.saved?.token).toBeNull();
+});
+
+it('a blocked employee loses the workspace on the next gateway call and can return after unblock', async () => {
+  const { adminCode, client } = await fixture();
+  const owner = client(),
+    employee = client();
+  await owner.controller.initialize();
+  await owner.controller.login({ code: adminCode });
+  const invitation = await owner.controller.createInvite({ name: 'Ana' });
+  await employee.controller.initialize();
+  await employee.controller.login({ code: invitation.code });
+  const kept = employee.saved?.token;
+  await owner.controller.setBlocked({ employeeId: invitation.id, blocked: true });
+  const local = employee.proxy!.connection;
+  const denied = await fetch(`${local.url}/models`, { headers: { Authorization: `Bearer ${local.token}` } });
+  expect(denied.status).toBe(403);
+  expect(await denied.text()).toBe('');
+  expect(employee.controller.state).toEqual({ status: 'blocked', user: null });
+  expect(employee.saved?.token).toBe(kept);
+  await owner.controller.setBlocked({ employeeId: invitation.id, blocked: false });
+  expect((await employee.controller.accessStatus()).status).toBe('authenticated');
 });
 
 it('preserves an installation binding after logout and reuses only a new invite for the same employee', async () => {

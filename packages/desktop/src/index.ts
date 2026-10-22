@@ -28,6 +28,7 @@ import { bootstrapJrConnection, configureJrProvider } from './process/services/j
 import {
   createJrSessionStore,
   getJrControlUrl,
+  applyJrProxyDenial,
   JrAccessController,
   setJrAccessController,
 } from './process/services/jr/auth';
@@ -924,10 +925,10 @@ const handleAppReady = async (): Promise<void> => {
     configureCore: (connection) =>
       serializeRuntime(async () => {
         await proxy?.close();
-        proxy = await startJrAuthProxy(connection, () => {
-          void controller
-            .rejectSession(connection.token)
-            .catch(() => console.warn('[JR] Access could not be cleared.'));
+        proxy = await startJrAuthProxy(connection, (notice) => {
+          applyJrProxyDenial(controller, connection.token, notice, () =>
+            console.warn('[JR] Access could not be cleared.')
+          );
         });
         try {
           const result = await startJrCore();

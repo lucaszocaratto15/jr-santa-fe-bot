@@ -14,7 +14,10 @@ import { parseJrConnectionStatus } from './usage';
 import type { JrRelayConfig } from './bootstrap';
 
 type Environment = Record<string, string | undefined>;
+/** Idle session check. Startup and each gateway response are checked separately. */
+export const JR_SESSION_CHECK_INTERVAL_MS = 60_000;
 export type JrStoredSession = { deviceId: string; issuer: string; ownerId: string | null; token: string | null };
+export type JrProxyDenial = { status: number; code: string | null };
 export type JrSessionStore = {
   read: () => Promise<JrStoredSession | null>;
   write: (session: JrStoredSession) => Promise<void>;
@@ -252,6 +255,10 @@ export class JrAccessController {
       return this.state;
     });
   }
+  /** Hide company data when a gateway call reports a block or closed access hours. */
+  noteGatewayRestriction(status: 'blocked' | 'outside-hours', expectedToken?: string): Promise<JrAccessState> {
+    return this.applyRestriction(status, expectedToken);
+  }
   private async applyRestriction(status: 'blocked' | 'outside-hours', expectedToken?: string): Promise<JrAccessState> {
     if (expectedToken && expectedToken !== this.saved?.token) return this.state;
     return this.blockTransitions(async () => {
@@ -277,7 +284,7 @@ export class JrAccessController {
     if (this.timer || this.options.pilot || !this.options.url) return;
     this.timer = setInterval(() => {
       void this.refresh();
-    }, 15000);
+    }, JR_SESSION_CHECK_INTERVAL_MS);
     this.timer.unref();
   }
   dispose(): void {
@@ -696,6 +703,24 @@ export class JrAccessController {
       return fail('JR_ACCESS_INVALID_RESPONSE');
     return { tokenLimit: value.tokenLimit, accessStart: value.accessStart, accessEnd: value.accessEnd };
   }
+}
+
+/** Map a control-service denial from the model proxy onto the local session. */
+export function applyJrProxyDenial(
+  controller: JrAccessController,
+  token: string,
+  notice: JrProxyDenial | undefined,
+  onError: (error: unknown) => void = () => {}
+): void {
+  const action =
+    notice?.status === 403 && notice.code === 'employee_blocked'
+      ? controller.noteGatewayRestriction('blocked', token)
+      : notice?.status === 403 && notice.code === 'outside_access_hours'
+        ? controller.noteGatewayRestriction('outside-hours', token)
+        : notice?.status === 401
+          ? controller.rejectSession(token)
+          : Promise.resolve(controller.state);
+  void action.catch(onError);
 }
 
 let nativeController: JrAccessController | null = null;

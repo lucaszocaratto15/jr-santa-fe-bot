@@ -57,6 +57,41 @@ it('does not expose control or arbitrary routes through the renderer-visible cap
   expect(request).not.toHaveBeenCalled();
 });
 
+it('notifies a blocked employee from the gateway response and hides the upstream body', async () => {
+  const denied = vi.fn();
+  const request = vi.fn(
+    async () => new Response(JSON.stringify({ error: { code: 'employee_blocked' } }), { status: 403 })
+  );
+  const proxy = await startJrAuthProxy(
+    { url: 'https://company.example/bot/v1', token: secret, model: 'MiniMax-M3.1-Flash' },
+    denied,
+    request
+  );
+  closers.push(proxy.close);
+  const response = await fetch(`${proxy.connection.url}/models`, {
+    headers: { Authorization: `Bearer ${proxy.connection.token}` },
+  });
+  expect(response.status).toBe(403);
+  expect(await response.text()).toBe('');
+  expect(denied).toHaveBeenCalledWith({ status: 403, code: 'employee_blocked' });
+});
+
+it('keeps an ordinary upstream failure local and does not clear the session', async () => {
+  const denied = vi.fn();
+  const request = vi.fn(async () => new Response('upstream failed', { status: 500 }));
+  const proxy = await startJrAuthProxy(
+    { url: 'https://company.example/bot/v1', token: secret, model: 'MiniMax-M3.1-Flash' },
+    denied,
+    request
+  );
+  closers.push(proxy.close);
+  const response = await fetch(`${proxy.connection.url}/models`, {
+    headers: { Authorization: `Bearer ${proxy.connection.token}` },
+  });
+  expect(response.status).toBe(502);
+  expect(denied).not.toHaveBeenCalled();
+});
+
 it('notifies revocation on upstream 401 and never returns its response body', async () => {
   const revoked = vi.fn();
   const request = vi.fn(async () => new Response(`server leaked ${secret}`, { status: 401 }));

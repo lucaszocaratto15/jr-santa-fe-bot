@@ -87,17 +87,24 @@ test('revocation immediately blocks existing sessions and unused invites without
       200
     );
   }
-  assert.equal((await app.request('/auth/session', { token: employee.token })).status, 401);
-  assert.equal(
-    (
-      await app.request('/v1/chat/completions', {
-        method: 'POST',
-        token: employee.token,
-        body: { messages: [{ role: 'user', content: 'Olá' }] },
-      })
-    ).status,
-    401
-  );
+  const employeeId = first.id;
+  for (const [method, path, body] of [
+    ['GET', '/auth/session'],
+    ['POST', '/auth/logout'],
+    ['GET', '/usage'],
+    ['GET', '/v1/models'],
+    ['POST', '/v1/chat/completions', { messages: [{ role: 'user', content: 'Olá' }] }],
+    ['GET', '/admin/employees'],
+    ['POST', '/admin/invites', { name: 'Outro' }],
+    ['POST', `/admin/employees/${employeeId}/revoke`],
+    ['POST', `/admin/employees/${employeeId}/invite`],
+    ['POST', `/admin/employees/${employeeId}/block`, { blocked: true }],
+    ['POST', `/admin/employees/${employeeId}/policy`, { tokenLimit: null, accessStart: null, accessEnd: null }],
+  ]) {
+    const response = await app.request(path, { method, token: employee.token, body });
+    assert.equal(response.status, 401, path);
+    assert.deepEqual(await response.json(), { error: { code: 'invalid_session' } });
+  }
   assert.equal((await app.login(second.code, 'second')).response.status, 401);
   assert.equal(
     (await app.request('/admin/employees/owner/revoke', { method: 'POST', token: owner.token })).status,
@@ -124,15 +131,21 @@ test('administrator can temporarily block and restore an employee without consum
   });
   assert.equal(block.status, 200);
   assert.deepEqual(await block.json(), { blocked: true });
-  for (const response of [
-    await app.request('/auth/session', { token: employee.token }),
-    await app.request('/v1/chat/completions', {
-      method: 'POST',
-      token: employee.token,
-      body: { messages: [{ role: 'user', content: 'Olá' }] },
-    }),
+  for (const [method, path, body] of [
+    ['GET', '/auth/session'],
+    ['POST', '/auth/logout'],
+    ['GET', '/usage'],
+    ['GET', '/v1/models'],
+    ['POST', '/v1/chat/completions', { messages: [{ role: 'user', content: 'Olá' }] }],
+    ['GET', '/admin/employees'],
+    ['POST', '/admin/invites', { name: 'Outro' }],
+    ['POST', `/admin/employees/${invitation.id}/revoke`],
+    ['POST', `/admin/employees/${invitation.id}/invite`],
+    ['POST', `/admin/employees/${invitation.id}/block`, { blocked: false }],
+    ['POST', `/admin/employees/${invitation.id}/policy`, { tokenLimit: 1, accessStart: null, accessEnd: null }],
   ]) {
-    assert.equal(response.status, 403);
+    const response = await app.request(path, { method, token: employee.token, body });
+    assert.equal(response.status, 403, path);
     assert.deepEqual(await response.json(), { error: { code: 'employee_blocked' } });
   }
   assert.equal(upstreamCalls, 0);
