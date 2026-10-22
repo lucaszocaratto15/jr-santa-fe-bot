@@ -35,6 +35,8 @@ test('model proxy uses only configured credentials and records real non-stream u
   assert.equal(usage.promptTokens, 25);
   assert.equal(usage.completionTokens, 7);
   assert.equal(usage.cachedPromptTokens, 10);
+  assert.equal(usage.tokensLast5h, 32);
+  assert.equal(usage.tokensThisWeek, 32);
   assert.equal((await (await app.request('/usage', { token: owner.token })).json()).usage, null);
 });
 
@@ -70,7 +72,7 @@ test('usage remains unknown when provider omits counts and foreign models are re
   assert.equal(usage.unmeteredRequests, 1);
 });
 
-test('token limit stops new model requests after the provider-reported budget is consumed', async (t) => {
+test('a stored token limit is kept but does not block further model requests', async (t) => {
   let upstreamCalls = 0;
   const app = await startControl(t, {
     upstreamFetch: async () => {
@@ -93,12 +95,14 @@ test('token limit stops new model requests after the provider-reported budget is
     body: { messages: [{ role: 'user', content: 'Olá' }] },
   };
   assert.equal((await app.request('/v1/chat/completions', request)).status, 200);
-  const exceeded = await app.request('/v1/chat/completions', request);
-  assert.equal(exceeded.status, 429);
-  assert.deepEqual(await exceeded.json(), { error: { code: 'token_limit_reached' } });
-  assert.equal(upstreamCalls, 1);
+  const continued = await app.request('/v1/chat/completions', request);
+  assert.equal(continued.status, 200);
+  assert.equal(upstreamCalls, 2);
   const usage = await (await app.request('/usage', { token: employee.token })).json();
-  assert.equal(usage.usage.totalTokens, 15);
+  assert.equal(usage.usage.totalTokens, 30);
+  assert.equal(usage.usage.tokensLast5h, 30);
+  const listed = await (await app.request('/admin/employees', { token: owner.token })).json();
+  assert.equal(listed.employees[0].tokenLimit, 15);
 });
 
 test('stream passes through UTF-8 and split SSE frames while recording the final cumulative usage once', async (t) => {

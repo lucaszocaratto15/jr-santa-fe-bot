@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { SWRConfig } from 'swr';
 import type { JrAccessState } from '@/common/config/clientSettings';
@@ -66,7 +66,7 @@ it('creates a real one-time invitation and displays the returned code only after
     accessEnd: null,
   });
 });
-it('sends a token limit with no access window', async () => {
+it('creates an invite without a token limit or access window', async () => {
   mocks.invite.mockResolvedValue({
     id: 'person',
     code: 'policy-code',
@@ -74,19 +74,19 @@ it('sends a token limit with no access window', async () => {
   });
   show('admin');
   fireEvent.change(await screen.findByLabelText('common.jr.access.employeeName'), { target: { value: 'Turno' } });
-  fireEvent.change(screen.getByLabelText('common.jr.access.tokenLimit'), { target: { value: '1200' } });
+  expect(screen.queryByLabelText('common.jr.access.tokenLimit')).not.toBeInTheDocument();
   expect(screen.queryByLabelText('common.jr.access.startTime')).not.toBeInTheDocument();
   expect(screen.queryByLabelText('common.jr.access.endTime')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'common.jr.access.generateCode' }));
   expect(await screen.findByText('policy-code')).toBeInTheDocument();
   expect(mocks.invite).toHaveBeenCalledWith({
     name: 'Turno',
-    tokenLimit: 1200,
+    tokenLimit: null,
     accessStart: null,
     accessEnd: null,
   });
 });
-it('saves a per-user token limit without an access window', async () => {
+it('shows consumed usage and does not offer a token limit to save', async () => {
   mocks.list.mockResolvedValue([
     {
       id: 'person-1',
@@ -94,20 +94,14 @@ it('saves a per-user token limit without an access window', async () => {
       role: 'employee',
       revoked: false,
       blocked: false,
-      tokenLimit: null,
+      tokenLimit: 9000,
+      usage: { totalTokens: 42, promptTokens: 30, completionTokens: 12, modelRequests: 2 },
     },
   ]);
-  mocks.updatePolicy.mockResolvedValue(undefined);
   show('admin');
-  const limit = await screen.findByLabelText('common.jr.access.tokenLimit', { selector: '#jr-limit-person-1' });
-  fireEvent.change(limit, { target: { value: '5000' } });
-  fireEvent.click(screen.getByRole('button', { name: 'common.jr.access.savePolicy' }));
-  await waitFor(() =>
-    expect(mocks.updatePolicy).toHaveBeenCalledWith({
-      employeeId: 'person-1',
-      tokenLimit: 5000,
-      accessStart: null,
-      accessEnd: null,
-    })
-  );
+  expect(await screen.findByText('Ana')).toBeInTheDocument();
+  expect(screen.queryByLabelText('common.jr.access.tokenLimit')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'common.jr.access.savePolicy' })).not.toBeInTheDocument();
+  expect(screen.getByText('common.jr.access.tokensUsed')).toBeInTheDocument();
+  expect(mocks.updatePolicy).not.toHaveBeenCalled();
 });

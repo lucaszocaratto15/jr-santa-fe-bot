@@ -19,8 +19,6 @@ const AdminContent: React.FC = () => {
     shouldRetryOnError: false,
   });
   const [name, setName] = useState('');
-  const [tokenLimit, setTokenLimit] = useState('');
-  const [policyDrafts, setPolicyDrafts] = useState<Record<string, string>>({});
   const [invite, setInvite] = useState<JrInvite>();
   const [pending, setPending] = useState('');
   const [failed, setFailed] = useState(false);
@@ -29,14 +27,8 @@ const AdminContent: React.FC = () => {
   const numeric = new Intl.NumberFormat(i18n.language);
   const tokens = (value: number | null | undefined) =>
     value == null ? t('common.jr.access.unreported') : numeric.format(value);
-  const limitDraft = (person: JrAdminEmployee) =>
-    policyDrafts[person.id] ?? (person.tokenLimit == null ? '' : String(person.tokenLimit));
   const generate = async (employeeId?: string) => {
     if (pending || (!employeeId && !name.trim())) return;
-    if (!employeeId && tokenLimit !== '' && (!/^\d+$/u.test(tokenLimit) || !Number.isSafeInteger(Number(tokenLimit)))) {
-      setFailed(true);
-      return;
-    }
     setPending(employeeId || 'invite');
     setFailed(false);
     setCopied(false);
@@ -46,15 +38,12 @@ const AdminContent: React.FC = () => {
         ? await ipcBridge.jr.admin.reissue.invoke({ employeeId })
         : await ipcBridge.jr.admin.createInvite.invoke({
             name: name.trim(),
-            tokenLimit: tokenLimit === '' ? null : Number(tokenLimit),
+            tokenLimit: null,
             accessStart: null,
             accessEnd: null,
           });
       setInvite(result);
-      if (!employeeId) {
-        setName('');
-        setTokenLimit('');
-      }
+      if (!employeeId) setName('');
       void mutate().catch(() => {});
     } catch {
       setFailed(true);
@@ -83,34 +72,6 @@ const AdminContent: React.FC = () => {
     try {
       await ipcBridge.jr.admin.setBlocked.invoke({ employeeId: person.id, blocked: !person.blocked });
       await mutate();
-    } catch {
-      setFailed(true);
-    } finally {
-      setPending('');
-    }
-  };
-  const savePolicy = async (person: JrAdminEmployee) => {
-    const draft = limitDraft(person);
-    const limit = draft === '' ? null : Number(draft);
-    if (pending || person.revoked || (limit !== null && (!Number.isSafeInteger(limit) || limit < 0))) {
-      setFailed(true);
-      return;
-    }
-    setPending(`policy:${person.id}`);
-    setFailed(false);
-    try {
-      await ipcBridge.jr.admin.updatePolicy.invoke({
-        employeeId: person.id,
-        tokenLimit: limit,
-        accessStart: null,
-        accessEnd: null,
-      });
-      await mutate();
-      setPolicyDrafts((current) => {
-        const next = { ...current };
-        delete next[person.id];
-        return next;
-      });
     } catch {
       setFailed(true);
     } finally {
@@ -147,16 +108,6 @@ const AdminContent: React.FC = () => {
               maxLength={80}
               disabled={Boolean(pending)}
               onPressEnter={() => void generate()}
-            />
-          </label>
-          <label className={styles.adminField} htmlFor='jr-invite-limit'>
-            <span>{t('common.jr.access.tokenLimit')}</span>
-            <Input
-              id='jr-invite-limit'
-              value={tokenLimit}
-              onChange={setTokenLimit}
-              disabled={Boolean(pending)}
-              placeholder={t('common.jr.access.noLimitPlaceholder')}
             />
           </label>
           <Button
@@ -216,23 +167,10 @@ const AdminContent: React.FC = () => {
               })}
             </p>
             <p className={styles.hint}>
-              {t('common.jr.access.tokenUsage', {
+              {t('common.jr.access.tokensUsed', {
                 used: tokens(person.usage?.totalTokens),
-                limit: person.tokenLimit == null ? t('common.jr.access.unlimited') : tokens(person.tokenLimit),
               })}
             </p>
-            {person.role === 'employee' && !person.revoked && (
-              <label className={styles.adminField} htmlFor={`jr-limit-${person.id}`}>
-                <span>{t('common.jr.access.tokenLimit')}</span>
-                <Input
-                  id={`jr-limit-${person.id}`}
-                  value={limitDraft(person)}
-                  onChange={(value) => setPolicyDrafts((current) => ({ ...current, [person.id]: value }))}
-                  disabled={Boolean(pending)}
-                  placeholder={t('common.jr.access.noLimitPlaceholder')}
-                />
-              </label>
-            )}
             {!!person.devices?.length && (
               <p className={styles.hint}>
                 {t('common.jr.access.devices', { names: person.devices.map((device) => device.name).join(', ') })}
@@ -240,16 +178,6 @@ const AdminContent: React.FC = () => {
             )}
             {person.role === 'employee' && !person.revoked && (
               <div className={styles.actions}>
-                <Button
-                  type='primary'
-                  shape='round'
-                  className={styles.primary}
-                  disabled={Boolean(pending)}
-                  loading={pending === `policy:${person.id}`}
-                  onClick={() => void savePolicy(person)}
-                >
-                  {t('common.jr.access.savePolicy')}
-                </Button>
                 <Button
                   disabled={Boolean(pending)}
                   loading={pending === person.id}

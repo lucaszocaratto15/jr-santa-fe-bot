@@ -25,14 +25,7 @@ import {
   writeSpellcheck,
   type ExecutionPreference,
 } from './preferences';
-import {
-  quotaPercent,
-  quotaTone,
-  readUsageQuota,
-  renewalParts,
-  usageMeterFromSnapshot,
-  type UsageWindowQuota,
-} from './usageMeter';
+import { readUsageConsumption, usageMeterFromSnapshot } from './usageMeter';
 import styles from './JrSidebar.module.css';
 
 declare const __APP_VERSION__: string;
@@ -223,28 +216,6 @@ export const ComputerPanel: React.FC = () => {
   );
 };
 
-const QuotaBar: React.FC<{ window: UsageWindowQuota; label: string }> = ({ window: quotaWindow, label }) => {
-  const percent = quotaPercent(quotaWindow.used, quotaWindow.limit);
-  const [filled, setFilled] = useState(0);
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => setFilled(percent));
-    return () => cancelAnimationFrame(frame);
-  }, [percent]);
-  const tone = quotaTone(percent);
-  return (
-    <div
-      className={styles.bar}
-      role='progressbar'
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-valuenow={percent}
-      aria-label={label}
-    >
-      <span className={tone === 'amber' ? styles.barAmber : undefined} style={{ width: `${filled}%` }} />
-    </div>
-  );
-};
-
 export const UsagePanel: React.FC = () => {
   const { t, i18n } = useTranslation();
   const { state } = useJrAccess();
@@ -255,38 +226,26 @@ export const UsagePanel: React.FC = () => {
   );
   const status = isConnectionStatus(data) ? data : null;
   const meter = usageMeterFromSnapshot(status?.usage);
-  const quota = readUsageQuota(status?.usage);
+  const consumption = readUsageConsumption(status?.usage);
   const number = new Intl.NumberFormat(i18n?.language);
   const totalTokens =
     meter.inputTokens == null && meter.outputTokens == null
       ? null
       : (meter.inputTokens ?? 0) + (meter.outputTokens ?? 0);
 
-  const renewLabel = (resetAt: string, mode: 'hours' | 'days') => {
-    const parts = renewalParts(resetAt);
-    if (mode === 'days' && parts.days > 0) return t('common.jr.look.renewDays', { count: parts.days });
-    const hours = parts.days * 24 + parts.hours;
-    if (hours === 0 && parts.minutes === 0) return t('common.jr.look.renewSoon');
-    return t('common.jr.look.renewHours', { hours, minutes: parts.minutes });
-  };
-
-  const quotaCard = (id: string, title: string, quotaWindow: UsageWindowQuota, mode: 'hours' | 'days') => {
-    const percent = quotaPercent(quotaWindow.used, quotaWindow.limit);
-    const usedLabel = t('common.jr.look.percentUsed', { percent });
-    return (
-      <section key={id} className={`${styles.card} ${styles.quotaCard}`} aria-labelledby={id}>
-        <h2 id={id} className={styles.cardTitle}>
-          {title}
-        </h2>
-        <p className={styles.meterLine}>
-          <strong className={styles.meterValue}>{percent}%</strong>
-          <span>{t('common.jr.look.usedLabel')}</span>
-        </p>
-        <QuotaBar window={quotaWindow} label={usedLabel} />
-        <p className={styles.muted}>{renewLabel(quotaWindow.resetAt, mode)}</p>
-      </section>
-    );
-  };
+  const consumptionCard = (id: string, title: string, value: number | null) => (
+    <section key={id} className={`${styles.card} ${styles.quotaCard}`} aria-labelledby={id}>
+      <h2 id={id} className={styles.cardTitle}>
+        {title}
+      </h2>
+      <p className={styles.meterLine}>
+        <strong className={styles.meterValue}>
+          {value == null ? t('common.jr.access.unreported') : number.format(value)}
+        </strong>
+        <span>{t('common.jr.look.tokensLabel')}</span>
+      </p>
+    </section>
+  );
 
   return (
     <div>
@@ -302,10 +261,11 @@ export const UsagePanel: React.FC = () => {
             </div>
           ) : null}
           <div className={styles.quotaGrid}>
-            {quotaCard('jr-limit-5h', t('common.jr.look.limit5h'), quota.window5h, 'hours')}
-            {quotaCard('jr-limit-week', t('common.jr.look.limitWeekly'), quota.weekly, 'days')}
+            {consumptionCard('jr-used-5h', t('common.jr.look.usedLast5h'), consumption.last5h)}
+            {consumptionCard('jr-used-week', t('common.jr.look.usedThisWeek'), consumption.thisWeek)}
+            {consumptionCard('jr-used-total', t('common.jr.look.usedTotal'), consumption.total)}
           </div>
-          <p className={styles.muted}>{t('common.jr.look.quotaMockNote')}</p>
+          <p className={styles.muted}>{t('common.jr.look.usageReportedOnly')}</p>
           <section className={styles.card} aria-labelledby='jr-usage-heading'>
             <h2 id='jr-usage-heading' className={styles.cardTitle}>
               {t('common.jr.look.sessionUsage')}

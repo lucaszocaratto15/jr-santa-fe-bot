@@ -13,14 +13,9 @@ import {
   setConnectorStatus,
 } from '@/renderer/pages/Jr/JrSidebar/connectors';
 import {
-  quotaPercent,
-  quotaTone,
-  readUsageQuota,
-  renewalParts,
+  readUsageConsumption,
   reportedTokenUse,
   usageMeterFromSnapshot,
-  WEEKLY_LIMIT,
-  WINDOW_5H_LIMIT,
 } from '@/renderer/pages/Jr/JrSidebar/usageMeter';
 
 const memoryStore = (): KeyValueStore => {
@@ -79,31 +74,28 @@ describe('usageMeterFromSnapshot', () => {
   });
 });
 
-describe('readUsageQuota', () => {
-  const now = Date.parse('2026-10-22T18:00:00.000Z');
-
-  it('mocks the 5-hour and weekly ceilings when nothing was reported', () => {
-    const quota = readUsageQuota(null, now);
-    expect(quota.source).toBe('mock');
-    expect(quota.window5h).toMatchObject({ used: 0, limit: WINDOW_5H_LIMIT });
-    expect(quota.weekly.limit).toBe(WEEKLY_LIMIT);
-    expect(Date.parse(quota.window5h.resetAt)).toBeGreaterThan(now);
+describe('readUsageConsumption', () => {
+  it('shows zero consumption when nothing was reported', () => {
+    expect(readUsageConsumption(null)).toEqual({ last5h: 0, thisWeek: 0, total: 0 });
+    expect(readUsageConsumption(undefined)).toEqual({ last5h: 0, thisWeek: 0, total: 0 });
   });
 
-  it('uses the metered total from the control service when it is present', () => {
+  it('uses reported windows and the metered total without a ceiling', () => {
     const snapshot = {
       promptTokens: 40,
       completionTokens: 10,
       totalTokens: 15,
+      tokensLast5h: 6,
+      tokensThisWeek: 15,
       cachedPromptTokens: 0,
       modelRequests: 1,
       startedAt: '2026-10-22T14:00:00.000Z',
     };
     expect(reportedTokenUse(snapshot)).toBe(15);
-    expect(readUsageQuota(snapshot, now).window5h.used).toBe(15);
+    expect(readUsageConsumption(snapshot)).toEqual({ last5h: 6, thisWeek: 15, total: 15 });
   });
 
-  it('falls back to prompt plus completion when the metered total is missing', () => {
+  it('leaves a missing window unreported instead of inventing a limit', () => {
     const snapshot = {
       promptTokens: 4,
       completionTokens: 6,
@@ -113,26 +105,7 @@ describe('readUsageQuota', () => {
       startedAt: '2026-10-22T14:00:00.000Z',
     };
     expect(reportedTokenUse(snapshot)).toBe(10);
-    expect(readUsageQuota(snapshot, now).source).toBe('mock');
-  });
-
-  it('maps used tokens onto the mock windows', () => {
-    const quota = readUsageQuota(
-      {
-        promptTokens: 2_400_000,
-        completionTokens: 600_000,
-        cachedPromptTokens: 0,
-        modelRequests: 4,
-        startedAt: '2026-10-22T14:00:00.000Z',
-      },
-      now
-    );
-    expect(quota.window5h.used).toBe(3_000_000);
-    expect(quotaPercent(quota.window5h.used, quota.window5h.limit)).toBe(100);
-    expect(quotaTone(100)).toBe('amber');
-    expect(quotaTone(80)).toBe('accent');
-    const parts = renewalParts(quota.weekly.resetAt, now);
-    expect(parts.days).toBeGreaterThan(0);
+    expect(readUsageConsumption(snapshot)).toEqual({ last5h: null, thisWeek: null, total: 10 });
   });
 });
 

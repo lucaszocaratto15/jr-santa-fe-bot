@@ -418,26 +418,6 @@
   color: var(--color-text-1);
 }
 
-.bar {
-  height: 8px;
-  border-radius: 999px;
-  overflow: hidden;
-  background: var(--jr-hairline);
-}
-
-.bar > span {
-  display: block;
-  height: 100%;
-  width: 0;
-  border-radius: inherit;
-  background: var(--jr-accent);
-  transition: width 700ms ease-out;
-}
-
-.bar > span.barAmber {
-  background: var(--jr-quota-amber, #d4a017);
-}
-
 .quotaGrid {
   display: flex;
   flex-direction: column;

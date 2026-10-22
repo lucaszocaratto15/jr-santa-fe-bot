@@ -31,28 +31,11 @@ export function usageMeterFromSnapshot(snapshot: JrUsageSnapshot | null | undefi
   };
 }
 
-/** Mock ceilings until gateway `/mmx/me/usage` is on the desktop bridge. */
-export const WINDOW_5H_LIMIT = 3_000_000;
-export const WEEKLY_LIMIT = 15_000_000;
-
-const FIVE_HOURS_MS = 5 * 60 * 60 * 1000;
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
-
-export type UsageWindowQuota = {
-  used: number;
-  limit: number;
-  resetAt: string;
-};
-
-export type UsageQuota = {
-  window5h: UsageWindowQuota;
-  weekly: UsageWindowQuota;
-  /**
-   * Always `mock` today. `used` is mapped from reported tokens when a snapshot
-   * exists. Limits and reset times are not on `JrUsageSnapshot`.
-   * Codex: replace this reader with gateway `/mmx/me/usage`.
-   */
-  source: 'mock';
+export type UsageConsumption = {
+  /** Null when the server did not report that window. */
+  last5h: number | null;
+  thisWeek: number | null;
+  total: number | null;
 };
 
 /** Metered total from the control service, otherwise prompt + completion. */
@@ -63,45 +46,23 @@ export function reportedTokenUse(snapshot: JrUsageSnapshot | null | undefined): 
   return (snapshot.promptTokens ?? 0) + (snapshot.completionTokens ?? 0);
 }
 
-function nextBoundary(now: number, windowMs: number, anchorMs: number): string {
-  const anchor = Number.isFinite(anchorMs) ? anchorMs : now;
-  const elapsed = now - anchor;
-  const steps = elapsed >= 0 ? Math.floor(elapsed / windowMs) + 1 : 1;
-  return new Date(anchor + steps * windowMs).toISOString();
+function reportedWindow(value: number | null | undefined): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
 /**
- * Quota cards for the usage tab.
- * `used` is the control-service total when `totalTokens` is present, otherwise
- * prompt + completion. The 3M / 15M ceilings and renewal instants stay mocked:
- * `JrUsageSnapshot` has no 5-hour or weekly window.
+ * Consumed tokens only. Windows come from the control service.
+ * There is no ceiling: a missing window stays null instead of a local quota.
  */
-export function readUsageQuota(snapshot: JrUsageSnapshot | null | undefined, now = Date.now()): UsageQuota {
-  const used = reportedTokenUse(snapshot);
-  const anchor = snapshot?.startedAt ? Date.parse(snapshot.startedAt) : now;
+export function readUsageConsumption(snapshot: JrUsageSnapshot | null | undefined): UsageConsumption {
+  if (!snapshot) return { last5h: 0, thisWeek: 0, total: 0 };
+  const hasTotal =
+    (typeof snapshot.totalTokens === 'number' && Number.isFinite(snapshot.totalTokens)) ||
+    snapshot.promptTokens != null ||
+    snapshot.completionTokens != null;
   return {
-    window5h: { used, limit: WINDOW_5H_LIMIT, resetAt: nextBoundary(now, FIVE_HOURS_MS, anchor) },
-    weekly: { used, limit: WEEKLY_LIMIT, resetAt: nextBoundary(now, WEEK_MS, anchor) },
-    source: 'mock',
+    last5h: reportedWindow(snapshot.tokensLast5h),
+    thisWeek: reportedWindow(snapshot.tokensThisWeek),
+    total: hasTotal ? reportedTokenUse(snapshot) : null,
   };
-}
-
-export function quotaPercent(used: number, limit: number): number {
-  if (limit <= 0) return 0;
-  return Math.max(0, Math.min(100, Math.round((used / limit) * 100)));
-}
-
-/** JR red up to 80% used, amber after that. */
-export function quotaTone(percent: number): 'accent' | 'amber' {
-  return percent > 80 ? 'amber' : 'accent';
-}
-
-export function renewalParts(resetAt: string, now = Date.now()): { days: number; hours: number; minutes: number } {
-  const target = Date.parse(resetAt);
-  const remaining = Math.max(0, (Number.isFinite(target) ? target : now) - now);
-  const minutesTotal = Math.ceil(remaining / 60_000);
-  const days = Math.floor(minutesTotal / (60 * 24));
-  const hours = Math.floor((minutesTotal - days * 24 * 60) / 60);
-  const minutes = minutesTotal - days * 24 * 60 - hours * 60;
-  return { days, hours, minutes };
 }

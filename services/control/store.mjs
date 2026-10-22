@@ -49,6 +49,15 @@ function isWithinAccessHours(start, end, timestamp) {
   return lower < upper ? current >= lower && current < upper : current >= lower || current < upper;
 }
 
+/**
+ * Usage is reported only. The token_limit column and tokenPolicy() stay so a
+ * later decision can turn enforcement back on without a schema change.
+ */
+export const TOKEN_LIMITS_ENFORCED = false;
+
+const FIVE_HOURS_MS = 5 * 60 * 60 * 1000;
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
 /** Open the private control database; only hashes and aggregate usage are persisted. */
 export function createStore({ databasePath, adminCode, model, now = Date.now }) {
   if (databasePath !== ':memory:' && (typeof databasePath !== 'string' || !isAbsolute(databasePath)))
@@ -116,16 +125,26 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
     db.prepare('INSERT INTO invites (hash,user_id,expires_at) VALUES (?,?,?)').run(keyHash(code), userId, expiresAt);
     return { id: userId, code, expiresAt: iso(expiresAt) };
   };
+  const windowTokens = (sum, unmetered) => (unmetered > 0 && sum == null ? null : (sum ?? 0));
   const usageFor = (userId) => {
+    const timestamp = now();
+    const since5h = timestamp - FIVE_HOURS_MS;
+    const sinceWeek = timestamp - WEEK_MS;
     const row = db
       .prepare(`SELECT COUNT(*) AS requests, MIN(started_at) AS first_request, MAX(started_at) AS last_request,
       SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed,
       SUM(CASE WHEN prompt_tokens IS NOT NULL AND completion_tokens IS NOT NULL THEN 1 ELSE 0 END) AS metered,
       SUM(prompt_tokens) AS prompt, SUM(completion_tokens) AS completion, SUM(cached_prompt_tokens) AS cached,
       AVG(CASE WHEN finished_at IS NOT NULL THEN MAX(0, finished_at-started_at) END) AS latency,
-      AVG(first_byte_ms) AS first_byte
+      AVG(first_byte_ms) AS first_byte,
+      SUM(CASE WHEN started_at >= ? AND prompt_tokens IS NOT NULL AND completion_tokens IS NOT NULL
+        THEN prompt_tokens + completion_tokens END) AS tokens_5h,
+      SUM(CASE WHEN started_at >= ? AND (prompt_tokens IS NULL OR completion_tokens IS NULL) THEN 1 ELSE 0 END) AS unmetered_5h,
+      SUM(CASE WHEN started_at >= ? AND prompt_tokens IS NOT NULL AND completion_tokens IS NOT NULL
+        THEN prompt_tokens + completion_tokens END) AS tokens_week,
+      SUM(CASE WHEN started_at >= ? AND (prompt_tokens IS NULL OR completion_tokens IS NULL) THEN 1 ELSE 0 END) AS unmetered_week
       FROM requests WHERE user_id = ?`)
-      .get(userId);
+      .get(since5h, since5h, sinceWeek, sinceWeek, userId);
     if (row.requests === 0) return null;
     return {
       startedAt: iso(row.first_request),
@@ -141,6 +160,8 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
         row.metered === row.requests && row.prompt !== null && row.completion !== null
           ? row.prompt + row.completion
           : null,
+      tokensLast5h: windowTokens(row.tokens_5h, row.unmetered_5h),
+      tokensThisWeek: windowTokens(row.tokens_week, row.unmetered_week),
       cachedPromptTokens: row.cached,
       averageLatencyMs: row.latency === null ? null : Math.round(row.latency),
       averageFirstByteMs: row.first_byte === null ? null : Math.round(row.first_byte),
@@ -251,6 +272,7 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
       });
     },
     tokenPolicy(userId) {
+      if (!TOKEN_LIMITS_ENFORCED) return null;
       const row = db.prepare('SELECT token_limit FROM users WHERE id = ?').get(userId);
       if (!row || row.token_limit === null) return null;
       const usage = usageFor(userId);

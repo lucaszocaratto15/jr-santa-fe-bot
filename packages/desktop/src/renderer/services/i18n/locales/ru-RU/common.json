@@ -437,9 +437,10 @@
       "savePolicy": "Salvar regras",
       "blockAction": "Bloquear agora",
       "unblockAction": "Desbloquear",
-      "openAccess": "Sem horário de início ou de fim. O limite de tokens é opcional.",
+      "openAccess": "Sem horário de início ou de fim. O consumo fica registrado e não bloqueia o acesso.",
       "noLimitPlaceholder": "Sem limite",
-      "unlimited": "Sem limite"
+      "unlimited": "Sem limite",
+      "tokensUsed": "Tokens usados: {{used}}"
     },
     "executing": "Working",
     "look": {
@@ -529,7 +530,11 @@
           "name": "WhatsApp",
           "description": "Draft messages in the connected WhatsApp."
         }
-      }
+      },
+      "usedLast5h": "Últimas 5 horas",
+      "usedThisWeek": "Últimos 7 dias",
+      "usedTotal": "Total",
+      "usageReportedOnly": "Consumo informado. Não há limite nem renovação."
     },
     "search": "Buscar",
     "newBot": "Novo Bot",

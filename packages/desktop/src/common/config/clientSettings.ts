@@ -81,6 +81,10 @@ export type JrUsageSnapshot = {
   promptTokens: number | null;
   completionTokens: number | null;
   totalTokens?: number | null;
+  /** Reported tokens in the last 5 hours. Absent when the server did not send a window. */
+  tokensLast5h?: number | null;
+  /** Reported tokens in the last 7 days. Absent when the server did not send a window. */
+  tokensThisWeek?: number | null;
   cachedPromptTokens: number | null;
   modelRequests: number;
   requests?: number;
