@@ -99,6 +99,7 @@
   border-radius: 9999px;
   color: var(--color-text-3);
   background: transparent;
+  -webkit-app-region: no-drag;
 }
 
 .closeButton:global(.arco-btn):hover,

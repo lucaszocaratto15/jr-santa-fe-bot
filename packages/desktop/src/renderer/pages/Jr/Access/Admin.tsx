@@ -210,7 +210,7 @@ const AdminContent: React.FC = () => {
       <Modal
         visible={Boolean(toRevoke)}
         title={t('common.jr.access.revokeTitle')}
-        closable={false}
+        closable={!pending}
         maskClosable={!pending}
         onCancel={() => setToRevoke(undefined)}
         footer={[

@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { SWRConfig } from 'swr';
 import type { JrAccessState } from '@/common/config/clientSettings';
@@ -85,6 +85,30 @@ it('creates an invite without a token limit or access window', async () => {
     accessStart: null,
     accessEnd: null,
   });
+});
+it('closes the revoke dialog from the X, cancel, and the backdrop', async () => {
+  mocks.list.mockResolvedValue([{ id: 'person-1', name: 'Ana', role: 'employee', revoked: false, blocked: false }]);
+  show('admin');
+  const open = async () => {
+    fireEvent.click(await screen.findByRole('button', { name: 'common.jr.access.revokeAction' }));
+    expect(await screen.findByRole('dialog', { name: 'common.jr.access.revokeTitle' })).toBeInTheDocument();
+  };
+  const closed = () =>
+    waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'common.jr.access.revokeTitle' })).not.toBeInTheDocument()
+    );
+  await open();
+  fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+  await closed();
+  await open();
+  fireEvent.click(screen.getByRole('button', { name: 'common.cancel' }));
+  await closed();
+  await open();
+  const backdrop = document.querySelector('.arco-modal-wrapper');
+  if (!backdrop) throw new Error('revoke dialog backdrop missing');
+  fireEvent.mouseDown(backdrop);
+  fireEvent.click(backdrop);
+  await closed();
 });
 it('shows consumed usage and does not offer a token limit to save', async () => {
   mocks.list.mockResolvedValue([

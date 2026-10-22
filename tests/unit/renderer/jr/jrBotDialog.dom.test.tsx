@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
@@ -62,6 +63,30 @@ it('centers the selected shape highlight on the shape itself', () => {
   expect(selected).toHaveAttribute('aria-pressed', 'true');
   expect(image?.parentElement?.tagName).toBe('SPAN');
   expect(image?.parentElement?.parentElement).toBe(selected);
+});
+it('closes from the X, Cancel, and the backdrop', async () => {
+  const onClose = vi.fn();
+  render(<JrBotDialog visible onClose={onClose} onSaved={vi.fn()} />);
+  fireEvent.click(screen.getByRole('button', { name: 'common.close' }));
+  fireEvent.click(screen.getByRole('button', { name: 'common.cancel' }));
+  const backdrop = document.querySelector('.arco-modal-wrapper');
+  if (!backdrop) throw new Error('dialog backdrop missing');
+  fireEvent.mouseDown(backdrop);
+  fireEvent.click(backdrop);
+  await waitFor(() => expect(onClose).toHaveBeenCalledTimes(3));
+  fireEvent.click(screen.getByLabelText('common.jr.botName'));
+  expect(onClose).toHaveBeenCalledTimes(3);
+});
+it('keeps modal controls outside the window drag region', () => {
+  const modalCss = readFileSync('packages/desktop/src/renderer/styles/arco-override.css', 'utf8');
+  const dialogCss = readFileSync('packages/desktop/src/renderer/pages/Jr/JrWorkspace.module.css', 'utf8');
+  const shellCss = readFileSync('packages/desktop/src/renderer/styles/jr.css', 'utf8');
+  expect(modalCss).toMatch(/\.arco-modal-wrapper,[\s\S]*?-webkit-app-region:\s*no-drag/);
+  expect(modalCss).toMatch(/\.arco-modal-close-icon,[\s\S]*?-webkit-app-region:\s*no-drag/);
+  expect(dialogCss).toMatch(/\.dialogClose:global\(\.arco-btn\)\s*\{[^}]*-webkit-app-region:\s*no-drag/);
+  expect(shellCss).toMatch(
+    /\.app-shell button,[\s\S]*?\.app-shell \[role='button'\],[\s\S]*?-webkit-app-region:\s*no-drag/
+  );
 });
 it('retains the name and character after a failed save', async () => {
   mocks.save.mockRejectedValue(new Error('unavailable'));

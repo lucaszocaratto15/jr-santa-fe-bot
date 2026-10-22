@@ -66,7 +66,7 @@ const ConnectionDialog: React.FC<ConnectionDialogProps> = ({
       title={t(server ? 'common.jr.mcp.editTitle' : 'common.jr.mcp.customTitle')}
       onCancel={onClose}
       maskClosable={!saving}
-      closable={false}
+      closable={!saving}
       escToExit={!saving}
       focusLock
       footer={[

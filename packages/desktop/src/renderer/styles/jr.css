@@ -122,6 +122,11 @@ body[arco-theme='dark'] {
   -webkit-app-region: drag;
 }
 .app-shell button,
+.app-shell input,
+.app-shell textarea,
+.app-shell select,
+.app-shell a,
+.app-shell [role='button'],
 .jr-brand-symbol {
   -webkit-app-region: no-drag;
 }

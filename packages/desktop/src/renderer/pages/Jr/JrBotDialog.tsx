@@ -73,6 +73,7 @@ const JrBotDialog: React.FC<{
             icon={<Close size={18} />}
             aria-label={t('common.close')}
             disabled={saving}
+            onMouseDown={(event) => event.stopPropagation()}
             onClick={onClose}
           />
         </>
