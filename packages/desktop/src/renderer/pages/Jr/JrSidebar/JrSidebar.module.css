@@ -9,24 +9,22 @@
 }
 
 .top {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-  align-items: start;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
   padding-bottom: 12px;
 }
 
 .actions {
   display: flex;
+  justify-content: flex-end;
   gap: 8px;
-  grid-column: 2;
-  grid-row: 1;
 }
 
 .pinned {
-  grid-column: 1;
-  grid-row: 1;
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   min-width: 0;
 }
@@ -421,8 +419,26 @@
 .bar > span {
   display: block;
   height: 100%;
+  width: 0;
   border-radius: inherit;
   background: var(--jr-accent);
+  transition: width 700ms ease-out;
+}
+
+.bar > span.barAmber {
+  background: var(--jr-quota-amber, #d4a017);
+}
+
+.quotaGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.quotaCard {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .updatesBrand {
@@ -500,6 +516,7 @@
   .sectionBody,
   .iconButton:global(.arco-btn),
   .pin:global(.arco-btn),
+  .bar > span,
   .sectionToggle:global(.arco-btn),
   .botRow:global(.arco-btn),
   .profile:global(.arco-btn),

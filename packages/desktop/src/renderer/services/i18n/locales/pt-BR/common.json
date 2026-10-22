@@ -388,6 +388,7 @@
       "title": "Entre no seu espaço JR",
       "description": "Use o código fornecido pelo administrador para ativar este computador.",
       "code": "Código de acesso",
+      "codePlaceholder": "Digite seu código",
       "enter": "Entrar",
       "askAdmin": "Precisa de acesso? Solicite um código ao administrador.",
       "invalidCode": "Não foi possível ativar este computador. Confira o código e o vínculo do funcionário ou peça um novo código ao administrador.",
@@ -482,6 +483,14 @@
       "advancedConnections": "Conexões avançadas",
       "react": "Reagir",
       "reply": "Responder",
+      "limit5h": "Limite de 5 horas",
+      "limitWeekly": "Limite semanal",
+      "percentUsed": "{{percent}}% usado",
+      "usedLabel": "usado",
+      "renewHours": "Renova em {{hours}}h {{minutes}}min",
+      "renewDays": "Renova em {{count}} dias",
+      "renewSoon": "Renova em breve",
+      "quotaMockNote": "Os totais abaixo são o uso informado. Os limites de 5 horas e da semana ficam neste computador até o gateway informar a cota.",
       "connector": {
         "gmail": {
           "name": "Gmail",

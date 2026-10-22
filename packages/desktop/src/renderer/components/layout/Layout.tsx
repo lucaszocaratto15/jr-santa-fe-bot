@@ -377,7 +377,7 @@ const Layout: React.FC<{
                 )}
               >
                 <div className='jr-brand-symbol' onClick={onClick}>
-                  <JrLogo height={28} className='jr-brand-logo' />
+                  <JrLogo height={20} className='jr-brand-logo' />
                 </div>
                 {isMobile && !collapsed && (
                   <Button

@@ -18,7 +18,8 @@
   --jr-chat: #ffffff;
   --jr-surface-2: #f3f3f3;
   --jr-assistant-bubble: #f3f3f3;
-  --jr-user-bubble: #90182c;
+  --jr-user-bubble: #e6e6e6;
+  --jr-quota-amber: #d4a017;
   --jr-hairline: #1c1c1c1f;
   --jr-modal: #ffffff;
   --jr-modal-content: #f7f7f7;
@@ -64,21 +65,26 @@ body[arco-theme='dark'] {
   --jr-chat: #111111;
   --jr-surface-2: #202020;
   --jr-assistant-bubble: #202020;
+  --jr-user-bubble: #2a2a2a;
   --jr-hairline: #ffffff1a;
   --jr-modal: #111111;
   --jr-modal-content: #141414;
   --jr-overlay: #000000b3;
   --jr-tab-active: #ffffff14;
-  --color-text-1: #f5f5f5;
+  --color-text-1: #ececec !important;
+  --text-primary: #ececec !important;
+  --text-0: #ececec !important;
+  --color-text-2: #a0a0a0 !important;
+  --text-secondary: #a0a0a0 !important;
+  --color-text-3: #a0a0a0 !important;
+  color: #ececec;
   --jr-border: #ffffff1f;
   --jr-border-strong: #ffffff3d;
   --jr-composer-shadow: 0 2px 8px -1px #00000040, 0 1px 2px #00000030;
   --jr-shadow: #00000022;
   --bg-hover: #ffffff0f;
   --bg-active: #ffffff14;
-  --color-text-2: #ffffffad;
-  --color-text-3: #ffffff8f;
-  --color-text-4: #ffffff66;
+  --color-text-4: #a0a0a0;
   --color-fill-1: #ffffff08;
   --color-fill-2: #ffffff0f;
   --border-light: #ffffff14;
@@ -120,7 +126,8 @@ body[arco-theme='dark'] {
   -webkit-app-region: no-drag;
 }
 .app-shell .chat-surface-fluid {
-  max-width: 960px;
+  width: min(720px, calc(100% - 32px));
+  max-width: 720px;
   margin-inline: auto;
 }
 .app-shell .chat-layout-header {
@@ -138,46 +145,91 @@ body[arco-theme='dark'] {
 }
 
 .app-shell .layout-sider-header {
-  min-height: 72px;
-  padding-top: calc(var(--titlebar-height, 36px) + 4px);
+  min-height: 0;
+  padding-top: calc(var(--titlebar-height, 36px) + 2px);
+  padding-bottom: 0;
 }
 .app-shell .chat-layout-header {
-  min-height: 72px;
+  min-height: 64px;
+  background: transparent;
+}
+.app-shell .chat-layout-header:has(.jr-chat-bot-title) {
+  background: transparent !important;
+}
+.app-shell .chat-layout-header:has(.jr-chat-bot-title) > :first-child {
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  transform: translateX(-50%);
+  width: auto;
+  height: auto;
+  justify-content: center;
+  z-index: 1;
+}
+.app-shell .chat-layout-header:has(.jr-chat-bot-title) .group {
+  width: auto !important;
+  max-width: 280px !important;
+  border-radius: 999px !important;
+  background: var(--jr-surface-2);
+  border: 1px solid var(--jr-hairline) !important;
+  padding-inline-end: 14px;
+  color: var(--color-text-1);
 }
 .jr-brand-symbol {
   display: flex;
   align-items: center;
   justify-content: center;
   width: auto;
-  max-width: 168px;
-  height: 40px;
+  max-width: 120px;
+  height: 28px;
   overflow: visible;
   flex-shrink: 0;
 }
 .jr-brand-logo {
   display: block;
-  height: 28px;
+  height: 20px;
   width: auto;
-  max-width: 168px;
+  max-width: 112px;
   object-fit: contain;
   object-position: center;
   background: none;
 }
 .jr-bubble {
-  max-width: min(100%, 720px);
+  box-sizing: border-box;
+  color: var(--color-text-1);
 }
 .jr-bubble-user {
+  display: inline-block;
+  max-width: 70%;
   background: var(--jr-user-bubble) !important;
-  color: var(--jr-on-accent) !important;
-  border-radius: 18px 6px 18px 18px !important;
+  color: var(--color-text-1) !important;
+  border-radius: 18px !important;
+  padding: 10px 14px !important;
 }
 .jr-bubble-assistant {
+  width: 100%;
   background: var(--jr-assistant-bubble);
-  border-radius: 6px 18px 18px 18px;
-  padding: 12px 14px;
+  color: var(--color-text-1);
+  border-radius: 18px;
+  padding: 14px 16px;
 }
 .jr-message-in {
   animation: jr-message-in 180ms ease-out;
+}
+.jr-working {
+  margin-bottom: 8px !important;
+  padding: 4px 0 8px !important;
+  color: var(--color-text-2);
+}
+.jr-working-avatar {
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
+.jr-working-avatar img {
+  width: 22px;
+  height: 22px;
 }
 .jr-working-dots {
   display: inline-flex;
@@ -242,6 +294,36 @@ body[data-jr-streaming='1'] .jr-bubble-assistant::after {
   50% {
     opacity: 0;
   }
+}
+body[arco-theme='dark'] .color-black,
+body[arco-theme='dark'] .arco-btn-text,
+body[arco-theme='dark'] .arco-btn-secondary,
+body[arco-theme='dark'] .arco-btn-outline,
+body[arco-theme='dark'] .arco-menu-item,
+body[arco-theme='dark'] .arco-dropdown-menu,
+body[arco-theme='dark'] .arco-dropdown-menu-item,
+body[arco-theme='dark'] .arco-select-view,
+body[arco-theme='dark'] .arco-select-option,
+body[arco-theme='dark'] .arco-input,
+body[arco-theme='dark'] .arco-textarea,
+body[arco-theme='dark'] .arco-tooltip-content,
+body[arco-theme='dark'] .arco-popover-content,
+body[arco-theme='dark'] .arco-modal,
+body[arco-theme='dark'] .arco-modal-title,
+body[arco-theme='dark'] .arco-alert-content,
+body[arco-theme='dark'] .arco-empty-description,
+body[arco-theme='dark'] .markdown-shadow,
+body[arco-theme='dark'] .markdown-shadow p {
+  color: var(--color-text-1);
+}
+body[arco-theme='dark'] .arco-tooltip-content {
+  background: var(--jr-surface-2);
+}
+body[arco-theme='light'] .jr-bubble-user,
+body[arco-theme='light'] .jr-bubble-assistant,
+body:not([arco-theme='dark']) .jr-bubble-user,
+body:not([arco-theme='dark']) .jr-bubble-assistant {
+  color: var(--color-text-1);
 }
 @media (prefers-reduced-motion: reduce) {
   .jr-message-in,

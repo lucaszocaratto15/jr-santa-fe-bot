@@ -310,20 +310,17 @@ const MessageText: React.FC<{
         )}
         <div
           className={classNames('min-w-0 [&>p:first-child]:mt-0px [&>p:last-child]:mb-0px', {
-            'bg-aou-2 p-6px md:p-8px jr-message-in jr-bubble jr-bubble-user': isUserMessage || cronMeta,
+            'jr-message-in jr-bubble jr-bubble-user': isUserMessage || cronMeta,
             'bg-3 p-6px md:p-8px': isTeammateMessage,
             'jr-message-in jr-bubble jr-bubble-assistant': !(isUserMessage || cronMeta || isTeammateMessage),
-            'w-full': !(isUserMessage || cronMeta || isTeammateMessage),
           })}
           style={{
-            ...(isUserMessage || cronMeta
-              ? { borderRadius: '8px 0 8px 8px', color: 'var(--text-primary)' }
-              : isTeammateMessage
-                ? {
-                    borderRadius: '0 8px 8px 8px',
-                    ...(teammateColor ? { borderLeft: `3px solid ${teammateColor}` } : {}),
-                  }
-                : undefined),
+            ...(isTeammateMessage
+              ? {
+                  borderRadius: '0 8px 8px 8px',
+                  ...(teammateColor ? { borderLeft: `3px solid ${teammateColor}` } : {}),
+                }
+              : undefined),
           }}
         >
           {/* JSON 内容使用折叠组件 Use CollapsibleContent for JSON content */}

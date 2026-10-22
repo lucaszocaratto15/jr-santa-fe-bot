@@ -1,6 +1,6 @@
 import { ipcBridge } from '@/common';
 import type { JrAccessState } from '@/common/config/clientSettings';
-import { Alert, Button, Input, Spin } from '@arco-design/web-react';
+import { Button, Input, Spin } from '@arco-design/web-react';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { JrLogo } from '../JrCharacter';
@@ -70,31 +70,44 @@ const JrAccessGate: React.FC<React.PropsWithChildren> = ({ children }) => {
   return (
     <main className={styles.page}>
       <section className={styles.login} aria-labelledby='jr-access-title'>
-        <JrLogo height={48} className={styles.brand} />
+        <JrLogo height={28} className={styles.brand} />
         <h1 id='jr-access-title'>{t('common.jr.access.title')}</h1>
         <p className={styles.hint}>{t('common.jr.access.description')}</p>
         {state.status === 'checking' ? (
           <Spin aria-label={t('common.loading')} />
         ) : (
           <>
-            {message && <Alert type={state.status === 'revoked' ? 'error' : 'warning'} content={t(message)} />}
-            {error && <Alert type='error' content={t(`common.jr.access.${error}`)} />}
-            <label htmlFor='jr-access-code'>{t('common.jr.access.code')}</label>
-            <Input
-              id='jr-access-code'
-              type='password'
-              autoComplete='off'
-              value={code}
-              onChange={setCode}
-              maxLength={200}
-              disabled={busy}
-              autoFocus
-              onPressEnter={() => void login()}
-            />
+            {message && (
+              <p className={styles.error} role='alert'>
+                {t(message)}
+              </p>
+            )}
+            <div className={styles.field}>
+              <label className={styles.srOnly} htmlFor='jr-access-code'>
+                {t('common.jr.access.code')}
+              </label>
+              <Input
+                id='jr-access-code'
+                type='password'
+                autoComplete='off'
+                value={code}
+                onChange={setCode}
+                maxLength={200}
+                disabled={busy}
+                autoFocus
+                placeholder={t('common.jr.access.codePlaceholder')}
+                onPressEnter={() => void login()}
+              />
+              {error && (
+                <p className={styles.error} role='alert'>
+                  {t(`common.jr.access.${error}`)}
+                </p>
+              )}
+            </div>
             <Button
               type='primary'
               long
-              className={styles.primary}
+              className={styles.enter}
               loading={busy}
               disabled={!code.trim()}
               onClick={() => void login()}

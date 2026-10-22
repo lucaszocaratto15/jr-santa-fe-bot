@@ -3,7 +3,15 @@ import unoConfig from '../../../uno.config';
 import { groupBots, UNSECTIONED_ID, workspaceFolderLabel } from '@/renderer/pages/Jr/JrSidebar/groupBots';
 import { readSpellcheck, type KeyValueStore } from '@/renderer/pages/Jr/JrSidebar/preferences';
 import { setConnectorStatus } from '@/renderer/pages/Jr/JrSidebar/connectors';
-import { usageMeterFromSnapshot } from '@/renderer/pages/Jr/JrSidebar/usageMeter';
+import {
+  quotaPercent,
+  quotaTone,
+  readUsageQuota,
+  renewalParts,
+  usageMeterFromSnapshot,
+  WEEKLY_LIMIT,
+  WINDOW_5H_LIMIT,
+} from '@/renderer/pages/Jr/JrSidebar/usageMeter';
 
 const memoryStore = (): KeyValueStore => {
   const values = new Map<string, string>();
@@ -58,6 +66,37 @@ describe('usageMeterFromSnapshot', () => {
     });
     expect(meter.inputSharePercent).toBe(25);
     expect(meter.requests).toBe(2);
+  });
+});
+
+describe('readUsageQuota', () => {
+  const now = Date.parse('2026-10-22T18:00:00.000Z');
+
+  it('mocks the 5-hour and weekly ceilings when nothing was reported', () => {
+    const quota = readUsageQuota(null, now);
+    expect(quota.source).toBe('mock');
+    expect(quota.window5h).toMatchObject({ used: 0, limit: WINDOW_5H_LIMIT });
+    expect(quota.weekly.limit).toBe(WEEKLY_LIMIT);
+    expect(Date.parse(quota.window5h.resetAt)).toBeGreaterThan(now);
+  });
+
+  it('maps used tokens onto the mock windows', () => {
+    const quota = readUsageQuota(
+      {
+        promptTokens: 2_400_000,
+        completionTokens: 600_000,
+        cachedPromptTokens: 0,
+        modelRequests: 4,
+        startedAt: '2026-10-22T14:00:00.000Z',
+      },
+      now
+    );
+    expect(quota.window5h.used).toBe(3_000_000);
+    expect(quotaPercent(quota.window5h.used, quota.window5h.limit)).toBe(100);
+    expect(quotaTone(100)).toBe('amber');
+    expect(quotaTone(80)).toBe('accent');
+    const parts = renewalParts(quota.weekly.resetAt, now);
+    expect(parts.days).toBeGreaterThan(0);
   });
 });
 

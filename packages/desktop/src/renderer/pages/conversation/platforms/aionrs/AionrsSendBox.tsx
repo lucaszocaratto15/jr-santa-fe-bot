@@ -523,7 +523,13 @@ const AionrsSendBox: React.FC<{
       />
       <ThoughtDisplay
         running={(teamRuntime?.loading ?? running) && !awaitingConfirmation}
-        leading={composerBot ? <JrCharacter appearance={composerBot.appearance} size={28} /> : undefined}
+        leading={
+          composerBot ? (
+            <span className='jr-working-avatar'>
+              <JrCharacter appearance={composerBot.appearance} size={22} />
+            </span>
+          ) : undefined
+        }
         statusText={awaitingConfirmation ? t('conversation.chat.awaitingConfirmation') : teamRuntime?.statusText}
         externalElapsedSource={Boolean(teamRuntime) || turnStartedAtMs != null}
         startedAtMs={teamRuntime ? (teamRuntime.startedAtMs ?? null) : turnStartedAtMs}
