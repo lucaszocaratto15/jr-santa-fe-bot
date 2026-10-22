@@ -296,17 +296,7 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
           onClick={() => setConnectionsOpen(true)}
         />
       </div>
-      {settingsTab && (
-        <JrSettingsModal
-          tab={settingsTab}
-          onTab={setSettingsTab}
-          onClose={() => setSettingsTab(null)}
-          onOpenAdvanced={() => {
-            setSettingsTab(null);
-            setConnectionsOpen(true);
-          }}
-        />
-      )}
+      {settingsTab && <JrSettingsModal tab={settingsTab} onTab={setSettingsTab} onClose={() => setSettingsTab(null)} />}
       {connectionsOpen && (
         <Suspense fallback={<Spin size={16} aria-label={t('common.loading')} />}>
           <JrConnections onClose={() => setConnectionsOpen(false)} />

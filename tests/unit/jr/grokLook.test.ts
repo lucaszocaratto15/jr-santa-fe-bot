@@ -7,15 +7,15 @@ import {
   workspaceFolderLabel,
 } from '@/renderer/pages/Jr/JrSidebar/groupBots';
 import { readSpellcheck, type KeyValueStore } from '@/renderer/pages/Jr/JrSidebar/preferences';
+import { readFileSync } from 'node:fs';
 import {
-  applyLiveConnectorStatus,
-  readConnectorRecords,
-  setConnectorStatus,
-} from '@/renderer/pages/Jr/JrSidebar/connectors';
-import {
+  EXAMPLE_USAGE_WINDOW_TOKENS,
   readUsageConsumption,
   reportedTokenUse,
+  USAGE_WINDOW_5H_MS,
+  usageBarsFromSnapshot,
   usageMeterFromSnapshot,
+  usageResetIn,
 } from '@/renderer/pages/Jr/JrSidebar/usageMeter';
 
 const memoryStore = (): KeyValueStore => {
@@ -125,22 +125,57 @@ describe('teamChatsForBots', () => {
   });
 });
 
-describe('connector mock', () => {
-  it('replaces gmail and chrome with live MCP status and leaves the other rows local', () => {
-    const store = memoryStore();
-    const stored = readConnectorRecords(store);
-    const live = applyLiveConnectorStatus(stored, { gmail: 'disconnected', chrome: 'connected' });
-    expect(live.find((item) => item.id === 'gmail')?.status).toBe('disconnected');
-    expect(live.find((item) => item.id === 'chrome')?.status).toBe('connected');
-    expect(live.find((item) => item.id === 'calendar')?.status).toBe('disconnected');
-    expect(readConnectorRecords(store).find((item) => item.id === 'gmail')?.status).toBe('connected');
+describe('usage bars', () => {
+  const now = USAGE_WINDOW_5H_MS + 90 * 60 * 1000;
+
+  it('fills both windows from reported usage against the example ceiling', () => {
+    const bars = usageBarsFromSnapshot(
+      {
+        promptTokens: 10,
+        completionTokens: 5,
+        totalTokens: 15,
+        tokensLast5h: 25_000_000,
+        tokensThisWeek: 10_000_000,
+        cachedPromptTokens: 0,
+        modelRequests: 1,
+        startedAt: '2026-10-22T14:00:00.000Z',
+      },
+      now
+    );
+    expect(bars.last5h).toMatchObject({ used: 25_000_000, limit: EXAMPLE_USAGE_WINDOW_TOKENS, percent: 50 });
+    expect(bars.week).toMatchObject({ used: 10_000_000, limit: EXAMPLE_USAGE_WINDOW_TOKENS, percent: 20 });
+    expect(bars.total).toBe(15);
+    expect(bars.last5h.reset).toEqual({ hours: 3, minutes: 30 });
   });
 
-  it('leaves the catalog unchanged for an unknown connector id', () => {
-    const store = memoryStore();
-    const before = setConnectorStatus('gmail', 'disconnected', store);
-    const after = setConnectorStatus('unknown', 'connected', store);
-    expect(after).toEqual(before);
+  it('draws a missing window as empty and caps the bar at 100 percent', () => {
+    const bars = usageBarsFromSnapshot(
+      {
+        promptTokens: 4,
+        completionTokens: 6,
+        totalTokens: null,
+        tokensLast5h: null,
+        tokensThisWeek: EXAMPLE_USAGE_WINDOW_TOKENS + 1,
+        cachedPromptTokens: 0,
+        modelRequests: 1,
+        startedAt: '2026-10-22T14:00:00.000Z',
+      },
+      now
+    );
+    expect(bars.last5h.used).toBe(0);
+    expect(bars.last5h.percent).toBe(0);
+    expect(bars.week.percent).toBe(100);
+    expect(bars.week.used).toBe(EXAMPLE_USAGE_WINDOW_TOKENS + 1);
+  });
+
+  it('reads a bad clock as zero remaining and keeps enforcement off', () => {
+    expect(usageResetIn(Number.NaN, USAGE_WINDOW_5H_MS)).toEqual({ hours: 0, minutes: 0 });
+    expect(usageResetIn(-1, USAGE_WINDOW_5H_MS)).toEqual({ hours: 0, minutes: 0 });
+    const source = readFileSync('services/control/store.mjs', 'utf8');
+    expect(source).toContain('export const TOKEN_LIMITS_ENFORCED = false');
+    expect(
+      readFileSync('packages/desktop/src/renderer/pages/Jr/JrSidebar/usageMeter.ts', 'utf8').match(/50_000_000/g)
+    ).toEqual(['50_000_000']);
   });
 });
 

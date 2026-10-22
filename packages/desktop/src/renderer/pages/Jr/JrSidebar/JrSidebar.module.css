@@ -448,43 +448,83 @@
   gap: 16px;
 }
 
-.quotaCard {
+.usageCard {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
-.updatesBrand {
-  margin-bottom: 12px;
+.usageHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
 }
 
-.connectorList {
-  list-style: none;
-  margin: 16px 0;
-  padding: 0;
+.usageTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 22px;
+  color: var(--color-text-1);
+}
+
+.usagePercent {
+  flex-shrink: 0;
+  font-size: 14px;
+  color: var(--color-text-3);
+}
+
+.usageTrack {
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--jr-hairline);
+}
+
+.usageFill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--jr-accent);
+}
+
+.usageFigures {
+  margin: 0;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-text-2);
+}
+
+.updateCard {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 20px;
 }
 
-.connectorRow {
+.updateRow {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 14px 16px;
-  border: 1px solid var(--jr-hairline);
-  border-radius: 16px;
-  background: var(--jr-surface-2);
+  justify-content: space-between;
+  gap: 24px;
 }
 
-.connectorMark {
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
-  font-weight: 700;
+.updateStatus {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.updateStatusTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 22px;
+  color: var(--color-text-1);
 }
 
 @media (max-width: 760px) {

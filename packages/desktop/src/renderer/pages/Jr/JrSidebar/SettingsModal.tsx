@@ -1,14 +1,12 @@
 import { Button } from '@arco-design/web-react';
-import { ChartHistogram, Close, Computer, Download, LinkOne, SettingTwo } from '@icon-park/react';
-import React, { lazy, Suspense, useEffect } from 'react';
+import { ChartHistogram, Close, Computer, Download, SettingTwo } from '@icon-park/react';
+import React, { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { ComputerPanel, GeneralPanel, UpdatesPanel, UsagePanel } from './panels';
 import styles from './JrSidebar.module.css';
 
-const LiveConnectors = lazy(() => import('./LiveConnectors'));
-
-export const SETTINGS_TABS = ['general', 'computer', 'usage', 'updates', 'connectors'] as const;
+export const SETTINGS_TABS = ['general', 'computer', 'usage', 'updates'] as const;
 export type SettingsTab = (typeof SETTINGS_TABS)[number];
 
 const TAB_LABEL = {
@@ -16,15 +14,20 @@ const TAB_LABEL = {
   computer: 'common.jr.look.tabs.computer',
   usage: 'common.jr.look.tabs.usage',
   updates: 'common.jr.look.tabs.updates',
-  connectors: 'common.jr.look.tabs.connectors',
 } as const;
+
+const tabIcon = (id: SettingsTab) => {
+  if (id === 'computer') return <Computer size={20} />;
+  if (id === 'usage') return <ChartHistogram size={20} />;
+  if (id === 'updates') return <Download size={20} />;
+  return <SettingTwo size={20} />;
+};
 
 const JrSettingsModal: React.FC<{
   tab: SettingsTab;
   onTab: (tab: SettingsTab) => void;
   onClose: () => void;
-  onOpenAdvanced: () => void;
-}> = ({ tab, onTab, onClose, onOpenAdvanced }) => {
+}> = ({ tab, onTab, onClose }) => {
   const { t } = useTranslation();
 
   useEffect(() => {
@@ -34,14 +37,6 @@ const JrSettingsModal: React.FC<{
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
-
-  const icon = (id: SettingsTab) => {
-    if (id === 'computer') return <Computer size={20} />;
-    if (id === 'usage') return <ChartHistogram size={20} />;
-    if (id === 'updates') return <Download size={20} />;
-    if (id === 'connectors') return <LinkOne size={20} />;
-    return <SettingTwo size={20} />;
-  };
 
   return createPortal(
     <div className={styles.overlay} onClick={onClose}>
@@ -70,7 +65,7 @@ const JrSettingsModal: React.FC<{
               aria-current={tab === id ? 'page' : undefined}
               onClick={() => onTab(id)}
             >
-              {icon(id)}
+              {tabIcon(id)}
               <span>{t(TAB_LABEL[id])}</span>
             </Button>
           ))}
@@ -80,11 +75,6 @@ const JrSettingsModal: React.FC<{
           {tab === 'computer' && <ComputerPanel />}
           {tab === 'usage' && <UsagePanel />}
           {tab === 'updates' && <UpdatesPanel />}
-          {tab === 'connectors' && (
-            <Suspense fallback={null}>
-              <LiveConnectors onOpenAdvanced={onOpenAdvanced} />
-            </Suspense>
-          )}
         </div>
       </div>
     </div>,

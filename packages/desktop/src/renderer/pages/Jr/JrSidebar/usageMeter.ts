@@ -51,8 +51,55 @@ function reportedWindow(value: number | null | undefined): number | null {
 }
 
 /**
+ * Display-only example ceiling for both usage bars.
+ * Not a quota: `TOKEN_LIMITS_ENFORCED` in services/control stays false, and nothing blocks.
+ */
+export const EXAMPLE_USAGE_WINDOW_TOKENS = 50_000_000;
+
+export const USAGE_WINDOW_5H_MS = 5 * 60 * 60 * 1000;
+export const USAGE_WINDOW_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+export type UsageReset = { hours: number; minutes: number };
+
+export type UsageWindowView = {
+  used: number;
+  limit: number;
+  percent: number;
+  reset: UsageReset;
+};
+
+/** Time until the next fixed window boundary. A bad clock reads as 0h 0m. */
+export function usageResetIn(nowMs: number, windowMs: number): UsageReset {
+  if (!Number.isFinite(nowMs) || nowMs < 0 || !Number.isFinite(windowMs) || windowMs <= 0) {
+    return { hours: 0, minutes: 0 };
+  }
+  const elapsed = ((nowMs % windowMs) + windowMs) % windowMs;
+  const remainingMs = elapsed === 0 ? windowMs : windowMs - elapsed;
+  const totalMinutes = Math.floor(remainingMs / 60_000);
+  return { hours: Math.floor(totalMinutes / 60), minutes: totalMinutes % 60 };
+}
+
+function displayUsed(value: number | null | undefined): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return 0;
+  return value;
+}
+
+/** Fill against the example ceiling. Missing or invalid usage draws as an empty bar. */
+export function usageWindowView(
+  used: number | null | undefined,
+  windowMs: number,
+  nowMs: number,
+  limit = EXAMPLE_USAGE_WINDOW_TOKENS
+): UsageWindowView {
+  const safeUsed = displayUsed(used);
+  const safeLimit = displayUsed(limit);
+  const percent = safeLimit <= 0 ? 0 : Math.min(100, Math.round((safeUsed / safeLimit) * 100));
+  return { used: safeUsed, limit: safeLimit, percent, reset: usageResetIn(nowMs, windowMs) };
+}
+
+/**
  * Consumed tokens only. Windows come from the control service.
- * There is no ceiling: a missing window stays null instead of a local quota.
+ * A missing window stays null here; the bars map that to an empty example fill.
  */
 export function readUsageConsumption(snapshot: JrUsageSnapshot | null | undefined): UsageConsumption {
   if (!snapshot) return { last5h: 0, thisWeek: 0, total: 0 };
@@ -64,5 +111,21 @@ export function readUsageConsumption(snapshot: JrUsageSnapshot | null | undefine
     last5h: reportedWindow(snapshot.tokensLast5h),
     thisWeek: reportedWindow(snapshot.tokensThisWeek),
     total: hasTotal ? reportedTokenUse(snapshot) : null,
+  };
+}
+
+export type UsageBars = {
+  last5h: UsageWindowView;
+  week: UsageWindowView;
+  total: number;
+};
+
+/** Both bars share the example ceiling. The total stays the reported figure, or zero when it is absent. */
+export function usageBarsFromSnapshot(snapshot: JrUsageSnapshot | null | undefined, nowMs: number): UsageBars {
+  const consumption = readUsageConsumption(snapshot);
+  return {
+    last5h: usageWindowView(consumption.last5h, USAGE_WINDOW_5H_MS, nowMs),
+    week: usageWindowView(consumption.thisWeek, USAGE_WINDOW_WEEK_MS, nowMs),
+    total: consumption.total ?? 0,
   };
 }

@@ -450,8 +450,7 @@
         "general": "Geral",
         "computer": "Computador",
         "usage": "Uso e cobrança",
-        "updates": "Atualizações",
-        "connectors": "Conectores"
+        "updates": "Atualizações"
       },
       "generalTitle": "Geral",
       "account": "Conta",
@@ -472,8 +471,6 @@
       "executionHint": "Como o bot pede permissão antes de agir neste computador.",
       "allowAlways": "Permitir sempre",
       "askAlways": "Perguntar sempre",
-      "routeTraffic": "Rotear tráfego",
-      "routeTrafficHint": "Preferência neste computador. Ainda não altera o motor do bot.",
       "botComputer": "Computador do bot",
       "updateBotComputer": "Atualizar o computador do bot",
       "updateBotComputerHint": "Mantém este aplicativo alinhado com a versão da empresa.",
@@ -485,55 +482,24 @@
       "noUsage": "Ainda não há consumo informado nesta sessão.",
       "requestsLabel": "Chamadas",
       "tokensLabel": "Tokens",
-      "usageCaption": "Estes números são o uso informado. Esta tela não tem cota semanal nem data de renovação.",
+      "usageCaption": "Teto de exemplo só para exibição. Nada é bloqueado.",
       "updatesTitle": "Atualizações",
       "checking": "Verificando atualizações…",
       "versionLabel": "Versão {{version}}",
       "checkUpdates": "Verificar atualizações",
-      "connectorsTitle": "Conectores",
-      "connectorsIntro": "Serviços que o bot pode usar quando estiverem conectados.",
-      "mockNote": "O estado de conexão desta tela fica neste computador até a integração ficar pronta.",
-      "connect": "Conectar",
-      "disconnect": "Desconectar",
-      "connected": "Conectado",
-      "disconnected": "Desconectado",
-      "advancedConnections": "Conexões avançadas",
       "react": "Reagir",
       "reply": "Responder",
       "limit5h": "Limite de 5 horas",
       "limitWeekly": "Limite semanal",
       "percentUsed": "{{percent}}% usado",
       "usedLabel": "usado",
-      "renewHours": "Renova em {{hours}}h {{minutes}}min",
+      "renewHours": "Reinicia em {{hours}}h {{minutes}}m",
       "renewDays": "Renova em {{count}} dias",
       "renewSoon": "Renova em breve",
-      "quotaMockNote": "Os totais abaixo são o uso informado. Os limites de 5 horas e da semana ficam neste computador até o gateway informar a cota.",
-      "connector": {
-        "gmail": {
-          "name": "Gmail",
-          "description": "Ler e preparar e-mails da conta conectada."
-        },
-        "chrome": {
-          "name": "Chrome",
-          "description": "Usar o navegador neste computador."
-        },
-        "calendar": {
-          "name": "Calendário",
-          "description": "Ver compromissos da agenda conectada."
-        },
-        "files": {
-          "name": "Arquivos",
-          "description": "Trabalhar com pastas deste computador."
-        },
-        "whatsapp": {
-          "name": "WhatsApp",
-          "description": "Preparar mensagens no WhatsApp conectado."
-        }
-      },
-      "usedLast5h": "Últimas 5 horas",
-      "usedThisWeek": "Últimos 7 dias",
+      "usedLast5h": "Uso de 5 horas",
+      "usedThisWeek": "Uso semanal",
       "usedTotal": "Total",
-      "usageReportedOnly": "Consumo informado. Não há limite nem renovação."
+      "usageAmount": "{{used}} / {{limit}}"
     },
     "search": "Buscar",
     "newBot": "Novo Bot",
