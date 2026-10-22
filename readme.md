@@ -11,6 +11,8 @@ Aplicativo corporativo baseado no AionUI. O agente e suas ferramentas executam n
 - MiniMax-M3.1-Flash, sem teto inicial de tokens. Consumo informado pelo provedor, com lacunas de medição identificadas.
 - A conexão Google/Gmail foi retirada desta versão.
 
+Cada bot abre sua própria conversa permanente. Selecionar o bot retoma o mesmo histórico e contexto, inclusive após reiniciar o aplicativo. Nome, personagem e edição ficam na própria conversa; a navegação não apresenta chats avulsos. O fluxo foi conferido no Mac com dois bots, cada um mantendo seu histórico e uma única conversa.
+
 O visual foi reconstruído a partir das medidas observadas no Grok Bot. Fonte de sistema, ícones e personagens próprios ainda diferem da referência; as telas foram comparadas no Mac, com ajustes de alinhamento, botões, temas e campo de mensagem. Não foi comprovada igualdade visual exata.
 
 ## Validação

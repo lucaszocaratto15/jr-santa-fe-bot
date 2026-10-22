@@ -24,25 +24,30 @@ Revogação não recupera nem apaga documentos já copiados. O aplicativo não �
 
 1. Entre com o convite recebido.
 2. Use **Novo Bot**, dê um nome e escolha o personagem e a cor.
-3. Envie o pedido na conversa. O aplicativo cria uma pasta local para esse bot.
+3. A criação abre a conversa do próprio bot. Envie o pedido ali; cada bot mantém sua pasta e uma conversa permanente.
 4. Confira as ações solicitadas e autorize as escritas ou execuções permitidas.
 5. No perfil, acompanhe **Uso**, altere o tema ou saia.
 
+Clique no bot na barra lateral para retomar o mesmo histórico e contexto, inclusive após fechar o aplicativo. O menu **Mais** da conversa permite editar nome e aparência. A navegação JR não mostra uma lista separada de conversas avulsas. Para bots anteriores à mudança, o aplicativo vincula a conversa mais recente daquele bot e pasta; os demais históricos são preservados, sem mesclar mensagens.
+
 Em **Conectar aplicativos**, adicionar o Chrome só mostra **Conectado** após uma conexão real e a leitura das ferramentas. O primeiro uso exige Chrome e um ambiente Node.js disponível; em computadores limpos isso ainda precisa ser validado antes da distribuição Windows. O administrador também pode configurar MCP personalizado. Configure somente serviços apropriados aos dados da empresa.
+
+Conecte os serviços antes de criar os bots que irão usá-los. O AionCore fixa a seleção de ferramentas na criação da conversa e recusa mudanças posteriores. Uma conexão adicionada depois fica disponível para novos bots; esta versão preserva o histórico existente e não recria a conversa para trocar ferramentas.
 
 As regras atuais incluem confirmações de ferramentas e o bloqueio central de identidade/modelo. Um editor administrativo completo de políticas por ferramenta não faz parte desta entrega. A medição não aplica teto inicial de tokens. Valores ausentes do provedor aparecem como desconhecidos, sem estimar saldo da assinatura.
 
 ## Evidência operacional
 
-| Verificação                                   | Resultado observado                                                                                                                    |
-| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Administrador e funcionário no aplicativo Mac | Login real, convite consumido uma vez, administração ausente para funcionário                                                          |
-| Chrome pelo agente MiniMax                    | Navegação, leitura e execução de script na página `https://example.com`                                                                |
-| Arquivo local                                 | `validacao-chrome-jr.json` criado pelo agente e conferido em disco; título `Example Domain`, cabeçalho ausente representado por `null` |
-| Revogação do aplicativo                       | Agente local encerrou em 1.012 ms no teste; tela de acesso revogado conferida no aplicativo                                            |
-| Controle na VPS                               | HTTPS válido; login, convites, papéis, consumo e revogação exercitados                                                                 |
-| Modelo via VPS                                | Resposta real em 1.067 ms; 258 tokens de entrada, 23 de saída e 128 de cache informados pelo provedor                                  |
-| Fluxo interrompido na VPS                     | Primeiro trecho em 1.307 ms; término 78 ms após revogação; medição ausente permaneceu desconhecida                                     |
+| Verificação                                   | Resultado observado                                                                                                                           |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Administrador e funcionário no aplicativo Mac | Login real, convite consumido uma vez, administração ausente para funcionário                                                                 |
+| Chrome pelo agente MiniMax                    | Navegação, leitura e execução de script na página `https://example.com`                                                                       |
+| Arquivo local                                 | `validacao-chrome-jr.json` criado pelo agente e conferido em disco; título `Example Domain`, cabeçalho ausente representado por `null`        |
+| Revogação do aplicativo                       | Agente local encerrou em 1.012 ms no teste; tela de acesso revogado conferida no aplicativo                                                   |
+| Controle na VPS                               | HTTPS válido; login, convites, papéis, consumo e revogação exercitados                                                                        |
+| Modelo via VPS                                | Resposta real em 1.067 ms; 258 tokens de entrada, 23 de saída e 128 de cache informados pelo provedor                                         |
+| Fluxo interrompido na VPS                     | Primeiro trecho em 1.307 ms; término 78 ms após revogação; medição ausente permaneceu desconhecida                                            |
+| Conversa permanente por bot                   | Dois bots criados no Mac, uma conversa por bot; após reiniciar, cada um retomou sua palavra e histórico; editar aparência preservou o vínculo |
 
 A tarefa Chrome teve confirmações manuais, consultas repetidas e reconexão do navegador. Não existe uma medição válida do tempo total automatizado dessa tarefa. As instruções dos novos bots passaram a orientar o reaproveitamento de resultados e uma única verificação; o ganho ainda não foi medido.
 

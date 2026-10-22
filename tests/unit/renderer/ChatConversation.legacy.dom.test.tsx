@@ -1,4 +1,5 @@
 import React from 'react';
+import { MemoryRouter } from 'react-router-dom';
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -127,9 +128,11 @@ describe('ChatConversation legacy runtime rendering', () => {
       appearance: { shape: 'spark', color: 'orange' },
     });
     render(
-      <ChatConversation
-        conversation={{ ...legacyConversation('gemini'), id: 'conv-jr-header', type: 'aionrs' } as TChatConversation}
-      />
+      <MemoryRouter>
+        <ChatConversation
+          conversation={{ ...legacyConversation('gemini'), id: 'conv-jr-header', type: 'aionrs' } as TChatConversation}
+        />
+      </MemoryRouter>
     );
     const name = await screen.findByText('Assistente JR');
     expect(name).toHaveClass('jr-chat-bot-title');

@@ -10,7 +10,9 @@ export type ImageGenerationModelSetting = TProviderWithModel & {
 };
 
 export type ClientBusinessSettingMap = {
-  'jr.botWorkspaces': Record<string, { workspace: string; appearance?: JrAppearance }> | undefined;
+  'jr.botWorkspaces':
+    | Record<string, { workspace: string; appearance?: JrAppearance; conversationId?: string }>
+    | undefined;
   'google.config': GoogleClientSetting;
   'mcp.config': IMcpServer[] | undefined;
   'tools.imageGenerationModel': ImageGenerationModelSetting | undefined;

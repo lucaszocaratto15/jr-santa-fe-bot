@@ -12,15 +12,15 @@ import { CronJobManager } from '@/renderer/pages/cron';
 import { resolveCronJobId } from '@/renderer/pages/cron/cronUtils';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { usePresetAssistantInfo } from '@/renderer/hooks/agent/usePresetAssistantInfo';
-import { getJrBot } from '@/renderer/pages/Jr/jrBots';
+import { deleteJrBot, getJrBot } from '@/renderer/pages/Jr/jrBots';
 import JrCharacter from '@/renderer/pages/Jr/JrCharacter';
 import { iconColors } from '@/renderer/styles/colors';
-import { Button, Dropdown, Menu, Message, Tooltip, Typography } from '@arco-design/web-react';
-import { History } from '@icon-park/react';
+import { Button, Dropdown, Menu, Message, Modal, Tooltip, Typography } from '@arco-design/web-react';
+import { Delete, Edit, History, More } from '@icon-park/react';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import useSWR from 'swr';
+import useSWR, { mutate } from 'swr';
 import { emitter } from '../../../utils/emitter';
 import AcpChat from '../platforms/acp/AcpChat';
 import ChatLayout from './ChatLayout';
@@ -148,6 +148,8 @@ const AionrsConversationPanel: React.FC<{ conversation: AionrsConversation; slid
   conversation,
   sliderTitle,
 }) => {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
   const runtimeView = useConversationRuntimeView(conversation.id);
   const onSelectModel = useCallback(
     async (_provider: IProvider, modelName: string) => {
@@ -187,7 +189,42 @@ const AionrsConversationPanel: React.FC<{ conversation: AionrsConversation; slid
     sider: <ChatSlider conversation={conversation} />,
     headerExtra: (
       <div className='flex items-center gap-8px'>
-        <CronJobManager conversation_id={conversation.id} cron_job_id={cronJobId} />
+        {jrBot ? (
+          <Dropdown
+            trigger='click'
+            position='bottom'
+            droplist={
+              <Menu
+                onClickMenuItem={(key) => {
+                  if (key === 'edit') void navigate(`/guid?bot=${encodeURIComponent(jrBot.id)}&edit=1`);
+                  if (key === 'delete')
+                    Modal.confirm({
+                      title: t('common.jr.deleteBot'),
+                      content: t('common.jr.deleteBotHint'),
+                      okText: t('common.delete'),
+                      cancelText: t('common.cancel'),
+                      onOk: async () => {
+                        await deleteJrBot(jrBot.id);
+                        await mutate('jr.bots');
+                        await navigate('/guid');
+                      },
+                    });
+                }}
+              >
+                <Menu.Item key='edit'>
+                  <Edit size={16} /> {t('common.jr.editBot')}
+                </Menu.Item>
+                <Menu.Item key='delete'>
+                  <Delete size={16} /> {t('common.jr.deleteBot')}
+                </Menu.Item>
+              </Menu>
+            }
+          >
+            <Button type='text' shape='circle' icon={<More size={18} />} aria-label={t('common.more')} />
+          </Dropdown>
+        ) : (
+          <CronJobManager conversation_id={conversation.id} cron_job_id={cronJobId} />
+        )}
       </div>
     ),
     workspaceEnabled,

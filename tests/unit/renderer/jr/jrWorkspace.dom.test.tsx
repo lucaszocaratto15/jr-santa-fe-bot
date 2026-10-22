@@ -67,46 +67,31 @@ beforeEach(() => {
   mocks.start.mockResolvedValue({ id: 'conversation-1' });
 });
 
-it('shows the selected bot in the header without the extra editorial hero', () => {
+it('opens the selected bot conversation directly without a second composer', async () => {
   render(<JrWorkspace />);
-  expect(screen.getByRole('heading', { name: 'Compras', level: 1 })).toBeInTheDocument();
-  expect(screen.queryByText('common.jr.taskHint')).not.toBeInTheDocument();
-  expect(screen.queryByText('common.jr.yourAssistant')).not.toBeInTheDocument();
+  await waitFor(() =>
+    expect(mocks.navigate).toHaveBeenCalledWith('/conversation/conversation-1?bot=bot-1', { replace: true })
+  );
+  expect(mocks.start).toHaveBeenCalledWith(mocks.bot);
+  expect(screen.queryByLabelText('common.jr.taskTitle')).not.toBeInTheDocument();
 });
 
-it('opens the real conversation with its workspace panel initially collapsed', async () => {
-  render(<JrWorkspace />);
-  fireEvent.change(screen.getByLabelText('common.jr.taskTitle'), { target: { value: 'Analise a planilha' } });
-  fireEvent.click(screen.getByRole('button', { name: 'common.jr.startTask' }));
-  await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/conversation/conversation-1'));
-  expect(localStorage.getItem('workspace-preference-conversation-1')).toBe('collapsed');
-  expect(mocks.start).toHaveBeenCalledWith(mocks.bot, 'Analise a planilha');
+it('loads bot details before opening its conversation from a summary in the sidebar', () => {
+  render(<JrSidebar />);
+  fireEvent.click(screen.getByRole('button', { name: 'Compras' }));
+  expect(mocks.navigate).toHaveBeenCalledWith('/guid?bot=bot-1');
+  expect(mocks.start).not.toHaveBeenCalled();
+  expect(screen.queryByLabelText('common.jr.recentChats')).not.toBeInTheDocument();
 });
 
-it('keeps navigation working when storing the optional workspace preference fails', async () => {
-  const setItem = Storage.prototype.setItem;
-  const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (key, value) {
-    if (key.startsWith('workspace-preference-')) throw new Error('quota exceeded');
-    return setItem.call(this, key, value);
-  });
-  try {
-    render(<JrWorkspace />);
-    fireEvent.change(screen.getByLabelText('common.jr.taskTitle'), { target: { value: 'Analise a planilha' } });
-    fireEvent.click(screen.getByRole('button', { name: 'common.jr.startTask' }));
-    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/conversation/conversation-1'));
-  } finally {
-    spy.mockRestore();
-  }
-});
-
-it('retains the task and shows a localized error when conversation creation fails', async () => {
+it('shows a localized retry when the bot conversation cannot be opened', async () => {
   mocks.start.mockRejectedValueOnce(new Error('offline'));
   render(<JrWorkspace />);
-  fireEvent.change(screen.getByLabelText('common.jr.taskTitle'), { target: { value: 'Analise a planilha' } });
-  fireEvent.click(screen.getByRole('button', { name: 'common.jr.startTask' }));
   expect(await screen.findByText('common.jr.connectionError')).toBeInTheDocument();
-  expect(screen.getByDisplayValue('Analise a planilha')).toBeInTheDocument();
-  expect(mocks.navigate).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'common.jr.retry' }));
+  await waitFor(() =>
+    expect(mocks.navigate).toHaveBeenCalledWith('/conversation/conversation-1?bot=bot-1', { replace: true })
+  );
 });
 
 it('keeps search and new bot controls first, with real search and creation actions', () => {

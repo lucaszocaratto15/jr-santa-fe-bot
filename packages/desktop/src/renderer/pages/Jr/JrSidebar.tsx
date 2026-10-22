@@ -1,7 +1,6 @@
-import { ipcBridge } from '@/common';
 import { Button, Dropdown, Menu, Spin, Tooltip } from '@arco-design/web-react';
-import { ChartHistogram, Message, Sun, Moon, LinkOne, Peoples, Logout, Search, Plus, Down } from '@icon-park/react';
-import React, { lazy, Suspense, useEffect, useState } from 'react';
+import { ChartHistogram, Sun, Moon, LinkOne, Peoples, Logout, Search, Plus, Down } from '@icon-park/react';
+import React, { lazy, Suspense, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
@@ -22,16 +21,6 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void }> = ({ onSessionClick }
   const { state, logout } = useJrAccess();
   const [connectionsOpen, setConnectionsOpen] = useState(false);
   const { data: bots, error } = useSWR('jr.bots', listJrBots);
-  const { data: recent, mutate: refreshRecent } = useSWR('jr.recent', () =>
-    ipcBridge.database.getUserConversations.invoke({ limit: 12 })
-  );
-  useEffect(
-    () =>
-      ipcBridge.conversation.listChanged.on(() => {
-        void refreshRecent();
-      }),
-    [refreshRecent]
-  );
   const open = (path: string) => {
     void navigate(path);
     onSessionClick?.();
@@ -128,25 +117,6 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void }> = ({ onSessionClick }
             </Button>
           ))}
         </div>
-        {!!recent?.items.length && (
-          <div className={styles.sidebarSection} aria-label={t('common.jr.recentChats')}>
-            {recent.items
-              .filter((item) => item.type === 'aionrs')
-              .map((item) => (
-                <Button
-                  type='text'
-                  key={item.id}
-                  long
-                  className={`${styles.navItem} ${location.pathname === `/conversation/${item.id}` ? styles.active : ''}`}
-                  icon={<Message size={17} />}
-                  onClick={() => open(`/conversation/${item.id}`)}
-                  title={item.name}
-                >
-                  {item.name}
-                </Button>
-              ))}
-          </div>
-        )}
       </div>
       <div className={styles.sidebarBottom}>
         <Dropdown trigger='click' position='top' droplist={profileMenu}>

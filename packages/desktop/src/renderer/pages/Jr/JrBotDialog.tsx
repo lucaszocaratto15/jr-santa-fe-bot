@@ -42,7 +42,6 @@ const JrBotDialog: React.FC<{
         bot?.id
       );
       await onSaved(saved);
-      onClose();
     } catch {
       setError(t('common.jr.saveError'));
     } finally {

@@ -1,11 +1,12 @@
 import { ipcBridge } from '@/common';
-import type { IProvider, TProviderWithModel } from '@/common/config/storage';
+import type { IProvider, TChatConversation, TProviderWithModel } from '@/common/config/storage';
 import { isAionrsAssistant } from '@/common/types/agent/assistantTypes';
 import { getClientBusinessSetting, setClientBusinessSetting } from '@/renderer/services/clientBusinessSettings';
 import type { JrAppearance } from '@/common/config/clientSettings';
 import { normalizeAppearance } from './botAppearance';
 import { isGmailServer } from './Connections/connections';
 import { toSessionMcpServer } from '@/renderer/hooks/mcp/catalog';
+import { getConversationOrNull } from '@/renderer/pages/conversation/utils/conversationCache';
 
 export const JR_MODEL = 'MiniMax-M3.1-Flash';
 export const JR_PROVIDER = 'JR MiniMax';
@@ -88,6 +89,7 @@ export async function saveJrBot(input: JrBotInput, id?: string): Promise<JrBot> 
     await setClientBusinessSetting('jr.botWorkspaces', {
       ...workspaces,
       [id]: {
+        ...workspaces[id],
         workspace: input.workspace,
         ...(input.appearance ? { appearance: normalizeAppearance(input.appearance) } : {}),
       },
@@ -126,16 +128,66 @@ export function selectJrModel(providers: IProvider[]): TProviderWithModel | null
   return provider ? { ...provider, api_key: '', use_model: JR_MODEL } : null;
 }
 
-export async function startJrConversation(bot: JrBot, input: string) {
+const openingConversations = new Map<string, Promise<TChatConversation>>();
+let conversationQueue: Promise<unknown> = Promise.resolve();
+
+/** Open the bot's durable conversation, coalescing concurrent navigation requests. */
+export function startJrConversation(bot: JrBot): Promise<TChatConversation> {
+  const pending = openingConversations.get(bot.id);
+  if (pending) return pending;
+  // Serialize whole-map writes so opening different bots cannot discard each other's bindings.
+  const operation = conversationQueue.then(() => resolveJrConversation(bot));
+  conversationQueue = operation.catch((): undefined => undefined);
+  openingConversations.set(bot.id, operation);
+  void operation.then(
+    () => openingConversations.delete(bot.id),
+    () => openingConversations.delete(bot.id)
+  );
+  return operation;
+}
+
+async function resolveJrConversation(bot: JrBot): Promise<TChatConversation> {
   if (validateJrBot(bot)) throw new Error('Bot configuration is incomplete');
+  const matchesBot = (conversation: TChatConversation) => {
+    const extra = conversation.extra as
+      | { workspace?: string; assistant_id?: string; preset_assistant_id?: string }
+      | undefined;
+    const assistantId = conversation.assistant?.id || extra?.assistant_id || extra?.preset_assistant_id;
+    return (
+      conversation.type === 'aionrs' &&
+      assistantId === bot.id &&
+      extra?.workspace?.normalize('NFC') === bot.workspace.normalize('NFC')
+    );
+  };
+  const workspaces = (await getClientBusinessSetting('jr.botWorkspaces')) || {};
+  const boundId = workspaces[bot.id]?.conversationId;
+  if (boundId) {
+    const bound = await getConversationOrNull(boundId);
+    if (bound && matchesBot(bound)) return bound;
+  }
+  const bind = async (conversation: TChatConversation) => {
+    const latest = (await getClientBusinessSetting('jr.botWorkspaces')) || {};
+    await setClientBusinessSetting('jr.botWorkspaces', {
+      ...latest,
+      [bot.id]: { ...latest[bot.id], workspace: bot.workspace, conversationId: conversation.id },
+    });
+    return conversation;
+  };
+  // shortcut: legacy recovery uses the existing 10,000-row window; paginate before supporting larger histories.
+  const history = await ipcBridge.database.getUserConversations.invoke({ limit: 10000 });
+  const previous = history.items
+    .filter(matchesBot)
+    .sort((a, b) => b.modified_at - a.modified_at || b.created_at - a.created_at)[0];
+  if (previous) return bind(previous);
+  if (history.has_more) throw new Error('Conversation history is incomplete');
   const model = selectJrModel(await ipcBridge.mode.listProviders.invoke());
   if (!model) throw new Error('JR MiniMax connection is unavailable');
   // shortcut: Gmail OAuth is incomplete; admit it after real client authorization is supported.
   const servers = (await ipcBridge.mcpService.listServers.invoke()).filter(
     (server) => server.enabled && !isGmailServer(server)
   );
-  return ipcBridge.conversation.create.invoke({
-    name: input.trim().slice(0, 120) || bot.name,
+  const conversation = await ipcBridge.conversation.create.invoke({
+    name: bot.name,
     model,
     assistant: { id: bot.id, locale: 'pt-BR', conversation_overrides: { mcp_ids: servers.map((server) => server.id) } },
     extra: {
@@ -145,4 +197,12 @@ export async function startJrConversation(bot: JrBot, input: string) {
       selected_session_mcp_servers: servers.map(toSessionMcpServer),
     },
   });
+  if (!conversation?.id) throw new Error('Conversation was not created');
+  try {
+    localStorage.setItem(`workspace-preference-${conversation.id}`, 'collapsed');
+    if (conversation.project_id) localStorage.setItem(`project-panel-collapse:${conversation.project_id}`, 'collapsed');
+  } catch {
+    // Navigation must continue when optional layout preferences cannot be stored.
+  }
+  return bind(conversation);
 }

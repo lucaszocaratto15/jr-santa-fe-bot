@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => ({
   writeSetting: vi.fn(),
   providers: vi.fn(),
   conversation: vi.fn(),
+  getConversation: vi.fn(),
+  conversations: vi.fn(),
   mcps: vi.fn(),
 }));
 vi.mock('@/common', () => ({
@@ -26,7 +28,8 @@ vi.mock('@/common', () => ({
     },
     fs: { writeAssistantRule: { invoke: mocks.writeRules } },
     mode: { listProviders: { invoke: mocks.providers } },
-    conversation: { create: { invoke: mocks.conversation } },
+    conversation: { create: { invoke: mocks.conversation }, get: { invoke: mocks.getConversation } },
+    database: { getUserConversations: { invoke: mocks.conversations } },
     mcpService: { listServers: { invoke: mocks.mcps } },
   },
 }));
@@ -69,6 +72,8 @@ beforeEach(() => {
   mocks.writeRules.mockResolvedValue(true);
   mocks.providers.mockResolvedValue([provider]);
   mocks.mcps.mockResolvedValue([]);
+  mocks.conversations.mockResolvedValue({ items: [], total: 0, has_more: false });
+  mocks.getConversation.mockResolvedValue(null);
   mocks.conversation.mockResolvedValue({ id: 'real-conversation' });
 });
 
@@ -137,10 +142,10 @@ describe('JR bot persistence', () => {
   });
 
   it('starts a real aionrs conversation in the chosen bot workspace', async () => {
-    const result = await startJrConversation({ id: 'jr-bot', ...input }, 'Some o CSV');
+    const result = await startJrConversation({ id: 'jr-bot', ...input });
     expect(mocks.conversation).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: 'Some o CSV',
+        name: input.name,
         assistant: expect.objectContaining({ id: 'jr-bot', locale: 'pt-BR' }),
         model: expect.objectContaining({ id: 'jr-provider', use_model: 'MiniMax-M3.1-Flash' }),
         extra: expect.objectContaining({ workspace: input.workspace, custom_workspace: true }),
@@ -158,7 +163,7 @@ it('passes enabled MCP connections into the actual embedded-agent conversation',
     transport: { type: 'stdio', command: 'npx', args: ['chrome-devtools-mcp@1.12.0'] },
   };
   mocks.mcps.mockResolvedValue([chrome, { ...chrome, id: 'disabled', enabled: false }]);
-  await startJrConversation({ id: 'jr-bot', ...input }, 'Abra o Chrome');
+  await startJrConversation({ id: 'jr-bot', ...input });
   expect(mocks.conversation).toHaveBeenCalledWith(
     expect.objectContaining({
       assistant: expect.objectContaining({ conversation_overrides: { mcp_ids: ['chrome-1'] } }),
@@ -214,8 +219,107 @@ it('does not attach pending official Gmail connections to a new model conversati
       transport: { type: 'http', url: 'https://gmailmcp.googleapis.com/mcp/v1' },
     },
   ]);
-  await startJrConversation({ id: 'jr-bot', ...input }, 'Olá');
+  await startJrConversation({ id: 'jr-bot', ...input });
   expect(mocks.conversation).toHaveBeenCalledWith(
     expect.objectContaining({ assistant: expect.objectContaining({ conversation_overrides: { mcp_ids: [] } }) })
   );
+});
+
+describe('one persistent conversation per JR bot', () => {
+  const bot = { id: 'jr-bot', ...input };
+  const conversation = {
+    id: 'existing-chat',
+    type: 'aionrs',
+    assistant: { id: bot.id },
+    extra: { workspace: input.workspace },
+    modified_at: 20,
+  };
+
+  it('reopens the bound conversation without starting a parallel chat', async () => {
+    mocks.readSetting.mockResolvedValue({ [bot.id]: { workspace: bot.workspace, conversationId: conversation.id } });
+    mocks.getConversation.mockResolvedValue(conversation);
+    expect(await startJrConversation(bot)).toEqual(conversation);
+    expect(mocks.conversation).not.toHaveBeenCalled();
+    expect(mocks.conversations).not.toHaveBeenCalled();
+  });
+
+  it('adopts the most recent matching history and preserves its messages', async () => {
+    mocks.conversations.mockResolvedValue({
+      items: [
+        { id: 'unrelated-chat', type: 'acp', modified_at: 40 },
+        { ...conversation, id: 'other-bot', assistant: { id: 'someone-else' }, modified_at: 30 },
+        { ...conversation, id: 'older-chat', modified_at: 10 },
+        conversation,
+      ],
+      total: 4,
+      has_more: false,
+    });
+    expect(await startJrConversation(bot)).toEqual(conversation);
+    expect(mocks.writeSetting).toHaveBeenCalledWith(
+      'jr.botWorkspaces',
+      expect.objectContaining({
+        [bot.id]: expect.objectContaining({ conversationId: conversation.id }),
+      })
+    );
+    expect(mocks.conversation).not.toHaveBeenCalled();
+  });
+
+  it('recognizes the same workspace across macOS Unicode normalization forms', async () => {
+    const workspace = '/tmp/Comprás';
+    mocks.readSetting.mockResolvedValue({
+      [bot.id]: { workspace: workspace.normalize('NFD'), conversationId: conversation.id },
+    });
+    mocks.getConversation.mockResolvedValue({ ...conversation, extra: { workspace: workspace.normalize('NFC') } });
+    expect((await startJrConversation({ ...bot, workspace: workspace.normalize('NFD') })).id).toBe(conversation.id);
+    expect(mocks.conversation).not.toHaveBeenCalled();
+  });
+
+  it('creates only one conversation for overlapping opens of the same bot', async () => {
+    const [a, b] = await Promise.all([startJrConversation(bot), startJrConversation(bot)]);
+    expect(a.id).toBe(b.id);
+    expect(mocks.conversation).toHaveBeenCalledTimes(1);
+    expect(mocks.writeSetting).toHaveBeenCalledWith(
+      'jr.botWorkspaces',
+      expect.objectContaining({
+        [bot.id]: expect.objectContaining({ conversationId: 'real-conversation' }),
+      })
+    );
+  });
+
+  it('does not reuse another bot conversation from an invalid local binding', async () => {
+    mocks.readSetting.mockResolvedValue({ [bot.id]: { workspace: bot.workspace, conversationId: 'foreign' } });
+    mocks.getConversation.mockResolvedValue({ ...conversation, id: 'foreign', assistant: { id: 'another-bot' } });
+    expect((await startJrConversation(bot)).id).toBe('real-conversation');
+    expect(mocks.conversation).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails closed when the existing conversation cannot be checked', async () => {
+    mocks.readSetting.mockResolvedValue({ [bot.id]: { workspace: bot.workspace, conversationId: conversation.id } });
+    mocks.getConversation.mockRejectedValue(new Error('offline'));
+    await expect(startJrConversation(bot)).rejects.toThrow('offline');
+    expect(mocks.conversation).not.toHaveBeenCalled();
+  });
+
+  it('does not create a duplicate when the historical listing is incomplete', async () => {
+    mocks.conversations.mockResolvedValue({ items: [], total: 10001, has_more: true });
+    await expect(startJrConversation(bot)).rejects.toThrow();
+    expect(mocks.conversation).not.toHaveBeenCalled();
+  });
+
+  it('preserves the conversation binding while editing the bot appearance', async () => {
+    mocks.readSetting.mockResolvedValue({ [bot.id]: { workspace: bot.workspace, conversationId: conversation.id } });
+    mocks.get.mockResolvedValue({
+      source: 'user',
+      profile: { name: bot.name },
+      rules: { content: bot.instructions },
+      engine: { agent: { type: 'aionrs' } },
+    });
+    await saveJrBot({ ...input, appearance: { shape: 'star', color: 'blue' } }, bot.id);
+    expect(mocks.writeSetting).toHaveBeenCalledWith(
+      'jr.botWorkspaces',
+      expect.objectContaining({
+        [bot.id]: expect.objectContaining({ conversationId: conversation.id }),
+      })
+    );
+  });
 });
