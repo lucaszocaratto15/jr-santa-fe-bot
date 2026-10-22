@@ -259,21 +259,43 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px;
+  padding: 24px;
   background: var(--jr-overlay);
+  -webkit-app-region: no-drag;
   animation: jr-fade 160ms ease-out;
+}
+
+/* Traffic lights occupy y=22..~36. The rounded panel starts below them, and
+   below the window drag strip, so the corner stays clear. */
+.overlayMac {
+  padding-top: 56px;
+}
+
+.windowDrag {
+  position: absolute;
+  z-index: 0;
+  top: 0;
+  inset-inline: 0;
+  height: 16px;
+  -webkit-app-region: drag;
+}
+
+.overlayMac .windowDrag {
+  height: 28px;
 }
 
 .panel {
   position: relative;
+  z-index: 1;
   display: flex;
   width: min(1400px, 100%);
-  height: min(860px, calc(100vh - 32px));
+  height: min(860px, calc(100vh - 80px));
   overflow: hidden;
   border: 1px solid var(--jr-hairline);
   border-radius: 16px;
   background: var(--jr-modal);
   box-shadow: 0 24px 80px var(--jr-shadow, rgba(0, 0, 0, 0.45));
+  -webkit-app-region: no-drag;
   animation: jr-pop 180ms ease-out;
 }
 
@@ -283,6 +305,7 @@
   inset-inline-end: 16px;
   z-index: 2;
   color: var(--color-text-3);
+  -webkit-app-region: no-drag;
 }
 
 .nav {
@@ -293,22 +316,50 @@
   gap: 4px;
   padding: 28px 16px;
   border-inline-end: 1px solid var(--jr-hairline);
+  -webkit-app-region: no-drag;
 }
 
-.tab:global(.arco-btn) {
+.nav .tab:global(.arco-btn.arco-btn-long) {
   display: flex;
+  align-items: center;
+  box-sizing: border-box;
   height: 48px;
   justify-content: flex-start;
   gap: 12px;
-  padding: 0 14px;
+  padding: 14px;
   border-radius: 12px;
   color: var(--color-text-2);
   font-size: 16px;
+  line-height: 20px;
+  -webkit-app-region: no-drag;
   transition: background-color 160ms ease-out;
 }
 
-.tab:global(.arco-btn):hover,
-.tabActive:global(.arco-btn) {
+.nav .tab:global(.arco-btn) :global(.i-icon) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  line-height: 0;
+}
+
+.nav .tab:global(.arco-btn) :global(.i-icon) svg {
+  display: block;
+  margin: 0;
+  vertical-align: top;
+}
+
+.tabLabel {
+  display: flex;
+  align-items: center;
+  height: 20px;
+  line-height: 20px;
+}
+
+.nav .tab:global(.arco-btn.arco-btn-long):hover,
+.nav .tabActive:global(.arco-btn.arco-btn-long) {
   background: var(--jr-tab-active);
   color: var(--color-text-1);
 }
@@ -530,7 +581,7 @@
 @media (max-width: 760px) {
   .panel {
     flex-direction: column;
-    height: calc(100vh - 16px);
+    height: calc(100vh - 80px);
   }
   .nav {
     width: 100%;

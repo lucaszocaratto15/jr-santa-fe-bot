@@ -127,6 +127,38 @@ it('opens settings from the user row with theme, administration, usage and logou
   expect(mocks.logout).toHaveBeenCalled();
 });
 
+it('closes settings from the close button', async () => {
+  render(<JrSidebar />);
+  await act(async () => fireEvent.click(screen.getByRole('button', { name: /Funcionário JR/ })));
+  expect(await screen.findByRole('dialog', { name: 'common.jr.look.settingsNav' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'common.jr.look.closeSettings' }));
+  await waitFor(() =>
+    expect(screen.queryByRole('dialog', { name: 'common.jr.look.settingsNav' })).not.toBeInTheDocument()
+  );
+});
+
+it('keeps settings open when the dialog is clicked', async () => {
+  render(<JrSidebar />);
+  await act(async () => fireEvent.click(screen.getByRole('button', { name: /Funcionário JR/ })));
+  const dialog = await screen.findByRole('dialog', { name: 'common.jr.look.settingsNav' });
+  fireEvent.click(dialog);
+  expect(screen.getByRole('dialog', { name: 'common.jr.look.settingsNav' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'common.jr.look.tabs.computer' }));
+  expect(screen.getByRole('dialog', { name: 'common.jr.look.settingsNav' })).toBeInTheDocument();
+});
+
+it('closes settings when the backdrop is clicked', async () => {
+  render(<JrSidebar />);
+  await act(async () => fireEvent.click(screen.getByRole('button', { name: /Funcionário JR/ })));
+  const dialog = await screen.findByRole('dialog', { name: 'common.jr.look.settingsNav' });
+  const backdrop = dialog.parentElement;
+  if (!backdrop) throw new Error('settings dialog has no backdrop');
+  fireEvent.click(backdrop);
+  await waitFor(() =>
+    expect(screen.queryByRole('dialog', { name: 'common.jr.look.settingsNav' })).not.toBeInTheDocument()
+  );
+});
+
 it('leaves connectors and route traffic out of settings', async () => {
   render(<JrSidebar />);
   await act(async () => fireEvent.click(screen.getByRole('button', { name: /Funcionário JR/ })));

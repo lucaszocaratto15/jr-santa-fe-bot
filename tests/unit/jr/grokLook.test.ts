@@ -191,3 +191,36 @@ describe('accent token', () => {
     expect(colors?.accent).toBe('var(--accent)');
   });
 });
+
+describe('settings modal frame', () => {
+  const css = readFileSync('packages/desktop/src/renderer/pages/Jr/JrSidebar/JrSidebar.module.css', 'utf8');
+  const chrome = readFileSync('packages/desktop/src/process/utils/windowBounds.ts', 'utf8');
+  const main = readFileSync('packages/desktop/src/index.ts', 'utf8');
+
+  it('centers the nav icon and label inside the pill', () => {
+    expect(css).toMatch(/\.nav \.tab:global\(\.arco-btn\.arco-btn-long\)\s*\{[^}]*align-items:\s*center/);
+    expect(css).toMatch(/\.nav \.tab:global\(\.arco-btn\.arco-btn-long\)\s*\{[^}]*padding:\s*14px/);
+    expect(css).toMatch(/\.tabLabel\s*\{[^}]*align-items:\s*center/);
+    expect(css).toMatch(/\.tabLabel\s*\{[^}]*line-height:\s*20px/);
+  });
+
+  it('insets the macOS traffic lights inside the rounded window', () => {
+    expect(chrome).toContain("titleBarStyle: 'hiddenInset'");
+    expect(chrome).toContain('roundedCorners: true');
+    expect(chrome).toContain('x: 20, y: 22');
+  });
+
+  it('does not keep the clipped traffic-light position', () => {
+    expect(chrome).not.toContain('y: 13');
+    expect(main).toContain('macTitleBarOptions');
+    expect(main).toContain('setWindowButtonPosition');
+    expect(main).not.toContain('trafficLightPosition: { x: 10, y: 13 }');
+  });
+
+  it('lets the close control and the backdrop escape the window drag region', () => {
+    expect(css).toMatch(/\.overlay\s*\{[^}]*-webkit-app-region:\s*no-drag/);
+    expect(css).toMatch(/\.overlayMac\s*\{[^}]*padding-top:\s*56px/);
+    expect(css).toMatch(/\.close:global\(\.arco-btn\)\s*\{[^}]*-webkit-app-region:\s*no-drag/);
+    expect(css).toMatch(/\.windowDrag\s*\{[^}]*-webkit-app-region:\s*drag/);
+  });
+});

@@ -3,6 +3,7 @@ import { ChartHistogram, Close, Computer, Download, SettingTwo } from '@icon-par
 import React, { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
+import { isMacOS } from '@/renderer/utils/platform';
 import { ComputerPanel, GeneralPanel, UpdatesPanel, UsagePanel } from './panels';
 import styles from './JrSidebar.module.css';
 
@@ -38,13 +39,20 @@ const JrSettingsModal: React.FC<{
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  const dismissBackdrop = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (event.target !== event.currentTarget) return;
+    onClose();
+  };
+
   return createPortal(
-    <div className={styles.overlay} onClick={onClose}>
+    <div className={isMacOS() ? `${styles.overlay} ${styles.overlayMac}` : styles.overlay} onClick={dismissBackdrop}>
+      <div className={styles.windowDrag} aria-hidden='true' />
       <div
         className={styles.panel}
         role='dialog'
         aria-modal='true'
         aria-label={t('common.jr.look.settingsNav')}
+        onMouseDown={(event) => event.stopPropagation()}
         onClick={(event) => event.stopPropagation()}
       >
         <Button
@@ -53,6 +61,7 @@ const JrSettingsModal: React.FC<{
           className={styles.close}
           aria-label={t('common.jr.look.closeSettings')}
           icon={<Close size={18} />}
+          onMouseDown={(event) => event.stopPropagation()}
           onClick={onClose}
         />
         <nav className={styles.nav} aria-label={t('common.jr.look.settingsNav')}>
@@ -66,7 +75,7 @@ const JrSettingsModal: React.FC<{
               onClick={() => onTab(id)}
             >
               {tabIcon(id)}
-              <span>{t(TAB_LABEL[id])}</span>
+              <span className={styles.tabLabel}>{t(TAB_LABEL[id])}</span>
             </Button>
           ))}
         </nav>

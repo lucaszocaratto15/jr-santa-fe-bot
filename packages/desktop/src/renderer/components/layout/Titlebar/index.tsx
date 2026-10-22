@@ -246,9 +246,9 @@ const Titlebar: React.FC<TitlebarProps> = ({ workspaceAvailable }) => {
 
   const menuStyle: React.CSSProperties = useMemo(() => {
     if (!isMacRuntime || !showSiderToggle) return {};
-    // macOS: sit the menu buttons right next to the traffic lights (which occupy ~70px).
-    // Mobile keeps its own layout (no traffic lights).
-    const marginLeft = layout?.isMobile ? '0px' : '76px';
+    // macOS: sit the menu clear of the traffic lights. Lights start at x=20 and the
+    // group is ~70px wide, so 96px leaves a gap. Mobile has no traffic lights.
+    const marginLeft = layout?.isMobile ? '0px' : '96px';
     return {
       marginLeft,
     };
