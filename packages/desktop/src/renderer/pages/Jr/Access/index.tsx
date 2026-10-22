@@ -1,9 +1,9 @@
 import { ipcBridge } from '@/common';
 import type { JrAccessState } from '@/common/config/clientSettings';
-import { Alert, Button, Input, Spin } from '@arco-design/web-react';
+import { Button, Input, Spin } from '@arco-design/web-react';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import jrLogo from '@/renderer/assets/logos/jr-logo.png';
+import { JrLogo } from '../JrCharacter';
 import { JrAccessContext } from './context';
 import styles from './Access.module.css';
 
@@ -78,12 +78,7 @@ const JrAccessGate: React.FC<React.PropsWithChildren> = ({ children }) => {
   return (
     <main className={styles.page}>
       <section className={styles.login} aria-labelledby='jr-access-title'>
-        <div
-          className={styles.brand}
-          role='img'
-          aria-label={t('common.jr.companyName')}
-          style={{ maskImage: `url("${jrLogo}")` }}
-        />
+        <JrLogo height={28} className={styles.brand} />
         <h1 id='jr-access-title'>{t('common.jr.access.title')}</h1>
         <p className={styles.hint}>{t('common.jr.access.description')}</p>
         {state.status === 'checking' ? (
@@ -91,28 +86,36 @@ const JrAccessGate: React.FC<React.PropsWithChildren> = ({ children }) => {
         ) : (
           <>
             {message && (
-              <Alert
-                type={state.status === 'revoked' || state.status === 'blocked' ? 'error' : 'warning'}
-                content={t(message)}
-              />
+              <p className={styles.error} role='alert'>
+                {t(message)}
+              </p>
             )}
-            {error && !message && <Alert type='error' content={t(`common.jr.access.${error}`)} />}
-            <label htmlFor='jr-access-code'>{t('common.jr.access.code')}</label>
-            <Input
-              id='jr-access-code'
-              type='password'
-              autoComplete='off'
-              value={code}
-              onChange={setCode}
-              maxLength={200}
-              disabled={busy}
-              autoFocus
-              onPressEnter={() => void login()}
-            />
+            <div className={styles.field}>
+              <label className={styles.srOnly} htmlFor='jr-access-code'>
+                {t('common.jr.access.code')}
+              </label>
+              <Input
+                id='jr-access-code'
+                type='password'
+                autoComplete='off'
+                value={code}
+                onChange={setCode}
+                maxLength={200}
+                disabled={busy}
+                autoFocus
+                placeholder={t('common.jr.access.codePlaceholder')}
+                onPressEnter={() => void login()}
+              />
+              {error && !message && (
+                <p className={styles.error} role='alert'>
+                  {t(`common.jr.access.${error}`)}
+                </p>
+              )}
+            </div>
             <Button
               type='primary'
               long
-              className={styles.primary}
+              className={styles.enter}
               loading={busy}
               disabled={!code.trim()}
               onClick={() => void login()}

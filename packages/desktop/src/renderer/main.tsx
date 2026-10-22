@@ -336,7 +336,7 @@ const Config: React.FC<PropsWithChildren> = ({ children }) => {
 
   return React.createElement(
     ConfigProvider,
-    { theme: { primaryColor: '#4E5969' }, locale: arcoLocale, rtl: isRtlLanguage(language) },
+    { theme: { primaryColor: '#90182C' }, locale: arcoLocale, rtl: isRtlLanguage(language) },
     children
   );
 };

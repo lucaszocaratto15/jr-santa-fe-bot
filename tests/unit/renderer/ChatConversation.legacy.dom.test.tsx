@@ -136,7 +136,7 @@ describe('ChatConversation legacy runtime rendering', () => {
     );
     const name = await screen.findByText('Assistente JR');
     expect(name).toHaveClass('jr-chat-bot-title');
-    expect(screen.getByTestId('chat-header').querySelector('img')).toHaveAttribute('width', '24');
+    expect(screen.getByTestId('chat-header').querySelector('img')).toHaveAttribute('width', '28');
     expect(getJrBotMock).toHaveBeenCalledWith('jr-header-bot');
   });
 

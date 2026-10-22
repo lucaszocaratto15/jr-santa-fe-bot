@@ -38,6 +38,9 @@ import type { SessionRef } from '@/common/adapter/ipcBridge';
 import CrossSessionDisabledBanner from '@/renderer/components/chat/CrossSessionDisabledBanner';
 import { useCrossSessionMessageEnabled } from '@/renderer/hooks/chat/useCrossSessionMessageEnabled';
 import { emitter, useAddEventListener } from '@/renderer/utils/emitter';
+import JrCharacter from '@/renderer/pages/Jr/JrCharacter';
+import { getJrBot } from '@/renderer/pages/Jr/jrBots';
+import useSWR from 'swr';
 import { type ChatFileRef, isChatFileRef, uploadFileRef } from '@/common/types/chatFile';
 import { localSelectionItems, mergeFileSelectionItems } from '@/renderer/utils/file/fileSelection';
 import { collectChatFileRefs, splitChatFileRefs } from '@/renderer/utils/file/messageFiles';
@@ -55,6 +58,15 @@ const useAionrsSendBoxDraft = getSendBoxDraftHook('aionrs', {
   content: '',
   uploadFile: [],
 });
+
+/** Bot id from the hash route or the search string, without using the router. */
+function jrBotIdFromLocation(): string | null {
+  if (typeof window === 'undefined') return null;
+  const hash = window.location.hash || '';
+  const search = hash.includes('?') ? hash.slice(hash.indexOf('?') + 1) : window.location.search.replace(/^\?/, '');
+  const id = new URLSearchParams(search).get('bot');
+  return id && id.trim() ? id : null;
+}
 
 const EMPTY_AT_PATH: Array<string | FileOrFolderItem> = [];
 const EMPTY_UPLOAD_FILES: string[] = [];
@@ -112,6 +124,8 @@ const AionrsSendBox: React.FC<{
       status: 'loaded',
     }));
   const { t } = useTranslation();
+  const jrBotId = jrBotIdFromLocation();
+  const { data: composerBot } = useSWR(jrBotId ? ['jr.composerBot', jrBotId] : null, () => getJrBot(jrBotId as string));
   const { checkAndUpdateTitle } = useAutoTitle();
   const { current_model } = modelSelection;
   const teamPermission = useTeamPermission();
@@ -509,6 +523,13 @@ const AionrsSendBox: React.FC<{
       />
       <ThoughtDisplay
         running={(teamRuntime?.loading ?? running) && !awaitingConfirmation}
+        leading={
+          composerBot ? (
+            <span className='jr-working-avatar'>
+              <JrCharacter appearance={composerBot.appearance} size={22} />
+            </span>
+          ) : undefined
+        }
         statusText={awaitingConfirmation ? t('conversation.chat.awaitingConfirmation') : teamRuntime?.statusText}
         externalElapsedSource={Boolean(teamRuntime) || turnStartedAtMs != null}
         startedAtMs={teamRuntime ? (teamRuntime.startedAtMs ?? null) : turnStartedAtMs}
@@ -545,10 +566,12 @@ const AionrsSendBox: React.FC<{
         }
         placeholder={
           current_model?.use_model
-            ? t('acp.sendbox.placeholder', {
-                backend: agent_name || 'AionCLI',
-                defaultValue: `Send message to {{backend}}...`,
-              })
+            ? composerBot?.name
+              ? t('common.jr.taskPlaceholder', { name: composerBot.name })
+              : t('acp.sendbox.placeholder', {
+                  backend: agent_name || 'AionCLI',
+                  defaultValue: `Send message to {{backend}}...`,
+                })
             : t('conversation.chat.noModelSelected')
         }
         onStop={effectiveHandleStop}

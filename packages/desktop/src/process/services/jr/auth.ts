@@ -563,13 +563,14 @@ export class JrAccessController {
               .usage;
       const tokenLimit =
         entry.tokenLimit == null ? null : typeof entry.tokenLimit === 'number' ? entry.tokenLimit : NaN;
-      const accessStart = entry.accessStart == null ? null : entry.accessStart;
-      const accessEnd = entry.accessEnd == null ? null : entry.accessEnd;
+      const accessStart =
+        entry.accessStart == null ? null : validClock(entry.accessStart) ? entry.accessStart : undefined;
+      const accessEnd = entry.accessEnd == null ? null : validClock(entry.accessEnd) ? entry.accessEnd : undefined;
       if (
         (tokenLimit !== null && (!Number.isSafeInteger(tokenLimit) || tokenLimit < 0)) ||
+        accessStart === undefined ||
+        accessEnd === undefined ||
         (accessStart === null) !== (accessEnd === null) ||
-        (accessStart !== null && !validClock(accessStart)) ||
-        (accessEnd !== null && !validClock(accessEnd)) ||
         (accessStart !== null && accessStart === accessEnd) ||
         (entry.blockedAt != null &&
           (typeof entry.blockedAt !== 'string' || !Number.isFinite(Date.parse(entry.blockedAt))))

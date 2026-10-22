@@ -52,5 +52,30 @@ it('creates a real one-time invitation and displays the returned code only after
   fireEvent.change(screen.getByLabelText('common.jr.access.employeeName'), { target: { value: 'Equipe teste' } });
   fireEvent.click(screen.getByRole('button', { name: 'common.jr.access.generateCode' }));
   expect(await screen.findByText('test-code-not-a-real-credential')).toBeInTheDocument();
-  expect(mocks.invite).toHaveBeenCalledWith({ name: 'Equipe teste' });
+  expect(mocks.invite).toHaveBeenCalledWith({
+    name: 'Equipe teste',
+    tokenLimit: null,
+    accessStart: null,
+    accessEnd: null,
+  });
+});
+it('sends the token limit and daily access window with the invitation', async () => {
+  mocks.invite.mockResolvedValue({
+    id: 'person',
+    code: 'policy-code',
+    expiresAt: '2026-10-29T15:00:00Z',
+  });
+  show('admin');
+  fireEvent.change(await screen.findByLabelText('common.jr.access.employeeName'), { target: { value: 'Turno' } });
+  fireEvent.change(screen.getByLabelText('common.jr.access.tokenLimit'), { target: { value: '1200' } });
+  fireEvent.change(screen.getByLabelText('common.jr.access.startTime'), { target: { value: '08:00' } });
+  fireEvent.change(screen.getByLabelText('common.jr.access.endTime'), { target: { value: '18:00' } });
+  fireEvent.click(screen.getByRole('button', { name: 'common.jr.access.generateCode' }));
+  expect(await screen.findByText('policy-code')).toBeInTheDocument();
+  expect(mocks.invite).toHaveBeenCalledWith({
+    name: 'Turno',
+    tokenLimit: 1200,
+    accessStart: '08:00',
+    accessEnd: '18:00',
+  });
 });

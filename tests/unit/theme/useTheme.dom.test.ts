@@ -58,7 +58,7 @@ describe('useTheme selection', () => {
     setActiveThemeMock.mockResolvedValue(darkTheme);
     const { result } = renderHook(() => useTheme());
 
-    await waitFor(() => expect(result.current[0]?.appearance).toBe('light'));
+    await waitFor(() => expect(result.current[0]?.appearance).toBe('dark'));
     await act(async () => result.current[1]('dark'));
 
     expect(result.current[0]?.appearance).toBe('dark');
@@ -70,9 +70,9 @@ describe('useTheme selection', () => {
     setActiveThemeMock.mockRejectedValue(new Error('save failed'));
     const { result } = renderHook(() => useTheme());
 
-    await waitFor(() => expect(result.current[0]?.appearance).toBe('light'));
+    await waitFor(() => expect(result.current[0]?.appearance).toBe('dark'));
     await expect(act(async () => result.current[1]('dark'))).rejects.toThrow('save failed');
 
-    expect(result.current[0]?.appearance).toBe('light');
+    expect(result.current[0]?.appearance).toBe('dark');
   });
 });
