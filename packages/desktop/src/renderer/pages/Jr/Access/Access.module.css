@@ -140,7 +140,9 @@
   color: var(--jr-on-brand) !important;
 }
 .admin {
-  min-height: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
   box-sizing: border-box;
   max-width: 880px;
   margin: 0 auto;
@@ -185,10 +187,15 @@
   text-align: start;
   color: var(--color-text-3);
 }
-.inviteForm {
+.inviteForm,
+.dialogForm {
   display: flex;
   gap: 12px;
   align-items: end;
+}
+.dialogForm {
+  flex-direction: column;
+  align-items: stretch;
 }
 .adminField {
   flex: 1;

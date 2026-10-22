@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
-import { readFile, stat } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { createControlServer } from '../../../../services/control/server.mjs';
+import { createStore } from '../../../../services/control/store.mjs';
 import { ADMIN_CODE, MODEL, startControl, UPSTREAM_KEY } from './support.mjs';
 
 test('requires explicit strong owner and upstream configuration', () => {
@@ -46,6 +49,58 @@ test('owner authenticates with an opaque session and cannot impersonate an emplo
   const invalid = await app.login('invalid-code-with-sufficient-length-to-check', 'wrong');
   assert.equal(invalid.response.status, 401);
   assert.equal(JSON.stringify(invalid).includes(ADMIN_CODE), false);
+});
+
+test('stores an optional employee email and rejects a malformed address', async (t) => {
+  const app = await startControl(t);
+  const owner = await app.login();
+  const created = await app.request('/admin/invites', {
+    method: 'POST',
+    token: owner.token,
+    body: { name: 'Ana', email: 'ana@empresa.com' },
+  });
+  assert.equal(created.status, 201);
+  const invitation = await created.json();
+  const withEmail = await (await app.request('/admin/employees', { token: owner.token })).json();
+  assert.equal(withEmail.employees.find((person) => person.id === invitation.id).email, 'ana@empresa.com');
+  const blank = await app.request('/admin/invites', {
+    method: 'POST',
+    token: owner.token,
+    body: { name: 'Bruno', email: '   ' },
+  });
+  assert.equal(blank.status, 201);
+  const listed = await (await app.request('/admin/employees', { token: owner.token })).json();
+  assert.equal(listed.employees.find((person) => person.name === 'Bruno').email, null);
+  const malformed = await app.request('/admin/invites', {
+    method: 'POST',
+    token: owner.token,
+    body: { name: 'Carlos', email: 'not-an-email' },
+  });
+  assert.equal(malformed.status, 400);
+  assert.equal((await malformed.json()).error.code, 'invalid_request');
+});
+
+test('repairs an owner row whose role drifted away from administrator', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'jr-owner-role-'));
+  const databasePath = join(directory, 'control.sqlite');
+  const open = () => createStore({ databasePath, adminCode: ADMIN_CODE, model: MODEL });
+  try {
+    open().close();
+    const db = new DatabaseSync(databasePath);
+    db.prepare("UPDATE users SET role = 'employee' WHERE id = 'owner'").run();
+    db.close();
+    const repaired = open();
+    const session = repaired.login({
+      code: ADMIN_CODE,
+      deviceId: 'device-owner-repair',
+      deviceName: 'Computador',
+    });
+    assert.equal(session.user.role, 'admin');
+    assert.equal(session.user.id, 'owner');
+    repaired.close();
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test('owner creates a one-use invite and employee cannot administer users', async (t) => {

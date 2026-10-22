@@ -2,6 +2,7 @@ import { ipcBridge } from '@/common';
 import type { JrConnectionStatus } from '@/common/config/clientSettings';
 import { DARK_THEME_ID, LIGHT_THEME_ID, SYSTEM_THEME_ID } from '@/common/theme/constants';
 import { JrLogo } from '@/renderer/pages/Jr/JrCharacter';
+import { isJrAdmin } from '@/common/config/clientSettings';
 import { useJrAccess } from '@/renderer/pages/Jr/Access/context';
 import { useThemeContext } from '@/renderer/hooks/context/ThemeContext';
 import {
@@ -73,7 +74,7 @@ export const GeneralPanel: React.FC = () => {
             <p className={styles.muted}>{t('common.jr.companyName')}</p>
           </div>
           <div className={styles.rowActions}>
-            {state.user?.role === 'admin' && (
+            {isJrAdmin(state.user) && (
               <Button type='outline' onClick={() => void navigate('/admin')}>
                 {t('common.jr.access.adminTitle')}
               </Button>

@@ -3,12 +3,13 @@ import { constants } from 'node:fs';
 import { chmod, lstat, mkdir, open, rename, unlink } from 'node:fs/promises';
 import { hostname } from 'node:os';
 import { isAbsolute, join } from 'node:path';
-import type {
-  JrAccessState,
-  JrAccessUser,
-  JrEmployee,
-  JrInvite,
-  JrConnectionStatus,
+import {
+  isJrAdmin,
+  type JrAccessState,
+  type JrAccessUser,
+  type JrEmployee,
+  type JrInvite,
+  type JrConnectionStatus,
 } from '@/common/config/clientSettings';
 import { parseJrConnectionStatus } from './usage';
 import type { JrRelayConfig } from './bootstrap';
@@ -62,6 +63,32 @@ async function responseCode(response: Response): Promise<string | null> {
     return null;
   }
 }
+const EMPLOYEE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u;
+
+function hasControlCharacter(value: string): boolean {
+  return [...value].some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127);
+}
+
+function listedEmail(value: unknown): string | null {
+  if (value == null || value === '') return null;
+  if (typeof value !== 'string' || value.length > 120 || hasControlCharacter(value))
+    return fail('JR_ACCESS_INVALID_RESPONSE');
+  const email = value.trim();
+  if (!email) return null;
+  if (!EMPLOYEE_EMAIL.test(email)) return fail('JR_ACCESS_INVALID_RESPONSE');
+  return email;
+}
+
+function inviteEmail(value: unknown): string | null {
+  if (value == null) return null;
+  if (typeof value !== 'string') return fail('JR_ACCESS_INVALID_EMAIL');
+  const email = value.trim();
+  if (!email) return null;
+  if (email.length > 120 || hasControlCharacter(email) || !EMPLOYEE_EMAIL.test(email))
+    return fail('JR_ACCESS_INVALID_EMAIL');
+  return email;
+}
+
 function restrictionStatus(code: string): 'blocked' | 'outside-hours' | null {
   if (code === 'employee_blocked') return 'blocked';
   if (code === 'outside_access_hours') return 'outside-hours';
@@ -488,7 +515,7 @@ export class JrAccessController {
   }
   private async authorized(path: string, init: RequestInit = {}, admin = false): Promise<unknown> {
     if (this.current.status !== 'authenticated' || !this.saved?.token) return fail('JR_ACCESS_REQUIRED');
-    if (admin && this.current.user?.role !== 'admin') return fail('JR_ACCESS_FORBIDDEN');
+    if (admin && !isJrAdmin(this.current.user)) return fail('JR_ACCESS_FORBIDDEN');
     const epoch = this.generation,
       token = this.saved.token;
     let response: Response;
@@ -568,6 +595,7 @@ export class JrAccessController {
           ? null
           : parseJrConnectionStatus({ model: record(entry.usage) ? entry.usage.model : null, usage: entry.usage })
               .usage;
+      const email = listedEmail(entry.email);
       const tokenLimit =
         entry.tokenLimit == null ? null : typeof entry.tokenLimit === 'number' ? entry.tokenLimit : NaN;
       const accessStart =
@@ -585,6 +613,7 @@ export class JrAccessController {
         return fail('JR_ACCESS_INVALID_RESPONSE');
       return {
         ...user,
+        email,
         revoked: entry.revoked,
         createdAt: entry.createdAt,
         revokedAt: entry.revokedAt as string | null,
@@ -600,12 +629,14 @@ export class JrAccessController {
   }
   async createInvite(input: {
     name: string;
+    email?: string | null;
     tokenLimit?: number | null;
     accessStart?: string | null;
     accessEnd?: string | null;
   }): Promise<JrInvite> {
     if (typeof input?.name !== 'string' || !input.name.trim() || input.name.trim().length > 120)
       return fail('JR_ACCESS_INVALID_NAME');
+    const email = inviteEmail(input.email);
     if (
       (input.tokenLimit != null && (!Number.isSafeInteger(input.tokenLimit) || input.tokenLimit < 0)) ||
       ((input.accessStart ?? null) === null) !== ((input.accessEnd ?? null) === null) ||
@@ -621,6 +652,7 @@ export class JrAccessController {
           method: 'POST',
           body: JSON.stringify({
             name: input.name.trim(),
+            email,
             tokenLimit: input.tokenLimit ?? null,
             accessStart: input.accessStart ?? null,
             accessEnd: input.accessEnd ?? null,

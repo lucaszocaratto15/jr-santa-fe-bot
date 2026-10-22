@@ -175,7 +175,13 @@ export const jr = {
     list: bridge.buildProvider<JrEmployee[], void>('jr-admin-list'),
     createInvite: bridge.buildProvider<
       JrInvite,
-      { name: string; tokenLimit?: number | null; accessStart?: string | null; accessEnd?: string | null }
+      {
+        name: string;
+        email?: string | null;
+        tokenLimit?: number | null;
+        accessStart?: string | null;
+        accessEnd?: string | null;
+      }
     >('jr-admin-create-invite'),
     reissue: bridge.buildProvider<JrInvite, { employeeId: string }>('jr-admin-reissue-invite'),
     revoke: bridge.buildProvider<void, { employeeId: string }>('jr-admin-revoke'),

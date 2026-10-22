@@ -26,12 +26,12 @@ vi.mock('@/common', () => ({
 }));
 import { JrAccessContext } from '@/renderer/pages/Jr/Access/context';
 import JrAdmin from '@/renderer/pages/Jr/Access/Admin';
-const show = (role: 'admin' | 'employee') =>
+const show = (role: 'admin' | 'employee', id = 'staff-1') =>
   render(
     <SWRConfig value={{ provider: () => new Map() }}>
       <JrAccessContext.Provider
         value={{
-          state: { status: 'authenticated', user: { id: 'owner', name: 'Gestor', role } } satisfies JrAccessState,
+          state: { status: 'authenticated', user: { id, name: 'Gestor', role } } satisfies JrAccessState,
           logout: async () => {},
         }}
       >
@@ -48,47 +48,82 @@ it('does not request administrative records for an employee', async () => {
   expect(await screen.findByText('common.jr.access.adminOnly')).toBeInTheDocument();
   expect(mocks.list).not.toHaveBeenCalled();
 });
-it('creates a real one-time invitation and displays the returned code only after success', async () => {
-  mocks.invite.mockResolvedValue({
-    id: 'person',
-    code: 'test-code-not-a-real-credential',
-    expiresAt: '2026-10-29T15:00:00Z',
+it('creates an employee from Novo funcionário and lists the invite with copy, revoke and block', async () => {
+  let created = false;
+  mocks.list.mockImplementation(async () =>
+    created
+      ? [
+          {
+            id: 'person',
+            name: 'Equipe teste',
+            email: 'ana@empresa.com',
+            role: 'employee',
+            revoked: false,
+            blocked: false,
+          },
+        ]
+      : []
+  );
+  mocks.invite.mockImplementation(async () => {
+    created = true;
+    return { id: 'person', code: 'test-code-not-a-real-credential', expiresAt: '2026-10-29T15:00:00Z' };
   });
-  show('admin');
-  await screen.findByLabelText('common.jr.access.employeeName');
-  fireEvent.change(screen.getByLabelText('common.jr.access.employeeName'), { target: { value: 'Equipe teste' } });
-  fireEvent.click(screen.getByRole('button', { name: 'common.jr.access.generateCode' }));
-  expect(await screen.findByText('test-code-not-a-real-credential')).toBeInTheDocument();
-  expect(mocks.invite).toHaveBeenCalledWith({
-    name: 'Equipe teste',
-    tokenLimit: null,
-    accessStart: null,
-    accessEnd: null,
+  show('admin', 'owner');
+  expect(screen.queryByLabelText('common.jr.access.employeeName')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'common.jr.access.newEmployee' }));
+  fireEvent.change(await screen.findByLabelText('common.jr.access.employeeName'), {
+    target: { value: 'Equipe teste' },
   });
-});
-it('creates an invite without a token limit or access window', async () => {
-  mocks.invite.mockResolvedValue({
-    id: 'person',
-    code: 'policy-code',
-    expiresAt: '2026-10-29T15:00:00Z',
-  });
-  show('admin');
-  fireEvent.change(await screen.findByLabelText('common.jr.access.employeeName'), { target: { value: 'Turno' } });
+  fireEvent.change(screen.getByLabelText('common.jr.access.employeeEmail'), { target: { value: 'ana@empresa.com' } });
   expect(screen.queryByLabelText('common.jr.access.tokenLimit')).not.toBeInTheDocument();
   expect(screen.queryByLabelText('common.jr.access.startTime')).not.toBeInTheDocument();
   expect(screen.queryByLabelText('common.jr.access.endTime')).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'common.jr.access.generateCode' }));
-  expect(await screen.findByText('policy-code')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'common.jr.access.createEmployee' }));
+  expect(await screen.findByText('test-code-not-a-real-credential')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'common.jr.access.copyCode' })).toBeInTheDocument();
+  expect(await screen.findByText('ana@empresa.com')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'common.jr.access.revokeAction' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'common.jr.access.blockAction' })).toBeInTheDocument();
   expect(mocks.invite).toHaveBeenCalledWith({
-    name: 'Turno',
+    name: 'Equipe teste',
+    email: 'ana@empresa.com',
     tokenLimit: null,
     accessStart: null,
     accessEnd: null,
   });
 });
+it('creates an invite without an email, token limit, or access window', async () => {
+  mocks.invite.mockResolvedValue({ id: 'person', code: 'policy-code', expiresAt: '2026-10-29T15:00:00Z' });
+  show('admin', 'owner');
+  fireEvent.click(screen.getByRole('button', { name: 'common.jr.access.newEmployee' }));
+  fireEvent.change(await screen.findByLabelText('common.jr.access.employeeName'), { target: { value: 'Turno' } });
+  fireEvent.click(screen.getByRole('button', { name: 'common.jr.access.createEmployee' }));
+  expect(await screen.findByText('policy-code')).toBeInTheDocument();
+  expect(mocks.invite).toHaveBeenCalledWith({
+    name: 'Turno',
+    email: null,
+    tokenLimit: null,
+    accessStart: null,
+    accessEnd: null,
+  });
+});
+it('keeps a malformed email in the form and does not create an employee', async () => {
+  show('admin', 'owner');
+  fireEvent.click(screen.getByRole('button', { name: 'common.jr.access.newEmployee' }));
+  fireEvent.change(await screen.findByLabelText('common.jr.access.employeeName'), { target: { value: 'Turno' } });
+  fireEvent.change(screen.getByLabelText('common.jr.access.employeeEmail'), { target: { value: 'not-an-email' } });
+  fireEvent.click(screen.getByRole('button', { name: 'common.jr.access.createEmployee' }));
+  expect(await screen.findByText('common.jr.access.invalidEmail')).toBeInTheDocument();
+  expect(mocks.invite).not.toHaveBeenCalled();
+});
+it('treats the owner account as an administrator when the role label is not admin', async () => {
+  show('employee', 'owner');
+  expect(await screen.findByRole('button', { name: 'common.jr.access.newEmployee' })).toBeInTheDocument();
+  expect(mocks.list).toHaveBeenCalled();
+});
 it('closes the revoke dialog from the X, cancel, and the backdrop', async () => {
   mocks.list.mockResolvedValue([{ id: 'person-1', name: 'Ana', role: 'employee', revoked: false, blocked: false }]);
-  show('admin');
+  show('admin', 'owner');
   const open = async () => {
     fireEvent.click(await screen.findByRole('button', { name: 'common.jr.access.revokeAction' }));
     expect(await screen.findByRole('dialog', { name: 'common.jr.access.revokeTitle' })).toBeInTheDocument();
@@ -122,7 +157,7 @@ it('shows consumed usage and does not offer a token limit to save', async () => 
       usage: { totalTokens: 42, promptTokens: 30, completionTokens: 12, modelRequests: 2 },
     },
   ]);
-  show('admin');
+  show('admin', 'owner');
   expect(await screen.findByText('Ana')).toBeInTheDocument();
   expect(screen.queryByLabelText('common.jr.access.tokenLimit')).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'common.jr.access.savePolicy' })).not.toBeInTheDocument();
