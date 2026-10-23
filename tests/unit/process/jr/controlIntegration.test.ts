@@ -168,6 +168,27 @@ it('recognizes the owner as an administrator and creates an employee with an opt
   expect(invitation.code.startsWith('JR-')).toBe(true);
 });
 
+it('stores an optional job title and rejects a title that is not plain text', async () => {
+  const { adminCode, client } = await fixture();
+  const owner = client();
+  await owner.controller.initialize();
+  await owner.controller.login({ code: adminCode });
+  const invitation = await owner.controller.createInvite({ name: 'Ana', title: 'Compras' });
+  expect((await owner.controller.listEmployees())[0]).toMatchObject({
+    id: invitation.id,
+    name: 'Ana',
+    title: 'Compras',
+    email: null,
+  });
+  const blank = await owner.controller.createInvite({ name: 'Bruno', title: '   ' });
+  expect((await owner.controller.listEmployees()).find((person) => person.id === blank.id)).toMatchObject({
+    title: null,
+  });
+  await expect(owner.controller.createInvite({ name: 'Carlos', title: 'linha\nquebrada' })).rejects.toThrow(
+    'JR_ACCESS_INVALID_NAME'
+  );
+});
+
 it('lists an employee created without an email and rejects a malformed email before saving', async () => {
   const { adminCode, client } = await fixture();
   const owner = client();

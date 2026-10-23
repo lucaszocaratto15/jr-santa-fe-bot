@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   getConversation: vi.fn(),
   updateConversation: vi.fn(),
   conversations: vi.fn(),
+  removeConversation: vi.fn(),
   mcps: vi.fn(),
   systemInfo: vi.fn(),
   createMcp: vi.fn(),
@@ -49,6 +50,7 @@ vi.mock('@/common', () => ({
       create: { invoke: mocks.conversation },
       get: { invoke: mocks.getConversation },
       update: { invoke: mocks.updateConversation },
+      remove: { invoke: mocks.removeConversation },
     },
     database: { getUserConversations: { invoke: mocks.conversations } },
     application: { systemInfo: { invoke: mocks.systemInfo } },
@@ -68,6 +70,7 @@ import {
   JR_DEFAULT_INSTRUCTIONS,
   listJrBots,
   reportJrOpenError,
+  deleteJrBot,
   saveJrBot,
   selectJrModel,
   startJrConversation,
@@ -108,6 +111,7 @@ beforeEach(() => {
   mocks.systemInfo.mockResolvedValue({ cacheDir: '/tmp/jr-cache' });
   mocks.createMcp.mockRejectedValue(new Error('chrome-unavailable'));
   mocks.conversations.mockResolvedValue({ items: [], total: 0, has_more: false });
+  mocks.removeConversation.mockResolvedValue(true);
   mocks.getConversation.mockResolvedValue(null);
   mocks.conversation.mockResolvedValue({ id: 'real-conversation' });
 });
@@ -614,5 +618,68 @@ describe('one persistent conversation per JR bot', () => {
         ours: expect.objectContaining({ skillIds: ['pesquisa-jr', 'planilhas'], useChrome: true }),
       })
     );
+  });
+});
+
+describe('deleting a bot', () => {
+  const storedBot = () => {
+    mocks.readSetting.mockResolvedValue({
+      'jr-bot': { workspace: '/tmp/jr-bot' },
+      other: { workspace: '/tmp/other' },
+    });
+    mocks.get.mockResolvedValue({
+      source: 'user',
+      profile: { name: 'Compras' },
+      rules: { content: 'Regras' },
+      engine: { agent: { type: 'aionrs' } },
+    });
+  };
+
+  it('removes only the chats bound to that bot and drops its workspace record', async () => {
+    storedBot();
+    mocks.conversations.mockResolvedValue({
+      items: [
+        { id: 'chat-1', type: 'aionrs', assistant: { id: 'jr-bot' } },
+        { id: 'chat-2', type: 'aionrs', extra: { assistant_id: 'jr-bot' } },
+        { id: 'preset', type: 'aionrs', extra: { preset_assistant_id: 'jr-bot' } },
+        { id: 'other-chat', type: 'aionrs', assistant: { id: 'other' }, extra: { workspace: '/tmp/jr-bot' } },
+      ],
+      total: 4,
+      has_more: false,
+    });
+    await deleteJrBot('jr-bot');
+    expect(mocks.removeConversation.mock.calls.map((call) => call[0])).toEqual([
+      { id: 'chat-1' },
+      { id: 'chat-2' },
+      { id: 'preset' },
+    ]);
+    expect(mocks.remove).toHaveBeenCalledWith({ id: 'jr-bot' });
+    expect(mocks.writeSetting).toHaveBeenLastCalledWith('jr.botWorkspaces', { other: { workspace: '/tmp/other' } });
+  });
+
+  it('still removes the bot when one of its chats cannot be deleted', async () => {
+    storedBot();
+    mocks.conversations.mockResolvedValue({
+      items: [{ id: 'chat-1', assistant: { id: 'jr-bot' } }],
+      total: 1,
+      has_more: false,
+    });
+    mocks.removeConversation.mockRejectedValue(new Error('busy'));
+    await deleteJrBot('jr-bot');
+    expect(mocks.remove).toHaveBeenCalledWith({ id: 'jr-bot' });
+  });
+
+  it('still removes the bot when the chat list cannot be read', async () => {
+    storedBot();
+    mocks.conversations.mockRejectedValue(new Error('offline'));
+    await deleteJrBot('jr-bot');
+    expect(mocks.removeConversation).not.toHaveBeenCalled();
+    expect(mocks.remove).toHaveBeenCalledWith({ id: 'jr-bot' });
+  });
+
+  it('does not delete chats when the bot is not a JR bot', async () => {
+    await expect(deleteJrBot('missing')).rejects.toThrow('JR bot not found');
+    expect(mocks.conversations).not.toHaveBeenCalled();
+    expect(mocks.remove).not.toHaveBeenCalled();
   });
 });

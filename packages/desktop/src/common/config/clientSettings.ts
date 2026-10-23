@@ -122,6 +122,8 @@ export type JrAccessState = {
 };
 export type JrAdminEmployee = JrAccessUser & {
   email?: string | null;
+  /** Optional job title. Missing on older control servers. */
+  title?: string | null;
   revoked: boolean;
   createdAt: string;
   revokedAt: string | null;

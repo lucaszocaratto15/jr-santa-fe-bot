@@ -15,6 +15,8 @@ const mocks = vi.hoisted(() => ({
     appearance: { shape: string; color: string };
   }>,
   accessUser: { id: 'employee-1', name: 'Funcionário JR', role: 'employee' as 'admin' | 'employee' },
+  refreshBots: vi.fn(),
+  deleteBot: vi.fn(),
 }));
 
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
@@ -25,7 +27,7 @@ vi.mock('react-router-dom', () => ({
 vi.mock('swr', () => ({
   default: (key: string | string[]) => ({
     data: Array.isArray(key) ? [] : key === 'jr.bots' ? mocks.bots : undefined,
-    mutate: vi.fn(),
+    mutate: mocks.refreshBots,
   }),
 }));
 vi.mock('@/common', () => ({
@@ -35,7 +37,10 @@ vi.mock('@/common', () => ({
     database: { getConversationMessages: { invoke: mocks.messages } },
   },
 }));
-vi.mock('@/renderer/pages/Jr/jrBots', () => ({ listJrBots: vi.fn() }));
+vi.mock('@/renderer/pages/Jr/jrBots', () => ({
+  listJrBots: vi.fn(),
+  deleteJrBot: (...args: unknown[]) => mocks.deleteBot(...args),
+}));
 vi.mock('@/renderer/pages/Jr/Access/context', () => ({
   useJrAccess: () => ({ state: { status: 'active', user: mocks.accessUser }, logout: vi.fn() }),
 }));
@@ -203,5 +208,47 @@ describe('JrSidebar rows', () => {
     localStorage.setItem('jr.sidebarLayout', '{');
     render(<JrSidebar />);
     expect(screen.getByRole('button', { name: 'Compras' })).toBeInTheDocument();
+  });
+
+  it('opens the same bot editor from the right-click menu', async () => {
+    render(<JrSidebar />);
+    fireEvent.contextMenu(screen.getByRole('button', { name: 'Compras' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'common.jr.contextEdit' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/guid?bot=bot-1&edit=1');
+  });
+
+  it('asks before deleting and leaves the bot when the confirmation is cancelled', async () => {
+    render(<JrSidebar />);
+    fireEvent.contextMenu(screen.getByRole('button', { name: 'Vendas' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'common.jr.contextDelete' }));
+    const dialog = await screen.findByRole('dialog', { name: 'common.jr.deleteBot' });
+    expect(within(dialog).getByText('common.jr.deleteBotHint')).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'common.cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'common.jr.deleteBot' })).not.toBeInTheDocument());
+    expect(mocks.deleteBot).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Vendas' })).toBeInTheDocument();
+  });
+
+  it('removes the open bot and its sidebar row after the deletion is confirmed', async () => {
+    mocks.deleteBot.mockResolvedValue(undefined);
+    mocks.refreshBots.mockResolvedValue(undefined);
+    render(<JrSidebar />);
+    fireEvent.contextMenu(screen.getByRole('button', { name: 'Compras' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'common.jr.contextDelete' }));
+    fireEvent.click(screen.getByRole('button', { name: 'common.jr.contextDelete' }));
+    await waitFor(() => expect(mocks.deleteBot).toHaveBeenCalledWith('bot-1'));
+    expect(mocks.refreshBots).toHaveBeenCalled();
+    expect(mocks.navigate).toHaveBeenCalledWith('/guid');
+  });
+
+  it('keeps the confirmation open when deleting the bot fails', async () => {
+    mocks.deleteBot.mockRejectedValue(new Error('offline'));
+    render(<JrSidebar />);
+    fireEvent.contextMenu(screen.getByRole('button', { name: 'Compras' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'common.jr.contextDelete' }));
+    fireEvent.click(screen.getByRole('button', { name: 'common.jr.contextDelete' }));
+    await waitFor(() => expect(mocks.deleteBot).toHaveBeenCalledWith('bot-1'));
+    expect(screen.getByText('common.jr.deleteBotHint')).toBeInTheDocument();
+    expect(mocks.navigate).not.toHaveBeenCalledWith('/guid');
   });
 });

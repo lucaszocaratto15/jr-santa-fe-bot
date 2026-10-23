@@ -9,6 +9,7 @@ import { connectionPayload, createChromeDraft, isGmailServer, isJrChromeServer }
 import { toSessionMcpServer } from '@/renderer/hooks/mcp/catalog';
 import { isBackendHttpError } from '@/common/adapter/httpBridge';
 import { getConversationOrNull } from '@/renderer/pages/conversation/utils/conversationCache';
+import { emitter } from '@renderer/utils/emitter';
 
 export const JR_MODEL = 'MiniMax-M3.1-Flash';
 export const JR_PROVIDER = 'JR MiniMax';
@@ -236,8 +237,41 @@ export async function saveJrBot(input: JrBotInput, id?: string): Promise<JrBot> 
   }
 }
 
+function conversationAssistantId(conversation: TChatConversation): string | undefined {
+  const extra = conversation.extra;
+  const record =
+    extra && typeof extra === 'object'
+      ? (extra as { assistant_id?: unknown; preset_assistant_id?: unknown })
+      : undefined;
+  const fromAssistant = conversation.assistant?.id;
+  const fromExtra = typeof record?.assistant_id === 'string' ? record.assistant_id : undefined;
+  const fromPreset = typeof record?.preset_assistant_id === 'string' ? record.preset_assistant_id : undefined;
+  return fromAssistant || fromExtra || fromPreset;
+}
+
+/** Drop chats bound to this bot. A listing or delete failure still lets the bot itself be removed. */
+async function removeBotConversations(id: string): Promise<void> {
+  let items: TChatConversation[] = [];
+  try {
+    const history = await ipcBridge.database.getUserConversations.invoke({ limit: 10000 });
+    items = Array.isArray(history?.items) ? history.items : [];
+  } catch {
+    return;
+  }
+  for (const conversation of items) {
+    if (conversationAssistantId(conversation) !== id) continue;
+    try {
+      await ipcBridge.conversation.remove.invoke({ id: conversation.id });
+      emitter.emit('conversation.deleted', conversation.id);
+    } catch {
+      // One stuck chat must not keep the bot in the sidebar.
+    }
+  }
+}
+
 export async function deleteJrBot(id: string): Promise<void> {
   await getJrBot(id);
+  await removeBotConversations(id);
   await ipcBridge.assistants.delete.invoke({ id });
   const workspaces = { ...(await getClientBusinessSetting('jr.botWorkspaces')) };
   delete workspaces[id];

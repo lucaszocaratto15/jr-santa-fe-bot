@@ -81,6 +81,25 @@ function listedEmail(value: unknown): string | null {
   return email;
 }
 
+/** Older control servers omit title. A missing value is not an error. */
+function listedTitle(value: unknown): string | null {
+  if (value == null || value === '') return null;
+  if (typeof value !== 'string' || hasControlCharacter(value)) return fail('JR_ACCESS_INVALID_RESPONSE');
+  const title = value.trim();
+  if (!title) return null;
+  if (title.length > 80) return fail('JR_ACCESS_INVALID_RESPONSE');
+  return title;
+}
+
+function inviteTitle(value: unknown): string | null {
+  if (value == null) return null;
+  if (typeof value !== 'string') return fail('JR_ACCESS_INVALID_NAME');
+  const title = value.trim();
+  if (!title) return null;
+  if (title.length > 80 || hasControlCharacter(title)) return fail('JR_ACCESS_INVALID_NAME');
+  return title;
+}
+
 function inviteEmail(value: unknown): string | null {
   if (value == null) return null;
   if (typeof value !== 'string') return fail('JR_ACCESS_INVALID_EMAIL');
@@ -627,6 +646,7 @@ export class JrAccessController {
           : parseJrConnectionStatus({ model: record(entry.usage) ? entry.usage.model : null, usage: entry.usage })
               .usage;
       const email = listedEmail(entry.email);
+      const title = listedTitle(entry.title);
       const tokenLimit =
         entry.tokenLimit == null ? null : typeof entry.tokenLimit === 'number' ? entry.tokenLimit : NaN;
       const accessStart =
@@ -645,6 +665,7 @@ export class JrAccessController {
       return {
         ...user,
         email,
+        title,
         revoked: entry.revoked,
         createdAt: entry.createdAt,
         revokedAt: entry.revokedAt as string | null,
@@ -661,6 +682,7 @@ export class JrAccessController {
   async createInvite(input: {
     name: string;
     email?: string | null;
+    title?: string | null;
     tokenLimit?: number | null;
     accessStart?: string | null;
     accessEnd?: string | null;
@@ -668,6 +690,7 @@ export class JrAccessController {
     if (typeof input?.name !== 'string' || !input.name.trim() || input.name.trim().length > 120)
       return fail('JR_ACCESS_INVALID_NAME');
     const email = inviteEmail(input.email);
+    const title = inviteTitle(input.title);
     if (
       (input.tokenLimit != null && (!Number.isSafeInteger(input.tokenLimit) || input.tokenLimit < 0)) ||
       ((input.accessStart ?? null) === null) !== ((input.accessEnd ?? null) === null) ||
@@ -684,6 +707,7 @@ export class JrAccessController {
           body: JSON.stringify({
             name: input.name.trim(),
             email,
+            title,
             tokenLimit: input.tokenLimit ?? null,
             accessStart: input.accessStart ?? null,
             accessEnd: input.accessEnd ?? null,

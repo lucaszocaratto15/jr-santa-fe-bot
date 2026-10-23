@@ -134,22 +134,27 @@
     animation: none;
   }
 }
-.primary {
-  background: var(--jr-brand) !important;
-  border-color: var(--jr-brand) !important;
-  color: var(--jr-on-brand) !important;
+.primary:global(.arco-btn) {
+  background: var(--jr-accent) !important;
+  border-color: var(--jr-accent) !important;
+  color: var(--jr-on-accent) !important;
+}
+.primary:global(.arco-btn:not(.arco-btn-disabled):hover) {
+  background: color-mix(in srgb, var(--jr-accent) 86%, white) !important;
+  border-color: color-mix(in srgb, var(--jr-accent) 86%, white) !important;
+  color: var(--jr-on-accent) !important;
 }
 .admin {
   height: 100%;
   min-height: 0;
   overflow: auto;
   box-sizing: border-box;
-  max-width: 880px;
+  max-width: 720px;
   margin: 0 auto;
-  padding: 48px 40px 56px;
+  padding: 72px 40px 96px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 36px;
   background: var(--jr-modal-content);
   color: var(--color-text-1);
 }
@@ -157,48 +162,79 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 24px;
 }
 .pageTitle {
   margin: 0;
-  font-size: 30px;
+  font-size: 34px;
   font-weight: 600;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.04em;
   color: var(--color-text-1);
 }
-.card,
-.person {
+.list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 20px 22px;
-  border: 1px solid var(--jr-hairline);
-  border-radius: 16px;
-  background: var(--jr-surface-2);
+  gap: 10px;
 }
-.cardTitle,
-.person h2 {
+.row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 18px;
+  border: 1px solid var(--jr-hairline);
+  border-radius: 18px;
+  background: var(--jr-surface);
+}
+.rowMain {
+  min-width: 0;
+  flex: 1;
+}
+.rowName {
   margin: 0;
-  font-size: 17px;
-  font-weight: 500;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
   color: var(--color-text-1);
 }
+.rowMeta,
+.status {
+  margin: 2px 0 0;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--color-text-3);
+}
+.status {
+  margin: 0;
+  flex-shrink: 0;
+}
+.status[data-state='revoked'] {
+  color: var(--jr-accent);
+}
+.rowActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 2px;
+}
+.quiet:global(.arco-btn-text) {
+  color: var(--color-text-2);
+  border-radius: 999px;
+}
+.dangerQuiet:global(.arco-btn-text) {
+  color: var(--jr-accent);
+  border-radius: 999px;
+}
 .admin .hint {
+  margin: 0;
   text-align: start;
   color: var(--color-text-3);
 }
-.inviteForm,
 .dialogForm {
   display: flex;
-  gap: 12px;
-  align-items: end;
-}
-.dialogForm {
   flex-direction: column;
-  align-items: stretch;
+  gap: 18px;
 }
 .adminField {
-  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -207,39 +243,57 @@
 }
 .adminField :global(.arco-input),
 .adminField :global(.arco-input-inner-wrapper) {
-  min-height: 40px;
+  min-height: 44px;
   border-radius: 12px !important;
   background: var(--jr-surface) !important;
   border: 1px solid var(--jr-hairline) !important;
   color: var(--color-text-1) !important;
 }
+.sheetActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+.codeSheet {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  padding: 12px 0 8px;
+}
 .code {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 28px 20px;
   overflow-wrap: anywhere;
+  text-align: center;
   font-family: ui-monospace, monospace;
-  padding: 12px;
-  background: var(--jr-brand-soft);
-  border-radius: 8px;
+  font-size: 22px;
+  line-height: 1.45;
+  letter-spacing: 0.03em;
+  border-radius: 16px;
+  border: 1px solid var(--jr-hairline);
+  background: var(--jr-surface-2);
   user-select: all;
   color: var(--color-text-1);
 }
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
 @media (max-width: 768px) {
   .admin {
-    padding: 24px 16px 40px;
+    padding: 40px 20px 64px;
+    gap: 28px;
   }
-  .inviteForm {
-    flex-direction: column;
+  .heading,
+  .row {
     align-items: stretch;
-  }
-  .heading {
-    align-items: start;
     flex-direction: column;
   }
   .pageTitle {
-    font-size: 26px;
+    font-size: 28px;
+  }
+  .rowActions,
+  .sheetActions {
+    justify-content: flex-start;
   }
 }
