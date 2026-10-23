@@ -6,7 +6,7 @@ services:
     labels:
       traefik.enable: 'true'
       traefik.docker.network: traefik-proxy
-      traefik.http.routers.jr-bot-control.rule: 'Host(`jrsantafe.stratacerta.com.br`) && (PathPrefix(`/bot/`) || Path(`/bot`))'
+      traefik.http.routers.jr-bot-control.rule: 'Host(`bot.jrsantafe.com.br`) && (PathPrefix(`/bot/`) || Path(`/bot`))'
       traefik.http.routers.jr-bot-control.entrypoints: websecure
       traefik.http.routers.jr-bot-control.tls.certresolver: letsencrypt
       traefik.http.routers.jr-bot-control.priority: '250'

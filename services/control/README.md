@@ -8,7 +8,7 @@ Serviço separado do aplicativo. Executa em Node.js 24, usa SQLite e não possui
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | `JR_ADMIN_CODE`       | Código exclusivo do administrador, entre 32 e 256 caracteres, sem espaços. Gere um valor aleatório seguro; não use senha comum. |
 | `JR_UPSTREAM_KEY`     | Chave real do provedor, disponível somente neste serviço.                                                                       |
-| `JR_UPSTREAM_URL`     | Endereço HTTPS do provedor terminando em `/v1`. Para JR: `https://jrsantafe.stratacerta.com.br/mmx/v1`.                         |
+| `JR_UPSTREAM_URL`     | Endereço HTTPS do provedor terminando em `/v1`. Para JR: `https://bot.jrsantafe.com.br/mmx/v1`.                         |
 | `JR_MODEL`            | Modelo permitido. Padrão da entrada executável: `MiniMax-M3.1-Flash`.                                                           |
 | `JR_CONTROL_DATA_DIR` | Diretório persistente privado. Padrão local: `./data`. No contêiner: `/data`.                                                   |
 | `JR_CONTROL_HOST`     | Padrão local: `127.0.0.1`. No contêiner: `0.0.0.0`, com publicação somente em `127.0.0.1`.                                      |

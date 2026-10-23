@@ -10,7 +10,7 @@ A conexão Google/Gmail foi removida do catálogo e da seleção de ferramentas 
 
 ## Acesso do administrador
 
-O endereço corporativo é `https://jrsantafe.stratacerta.com.br/bot`. A chave MiniMax e o código do administrador ficam no ambiente privado do serviço, fora do repositório. O código do administrador foi entregue em arquivo local privado ao responsável. Não distribua esse código aos funcionários.
+O endereço corporativo é `https://bot.jrsantafe.com.br/bot`. A chave MiniMax e o código do administrador ficam no ambiente privado do serviço, fora do repositório. O código do administrador foi entregue em arquivo local privado ao responsável. Não distribua esse código aos funcionários.
 
 No perfil do administrador, abra **Administração**, informe o nome do funcionário e gere um convite. O convite expira em sete dias e só pode ser usado uma vez. O funcionário informa esse código ao abrir o aplicativo.
 
@@ -68,7 +68,7 @@ Node.js 24 e Bun são necessários. Na raiz:
 ```sh
 bun install
 bun run package
-JR_CONTROL_URL=https://jrsantafe.stratacerta.com.br/bot bun run start:jr
+JR_CONTROL_URL=https://bot.jrsantafe.com.br/bot bun run start:jr
 ```
 
 O núcleo AionCore precisa estar disponível no pacote ou ser indicado em `AIONUI_BACKEND_BIN`. O lançador usa um perfil descartável em `.local-pilot/`; um perfil ativado no controle local de teste não pode ser reutilizado como perfil de produção.

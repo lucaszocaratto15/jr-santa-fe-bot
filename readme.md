@@ -19,7 +19,7 @@ O visual foi reconstruído a partir das medidas observadas no Grok Bot. Fonte de
 
 No Mac, o agente já leu dados, executou código, navegou no Chrome, criou um JSON e conferiu seu conteúdo. Login de administrador/funcionário e revogação foram exercitados. No teste de revogação do aplicativo, o processo local encerrou em 1,0 s após o bloqueio.
 
-O controle foi publicado em `https://jrsantafe.stratacerta.com.br/bot`, com HTTPS, armazenamento separado e chave restrita ao serviço. A validação remota confirmou convite, papéis, resposta MiniMax e interrupção de resposta em andamento após revogação. Essas medições não equivalem ao tempo completo de uma tarefa no PC.
+O controle foi publicado em `https://bot.jrsantafe.com.br/bot`, com HTTPS, armazenamento separado e chave restrita ao serviço. A validação remota confirmou convite, papéis, resposta MiniMax e interrupção de resposta em andamento após revogação. Essas medições não equivalem ao tempo completo de uma tarefa no PC.
 
 [Operação e limites da edição JR](./docs/pilot/jr-corporativo.md) · [Serviço de controle](./services/control/README.md) · [Primeiro piloto MiniMax](./docs/pilot/minimax-local-pilot.md)
 
