@@ -10,12 +10,12 @@ Remove-Item -LiteralPath $statusPath -Force -ErrorAction SilentlyContinue
 
 @(
   '{"schemaVersion":1,"event":"session-begin","session":"smoke","version":"2.1.28"}'
-  '{"schemaVersion":1,"event":"failure","session":"smoke","version":"2.1.28","updated":true,"code":"E1003","phase":"atomic-failed","failedPath":"C:\\Users\\huang\\AppData\\Local\\Programs\\AionUi","blockingProcesses":[],"fallbackReason":"restart-manager-no-process","message":"Windows did not identify a specific locking process. Close terminals, editors, and file managers opened in the install folder."}'
+  '{"schemaVersion":1,"event":"failure","session":"smoke","version":"2.1.28","updated":true,"code":"E1003","phase":"atomic-failed","failedPath":"C:\\Users\\huang\\AppData\\Local\\Programs\\JRSantaFeBot","blockingProcesses":[],"fallbackReason":"restart-manager-no-process","message":"Windows did not identify a specific locking process. Close terminals, editors, and file managers opened in the install folder."}'
 ) | Set-Content -LiteralPath $logPath -Encoding UTF8
 
 $detail = 'wrapperCode=E1002 old-uninstaller exitCode=2 uninstallerDetail=- Outer installer: previous uninstaller exited with code 2
 - Inner failure: E1003 phase atomic-failed
-- File or folder: C:\Users\huang\AppData\Local\Programs\AionUi
+- File or folder: C:\Users\huang\AppData\Local\Programs\JRSantaFeBot
 - Blocking process: Windows did not identify a specific locking process. Close terminals, editors, and file managers opened in the install folder.'
 
 & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $reportScript `

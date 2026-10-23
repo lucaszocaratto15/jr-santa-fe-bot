@@ -104,14 +104,14 @@ try {
     if ($script:installerSelfLock -and $script:installerPid -gt 0) {
       Write-LockersAndExit @(New-SelfLockProcess $script:installerPid) `
         'installer-self-lock' `
-        'The installer process is using the install directory as its current output directory.' `
+        'O instalador está usando a pasta de instalação como pasta de trabalho.' `
         0 `
         0 `
         1
     }
     Write-LockersAndExit @() `
       'restart-manager-no-resources' `
-      'Restart Manager had no existing files to query for this path.' `
+      'O Windows não encontrou arquivos existentes para verificar neste caminho.' `
       1 `
       0 `
       0
@@ -236,7 +236,7 @@ namespace AionUi.RestartManager {
               }
             }
             if (-not $name) {
-              $name = 'unknown'
+              $name = 'processo desconhecido'
             }
             [pscustomobject]@{ name = $name; pid = [int]$_.Process.dwProcessId }
           }
@@ -250,7 +250,7 @@ namespace AionUi.RestartManager {
     if ($script:installerSelfLock -and $lockers.Count -gt 0) {
       Write-LockersAndExit $lockers `
         'installer-self-lock' `
-        'The installer process is using the install directory as its current output directory.' `
+        'O instalador está usando a pasta de instalação como pasta de trabalho.' `
         0 `
         $resources.Count `
         $lockers.Count
@@ -259,7 +259,7 @@ namespace AionUi.RestartManager {
     if ($lockers.Count -eq 0) {
       Write-LockersAndExit @() `
         'restart-manager-no-process' `
-        'Windows did not identify a specific locking process. Close terminals, editors, and file managers opened in the install folder.' `
+        'O Windows não identificou um processo específico. Feche terminais, editores e janelas abertas na pasta de instalação.' `
         1 `
         $resources.Count `
         0

@@ -94,6 +94,7 @@ Var /GLOBAL AionUiActiveMarkerResult
 !macro AIONUI_OVERRIDE_APP_CANNOT_BE_CLOSED_MESSAGE
   !pragma warning disable 6030
   LangString appCannotBeClosed 1046 "${AIONUI_MSG_APP_CANNOT_BE_CLOSED_EN}"
+  LangString appClosing 1046 "Fechando o JR Bot..."
   !pragma warning default 6030
 !macroend
 
