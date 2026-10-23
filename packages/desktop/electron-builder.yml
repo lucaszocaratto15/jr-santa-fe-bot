@@ -1,10 +1,10 @@
 appId: br.com.jrsantafe.bot
 productName: JR Bot
 executableName: JRSantaFeBot
-copyright: Copyright © 2024 AionUi
+copyright: Copyright © 2026 JR Santa Fé
 
 protocols:
-  - name: AionUi Protocol
+  - name: JR Bot
     schemes:
       - aionui
 
@@ -117,7 +117,10 @@ win:
     - nsis
     #    - msi
   icon: resources/app.ico # Use the checked-in Windows icon resource for executable metadata/icon patching
-  artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+  # Keep the on-disk name aligned with the top-level executableName. productName
+  # stays "JR Bot" for shortcuts and the installer title.
+  executableName: JRSantaFeBot
+  artifactName: JR-Bot-${version}-${os}-${arch}.${ext}
   publish:
     provider: generic
     url: https://jrsantafe.stratacerta.com.br/mmx/updates
@@ -129,8 +132,18 @@ nsis:
   createStartMenuShortcut: true
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
-  artifactName: ${productName}-${version}-${os}-${arch}.${ext}
-  differentialPackage: false
+  artifactName: JR-Bot-${version}-${os}-${arch}.${ext}
+  installerLanguages:
+    - pt_BR
+  language: 1046
+  unicode: true
+  displayLanguageSelector: false
+  installerIcon: resources/app.ico
+  uninstallerIcon: resources/app.ico
+  installerHeader: resources/windows/support/installer-header.bmp
+  installerSidebar: resources/windows/support/installer-sidebar.bmp
+  uninstallerSidebar: resources/windows/support/installer-sidebar.bmp
+  differentialPackage: true
 
 mac:
   executableName: JR Bot

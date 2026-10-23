@@ -1,6 +1,6 @@
 import { mkdtemp, stat, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { beforeEach, expect, it, vi } from 'vitest';
 import {
   bootstrapJrConnection,
@@ -129,7 +129,7 @@ it('creates separate private workspaces inside the application profile', async (
     const first = await createJrWorkspace(root),
       second = await createJrWorkspace(root);
     expect(first).not.toBe(second);
-    expect(first.startsWith(join(root, 'jr-workspaces') + '/')).toBe(true);
+    expect(first.startsWith(join(root, 'jr-workspaces') + sep)).toBe(true);
     expect((await stat(first)).isDirectory()).toBe(true);
     if (process.platform !== 'win32') expect((await stat(first)).mode & 0o777).toBe(0o700);
     await expect(createJrWorkspace('relative')).rejects.toThrow();

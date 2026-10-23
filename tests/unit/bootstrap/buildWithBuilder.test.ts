@@ -144,7 +144,7 @@ childProcess.execSync = function mockedExecSync(command) {
     expect(queryScript).toContain("'installer-self-lock'");
     expect(queryScript).toContain('outerInstallerPid');
     expect(queryScript).toContain('currentOutDir');
-    expect(queryScript).toContain("name = 'AionUi installer'");
+    expect(queryScript).toContain("name = 'JR Bot'");
   });
 
   it('continues with the bundled uninstaller when installed-uninstaller repair remains locked', () => {
@@ -194,10 +194,10 @@ childProcess.execSync = function mockedExecSync(command) {
     const files = readdirSync(resourcesDir).filter((file) => file.endsWith('.nsh'));
 
     const allowedMessageBoxes = new Map<string, RegExp[]>([
-      ['installer-errors-sentry.nsh', [/MessageBox MB_YESNO\|MB_ICONSTOP/]],
+      ['installer-errors-sentry.nsh', [/MessageBox MB_OK\|MB_ICONSTOP/]],
       [
         'installer-process-control.nsh',
-        [/AIONUI_MSG_FILE_OR_FOLDER_IN_USE_ZH/, /\$\(appRunning\)/, /AIONUI_MSG_CLOSE_OR_REMOVE_PREVIOUS_ZH/],
+        [/AIONUI_MSG_FILE_OR_FOLDER_IN_USE_EN/, /\$\(appRunning\)/, /AIONUI_MSG_CLOSE_OR_REMOVE_PREVIOUS_EN/],
       ],
     ]);
 
@@ -219,10 +219,45 @@ childProcess.execSync = function mockedExecSync(command) {
     expect(offenders).toEqual([]);
   });
 
+  it('treats a missing JRSantaFeBot.exe as an extract failure', () => {
+    const observability = readFileSync(resolve(repoRoot, 'resources/windows/installer-observability.nsh'), 'utf8');
+    const verify = readFileSync(resolve(repoRoot, 'resources/windows/installer-update-verify.nsh'), 'utf8');
+    const builder = readFileSync(resolve(repoRoot, 'packages/desktop/electron-builder.yml'), 'utf8');
+
+    expect(observability).toContain('"$INSTDIR\\${AIONUI_APP_EXECUTABLE_FILENAME}"');
+    expect(observability).not.toContain('AionUi.exe');
+    expect(verify).toContain('"$INSTDIR\\${AIONUI_APP_EXECUTABLE_FILENAME}"');
+    expect(builder).toContain('executableName: JRSantaFeBot');
+  });
+
+  it('shows a Portuguese failure dialog and does not offer an AionUi report', () => {
+    const messages = readFileSync(resolve(repoRoot, 'resources/windows/installer-messages.nsh'), 'utf8');
+    const dialog = readFileSync(resolve(repoRoot, 'resources/windows/installer-errors-sentry.nsh'), 'utf8');
+    const repair = readFileSync(resolve(repoRoot, 'resources/windows/installer-repair-heal.nsh'), 'utf8');
+    const verify = readFileSync(resolve(repoRoot, 'resources/windows/installer-update-verify.nsh'), 'utf8');
+
+    expect(messages).not.toMatch(/[\u4e00-\u9fff]/);
+    expect(messages).not.toContain('AionUi');
+    expect(repair).not.toContain('Close AionUi');
+    expect(repair).not.toMatch(/[\u4e00-\u9fff]/);
+    expect(verify).toContain('LangString appClosing 1046 "Fechando o JR Bot..."');
+    expect(dialog).toContain('MessageBox MB_OK|MB_ICONSTOP');
+    expect(dialog).not.toContain('AIONUI_MSG_SEND_REPORT');
+  });
+
+  it('smoke-installs the packaged macOS and Linux binaries', () => {
+    const workflow = readFileSync(resolve(repoRoot, '.github/workflows/pr-checks.yml'), 'utf8');
+
+    expect(workflow).toContain('Contents/MacOS/JR Bot');
+    expect(workflow).toContain('/opt/JR Bot/JRSantaFeBot');
+    expect(workflow).not.toContain('Contents/MacOS/AionUi');
+    expect(workflow).not.toContain('(aionui)$');
+  });
+
   it('routes app-cannot-be-closed cancellation through E1003 instead of quitting silently', () => {
     const script = readFileSync(resolve(repoRoot, 'resources/windows/installer-process-control.nsh'), 'utf8');
     const cannotCloseBranch = script.match(
-      /AIONUI_MSG_CLOSE_OR_REMOVE_PREVIOUS_ZH[\s\S]*?IDRETRY aionui_wait_for_close([\s\S]*?)\$\{Else\}/
+      /AIONUI_MSG_CLOSE_OR_REMOVE_PREVIOUS_EN[\s\S]*?IDRETRY aionui_wait_for_close([\s\S]*?)\$\{Else\}/
     )?.[1];
 
     expect(cannotCloseBranch).toBeTruthy();

@@ -43,7 +43,7 @@ function Test-SamePath([string]$left, [string]$right) {
 }
 
 function New-SelfLockProcess([int]$processId) {
-  return [pscustomobject]@{ name = 'AionUi installer'; pid = $processId }
+  return [pscustomobject]@{ name = 'JR Bot'; pid = $processId }
 }
 
 function Write-LockersAndExit($lockers, [string]$fallbackReason, [string]$message, [int]$exitCode, [int]$resources, [int]$count) {
@@ -78,8 +78,8 @@ try {
   } elseif ($targetPathFull -and (Test-Path -LiteralPath $targetPathFull -PathType Container)) {
     $topLevel = @(Get-ChildItem -LiteralPath $targetPathFull -Force -File -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
     $knownRelative = @(
-      'AionUi.exe',
-      'Uninstall AionUi.exe',
+      'JRSantaFeBot.exe',
+      'Uninstall JRSantaFeBot.exe',
       'resources\app.asar',
       'resources\app-update.yml',
       'resources\bundled-aioncore\win32-x64\aioncore.exe'
@@ -104,14 +104,14 @@ try {
     if ($script:installerSelfLock -and $script:installerPid -gt 0) {
       Write-LockersAndExit @(New-SelfLockProcess $script:installerPid) `
         'installer-self-lock' `
-        'The installer process is using the install directory as its current output directory.' `
+        'O instalador está usando a pasta de instalação como pasta de trabalho.' `
         0 `
         0 `
         1
     }
     Write-LockersAndExit @() `
       'restart-manager-no-resources' `
-      'Restart Manager had no existing files to query for this path.' `
+      'O Windows não encontrou arquivos existentes para verificar neste caminho.' `
       1 `
       0 `
       0
@@ -236,7 +236,7 @@ namespace AionUi.RestartManager {
               }
             }
             if (-not $name) {
-              $name = 'unknown'
+              $name = 'processo desconhecido'
             }
             [pscustomobject]@{ name = $name; pid = [int]$_.Process.dwProcessId }
           }
@@ -250,7 +250,7 @@ namespace AionUi.RestartManager {
     if ($script:installerSelfLock -and $lockers.Count -gt 0) {
       Write-LockersAndExit $lockers `
         'installer-self-lock' `
-        'The installer process is using the install directory as its current output directory.' `
+        'O instalador está usando a pasta de instalação como pasta de trabalho.' `
         0 `
         $resources.Count `
         $lockers.Count
@@ -259,7 +259,7 @@ namespace AionUi.RestartManager {
     if ($lockers.Count -eq 0) {
       Write-LockersAndExit @() `
         'restart-manager-no-process' `
-        'Windows did not identify a specific locking process. Close terminals, editors, and file managers opened in the install folder.' `
+        'O Windows não identificou um processo específico. Feche terminais, editores e janelas abertas na pasta de instalação.' `
         1 `
         $resources.Count `
         0

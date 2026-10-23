@@ -444,7 +444,7 @@ jobs:
           Write-Host "SMOKE INSTALL: windows-x64"
           Write-Host "=========================================="
 
-          $installer = Get-ChildItem -Path out -Filter "AionUi-*-win-*.exe" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          $installer = Get-ChildItem -Path out -Filter "JR-Bot-*-win-*.exe" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
           if (-not $installer) {
             throw "No Windows installer found in out/"
           }
@@ -453,9 +453,9 @@ jobs:
           Start-Process -FilePath $installer.FullName -ArgumentList '/S' -Wait -NoNewWindow
 
           $candidates = @(
-            "$env:LOCALAPPDATA\\Programs\\AionUi\\AionUi.exe",
-            "$env:ProgramFiles\\AionUi\\AionUi.exe",
-            "$env:ProgramFiles(x86)\\AionUi\\AionUi.exe"
+            "$env:LOCALAPPDATA\\Programs\\JRSantaFeBot\\JRSantaFeBot.exe",
+            "$env:ProgramFiles\\JRSantaFeBot\\JRSantaFeBot.exe",
+            "$env:ProgramFiles(x86)\\JRSantaFeBot\\JRSantaFeBot.exe"
           )
 
           $installedExe = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
@@ -486,8 +486,17 @@ jobs:
           hdiutil detach "$MOUNT_POINT"
 
           APP_PATH=$(ls -d "$APP_DIR"/*.app | head -n 1)
-          APP_BIN="$APP_PATH/Contents/MacOS/AionUi"
+          case "$APP_PATH" in
+            */"JR Bot.app") ;;
+            *)
+              echo "Unexpected app bundle: $APP_PATH"
+              exit 1
+              ;;
+          esac
+          # mac.executableName is "JR Bot"; the bundle binary is not JRSantaFeBot.exe.
+          APP_BIN="$APP_PATH/Contents/MacOS/JR Bot"
 
+          echo "Installed executable: $APP_BIN"
           test -x "$APP_BIN"
           "$APP_BIN" --version || true
 
@@ -504,14 +513,16 @@ jobs:
           PKG_NAME=$(dpkg-deb -f "$DEB_FILE" Package)
           sudo dpkg -i "$DEB_FILE" || sudo apt-get install -f -y
 
-          INSTALLED_BIN=$(dpkg -L "$PKG_NAME" | grep -Ei '/(bin|opt)/.*(aionui)$' | head -n 1 || true)
-          if [ -z "$INSTALLED_BIN" ]; then
+          # productName "JR Bot" is the install directory; executableName is JRSantaFeBot.
+          INSTALLED_BIN="/opt/JR Bot/JRSantaFeBot"
+          if ! dpkg -L "$PKG_NAME" | grep -Fxq "$INSTALLED_BIN"; then
             echo "Package files:"
-            dpkg -L "$PKG_NAME" | head -n 50
-            echo "No installed executable path matched expected pattern"
+            dpkg -L "$PKG_NAME"
+            echo "Expected $INSTALLED_BIN in the package file list"
             exit 1
           fi
 
+          echo "Installed executable: $INSTALLED_BIN"
           test -x "$INSTALLED_BIN"
 
   # Job 5: Test release scripts (fast, no build required)
