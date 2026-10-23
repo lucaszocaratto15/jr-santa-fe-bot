@@ -1,6 +1,5 @@
 import { AgentLogoIcon } from '@/renderer/components/agent/AgentBadge';
 import type { PresetAssistantInfo } from '@/renderer/hooks/agent/usePresetAssistantInfo';
-import FlexFullContainer from '@/renderer/components/layout/FlexFullContainer';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { useResizableSplit } from '@/renderer/hooks/ui/useResizableSplit';
 import ChatTitleEditor from '@/renderer/pages/conversation/components/ChatTitleEditor';
@@ -69,6 +68,14 @@ const ChatLayout: React.FC<{
   const layout = useLayoutContext();
   const isDesktop = !layout?.isMobile;
   const isMobile = Boolean(layout?.isMobile);
+  const setWorkspaceToggleVisible = layout?.setWorkspaceToggleVisible;
+
+  // The titlebar workspace icon only means something when this chat mounts a rail.
+  useEffect(() => {
+    if (!setWorkspaceToggleVisible) return undefined;
+    setWorkspaceToggleVisible(Boolean(workspaceEnabled));
+    return () => setWorkspaceToggleVisible(false);
+  }, [setWorkspaceToggleVisible, workspaceEnabled]);
 
   // Preview panel state
   const { isOpen: isPreviewOpenRaw, isMaximized } = usePreviewContext();
@@ -199,10 +206,10 @@ const ChatLayout: React.FC<{
   const desktopHeader = (
     <ArcoLayout.Header
       className={classNames(
-        'min-h-44px flex items-center justify-between px-16px pt-8px pb-10px gap-16px !bg-1 chat-layout-header chat-layout-header--glass overflow-hidden'
+        'min-h-44px flex items-center justify-between px-16px py-8px gap-16px !bg-1 chat-layout-header chat-layout-header--glass'
       )}
     >
-      <FlexFullContainer className='h-full min-w-0' containerClassName='flex items-center'>
+      <div className='chat-layout-header__title flex h-full min-w-0 flex-1 items-center'>
         <ChatTitleEditor
           editingTitle={editingTitle}
           titleDraft={titleDraft}
@@ -227,8 +234,8 @@ const ChatLayout: React.FC<{
             ))
           }
         />
-      </FlexFullContainer>
-      <div className='flex items-center gap-12px shrink-0'>{props.headerExtra}</div>
+      </div>
+      <div className='chat-layout-header__extra flex items-center gap-12px shrink-0'>{props.headerExtra}</div>
     </ArcoLayout.Header>
   );
 

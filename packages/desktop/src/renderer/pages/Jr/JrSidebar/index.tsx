@@ -16,7 +16,8 @@ import { CSS } from '@dnd-kit/utilities';
 import { LinkOne, Peoples, Plus, Search } from '@icon-park/react';
 import { useAuth } from '@renderer/hooks/context/AuthContext';
 import { loadLatestConversationMessages } from '@renderer/utils/chat/messagePagination';
-import React, { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
@@ -109,6 +110,10 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
   const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
   const [teamDialogOpen, setTeamDialogOpen] = useState(false);
   const [layout, setLayout] = useState<SidebarLayout>(readSidebarLayout);
+  const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    setActionsSlot(document.getElementById('jr-sider-actions-slot'));
+  }, []);
   const [previews, setPreviews] = useState<Record<string, string>>({});
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
   const { data: bots, error } = useSWR<JrBot[]>('jr.bots', listJrBots);
@@ -178,32 +183,36 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
     ),
   ];
 
+  const headerActions = (
+    <div className={styles.actions}>
+      <ConversationSearchPopover
+        onSessionClick={onSessionClick}
+        renderTrigger={({ onClick, isActive }) => (
+          <Button
+            type='text'
+            className={`${styles.iconButton} ${isActive ? styles.pinActive : ''}`}
+            icon={<Search size={18} />}
+            aria-label={t('common.jr.search')}
+            onClick={onClick}
+          />
+        )}
+      />
+      <Button
+        type='text'
+        className={styles.iconButton}
+        aria-label={t('common.jr.newBot')}
+        icon={<Plus size={18} />}
+        onClick={() => open('/guid?create=1')}
+      />
+    </div>
+  );
+
   return (
     <nav className={styles.sidebar} aria-label={t('common.jr.navigation')}>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
           <div className={styles.top}>
-            <div className={styles.actions}>
-              <ConversationSearchPopover
-                onSessionClick={onSessionClick}
-                renderTrigger={({ onClick, isActive }) => (
-                  <Button
-                    type='text'
-                    className={`${styles.iconButton} ${isActive ? styles.pinActive : ''}`}
-                    icon={<Search size={18} />}
-                    aria-label={t('common.jr.search')}
-                    onClick={onClick}
-                  />
-                )}
-              />
-              <Button
-                type='text'
-                className={styles.iconButton}
-                aria-label={t('common.jr.newBot')}
-                icon={<Plus size={18} />}
-                onClick={() => open('/guid?create=1')}
-              />
-            </div>
+            {actionsSlot ? createPortal(headerActions, actionsSlot) : headerActions}
             <PinZone>
               {grouped.pinned.map((bot) => (
                 <BotRow

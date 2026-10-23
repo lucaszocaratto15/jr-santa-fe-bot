@@ -132,6 +132,27 @@ describe('JrSidebar rows', () => {
     expect(screen.queryByText('Sent 1 archive')).not.toBeInTheDocument();
   });
 
+  it('moves search and new chat into the header slot beside the logo', () => {
+    const slot = document.createElement('div');
+    slot.id = 'jr-sider-actions-slot';
+    document.body.appendChild(slot);
+    try {
+      render(<JrSidebar />);
+      expect(slot.querySelector('[aria-label="common.jr.search"]')).not.toBeNull();
+      expect(slot.querySelector('[aria-label="common.jr.newBot"]')).not.toBeNull();
+      expect(screen.getByRole('navigation').querySelector('[aria-label="common.jr.search"]')).toBeNull();
+    } finally {
+      slot.remove();
+    }
+  });
+
+  it('keeps search in the sidebar when the header slot is missing', () => {
+    render(<JrSidebar />);
+    expect(
+      within(screen.getByRole('navigation')).getByRole('button', { name: 'common.jr.search' })
+    ).toBeInTheDocument();
+  });
+
   it('still lists the bot when the saved layout is corrupt', () => {
     localStorage.setItem('jr.sidebarLayout', '{');
     render(<JrSidebar />);

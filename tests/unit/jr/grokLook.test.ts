@@ -217,6 +217,20 @@ describe('settings modal frame', () => {
     expect(main).not.toContain('trafficLightPosition: { x: 10, y: 13 }');
   });
 
+  it('keeps the chat title in flow and the sidebar header on a two-row grid', () => {
+    const chrome = readFileSync('packages/desktop/src/renderer/styles/jr.css', 'utf8');
+    const layout = readFileSync('packages/desktop/src/renderer/components/layout/Layout.tsx', 'utf8');
+    expect(chrome).not.toContain('top: 12px');
+    expect(chrome).toContain('grid-template-columns: minmax(40px, 1fr) auto minmax(40px, 1fr)');
+    expect(chrome).toContain('-webkit-app-region: no-drag');
+    expect(chrome).toContain('transition: width 280ms cubic-bezier(0.22, 1, 0.36, 1)');
+    expect(chrome).toContain('.jr-sider-brandline');
+    expect(layout).toContain('jr.sider-collapsed');
+    expect(layout).toContain('jr-sider-actions-slot');
+    expect(layout).toContain("setProperty('-webkit-app-region', 'no-drag')");
+    expect(layout).toContain("data-app-region='no-drag'");
+  });
+
   it('lets the close control and the backdrop escape the window drag region', () => {
     expect(css).toMatch(/\.overlay\s*\{[^}]*-webkit-app-region:\s*no-drag/);
     expect(css).toMatch(/\.overlayMac\s*\{[^}]*padding-top:\s*56px/);
