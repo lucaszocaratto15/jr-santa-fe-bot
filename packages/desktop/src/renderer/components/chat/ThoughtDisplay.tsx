@@ -17,7 +17,10 @@ type ThoughtDisplayProps = {
   thought?: ThoughtData;
   style?: 'default' | 'compact';
   running?: boolean;
-  /** Avatar shown beside the working status, for example the active bot. */
+  /**
+   * Kept for callers that used to pass an avatar. The running line is one mark
+   * plus the status text, so the avatar is not rendered.
+   */
   leading?: React.ReactNode;
   statusText?: string;
   onStop?: () => void;
@@ -33,7 +36,6 @@ const ThoughtDisplay: React.FC<ThoughtDisplayProps> = ({
   thought,
   style = 'default',
   running = false,
-  leading,
   statusText,
   onStop: _onStop,
   onRetryStart,
@@ -110,14 +112,6 @@ const ThoughtDisplay: React.FC<ThoughtDisplayProps> = ({
     return () => clearInterval(timer);
   }, [externalElapsedSource, startedAtMs, running, thought?.subject]);
 
-  useEffect(() => {
-    if (!running) return;
-    document.body.dataset.jrStreaming = '1';
-    return () => {
-      delete document.body.dataset.jrStreaming;
-    };
-  }, [running]);
-
   // Calculate final style based on style prop. The theme-aware gradient is
   // resolved via the `--thought-gradient` token so it follows light/dark and any
   // custom theme override.
@@ -150,15 +144,7 @@ const ThoughtDisplay: React.FC<ThoughtDisplayProps> = ({
         className={`jr-working relative z-1 mb--20px pb-30px px-10px py-10px rd-t-20px text-14px lh-20px text-t-primary flex items-center gap-8px`}
         style={containerStyle}
       >
-        {leading}
-        {running && (
-          <span className='jr-working-dots' aria-hidden='true'>
-            <i />
-            <i />
-            <i />
-          </span>
-        )}
-        {running && <Spin size={14} />}
+        {running ? <span className='jr-working-mark' data-testid='jr-working-mark' aria-hidden='true' /> : null}
         {/* Left block fills the row and truncates long text (tooltip shows the
             full message); the retry button stays pinned on the right and never
             shrinks, so a long/localized status can't push it out of a narrow

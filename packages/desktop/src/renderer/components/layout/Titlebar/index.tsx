@@ -87,8 +87,9 @@ const Titlebar: React.FC<TitlebarProps> = ({ workspaceAvailable }) => {
   const isMacRuntime = isDesktopRuntime && isMacOS();
   // Windows/Linux 显示自定义窗口按钮；macOS 在标题栏给工作区一个切换入口
   const showWindowControls = isDesktopRuntime && !isMacRuntime;
-  // Keep the workspace entry in the titlebar on every platform.
-  const showWorkspaceButton = workspaceAvailable;
+  // JR chats publish workspaceAvailable from the route but have no right rail.
+  // ChatLayout sets workspaceToggleVisible only when that rail is actually mounted.
+  const showWorkspaceButton = workspaceAvailable && layout?.workspaceToggleVisible !== false;
 
   const workspaceTooltip = workspaceCollapsed
     ? t('common.expandMore', { defaultValue: 'Expand workspace' })
@@ -99,8 +100,9 @@ const Titlebar: React.FC<TitlebarProps> = ({ workspaceAvailable }) => {
   // Desktop uses slimmer strokes to match macOS-native chrome aesthetics;
   // mobile keeps the default weight so icons stay legible at larger sizes.
   const desktopIconStroke = layout?.isMobile ? undefined : 2.5;
-  // 统一在标题栏左侧展示主侧栏开关 / Always expose sidebar toggle on titlebar left side
-  const showSiderToggle = Boolean(layout?.setSiderCollapsed) && !(layout?.isMobile && isSettingsRoute);
+  // Desktop draws the sidebar toggle in the sider's own top row so it clears the
+  // traffic lights and stays a no-drag hit target. Mobile keeps the titlebar one.
+  const showSiderToggle = Boolean(layout?.isMobile && layout.setSiderCollapsed && !isSettingsRoute);
   const showBackToChatButton = Boolean(layout?.isMobile && isSettingsRoute);
   const siderTooltip = layout?.siderCollapsed
     ? t('common.expandMore', { defaultValue: 'Expand sidebar' })
@@ -246,9 +248,9 @@ const Titlebar: React.FC<TitlebarProps> = ({ workspaceAvailable }) => {
 
   const menuStyle: React.CSSProperties = useMemo(() => {
     if (!isMacRuntime || !showSiderToggle) return {};
-    // macOS: sit the menu buttons right next to the traffic lights (which occupy ~70px).
-    // Mobile keeps its own layout (no traffic lights).
-    const marginLeft = layout?.isMobile ? '0px' : '76px';
+    // macOS: sit the menu clear of the traffic lights. Lights start at x=20 and the
+    // group is ~70px wide, so 96px leaves a gap. Mobile has no traffic lights.
+    const marginLeft = layout?.isMobile ? '0px' : '96px';
     return {
       marginLeft,
     };

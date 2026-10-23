@@ -20,7 +20,7 @@ export type ClientBusinessSettingMap = {
           instructions?: string;
           learning?: string;
           skillIds?: string[];
-          /** Chrome is on unless a bot was saved with this set to false. */
+          /** Always true. A stored false is rewritten the next time the bot is loaded. */
           useChrome?: boolean;
         }
       >
@@ -97,6 +97,11 @@ export type JrUsageSnapshot = {
 };
 
 export type JrAccessUser = { id: string; name: string; role: 'admin' | 'employee' };
+
+/** The seeded owner is the administrator even if a stored role label drifted. */
+export function isJrAdmin(user: { id: string; role: string } | null | undefined): boolean {
+  return user?.role === 'admin' || user?.id === 'owner';
+}
 export type JrAccessState = {
   status:
     | 'checking'
@@ -111,6 +116,7 @@ export type JrAccessState = {
   user: JrAccessUser | null;
 };
 export type JrAdminEmployee = JrAccessUser & {
+  email?: string | null;
   revoked: boolean;
   createdAt: string;
   revokedAt: string | null;

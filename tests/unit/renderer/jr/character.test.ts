@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
 import {
   normalizeAppearance,
@@ -23,4 +24,19 @@ it('creates an independent animated SVG without external URLs or scripts', () =>
   expect(svg).toContain('<svg');
   expect(svg).toContain('prefers-reduced-motion');
   expect(svg.replace('http://www.w3.org/2000/svg', '')).not.toMatch(/<script|https?:|url\(/i);
+});
+
+it('keeps a picker pose still so the shape stays in the center of its box', () => {
+  const still = characterSvg({ shape: 'cloud', color: 'red' }, { animate: false });
+  expect(still).not.toContain('translateY');
+  expect(still).not.toContain('rotate(');
+  expect(characterSvg({ shape: 'cloud', color: 'red' })).toContain('translateY(2px) rotate(-7deg)');
+});
+
+it('paints the shape highlight on the same centered box as the shape', () => {
+  const css = readFileSync('packages/desktop/src/renderer/pages/Jr/JrWorkspace.module.css', 'utf8');
+  expect(css).toMatch(/\.shapeChoice:global\(\.arco-btn\)\s*\{[^}]*align-items:\s*center/);
+  expect(css).toMatch(/\.shapeChoice:global\(\.arco-btn\)\s*\{[^}]*justify-content:\s*center/);
+  expect(css).toMatch(/\.shapeMark\s*\{[^}]*place-items:\s*center/);
+  expect(css).toMatch(/\.shapeMarkOn\s*\{[^}]*box-shadow:\s*0 0 0 6px/);
 });

@@ -1,3 +1,5 @@
+import { sanitizeSidebarLayout, type SidebarLayout } from './groupBots';
+
 export type KeyValueStore = {
   getItem: (key: string) => string | null;
   setItem: (key: string, value: string) => void;
@@ -18,8 +20,8 @@ export function browserStore(): KeyValueStore {
 }
 
 const EXECUTION_KEY = 'jr.executionPreference';
-const ROUTE_KEY = 'jr.routeTraffic';
 const SPELLCHECK_KEY = 'jr.spellcheck';
+const SIDEBAR_KEY = 'jr.sidebarLayout';
 
 export const SPELLCHECK_EVENT = 'jr-spellcheck-change';
 
@@ -27,9 +29,8 @@ export const SPELLCHECK_EVENT = 'jr-spellcheck-change';
 export type ExecutionPreference = 'allow' | 'ask';
 
 /**
- * Saved only in the renderer. Codex can replace these readers when execution
- * policy and traffic routing are exposed by the desktop process. They do not
- * change the agent engine today.
+ * Saved only in the renderer. Codex can replace this reader when execution
+ * policy is exposed by the desktop process. It does not change the agent engine today.
  */
 export function readExecutionPreference(store: KeyValueStore = browserStore()): ExecutionPreference {
   return store.getItem(EXECUTION_KEY) === 'ask' ? 'ask' : 'allow';
@@ -37,14 +38,6 @@ export function readExecutionPreference(store: KeyValueStore = browserStore()): 
 
 export function writeExecutionPreference(value: ExecutionPreference, store: KeyValueStore = browserStore()): void {
   store.setItem(EXECUTION_KEY, value);
-}
-
-export function readRouteTraffic(store: KeyValueStore = browserStore()): boolean {
-  return store.getItem(ROUTE_KEY) === '1';
-}
-
-export function writeRouteTraffic(enabled: boolean, store: KeyValueStore = browserStore()): void {
-  store.setItem(ROUTE_KEY, enabled ? '1' : '0');
 }
 
 export function readSpellcheck(store: KeyValueStore = browserStore()): boolean {
@@ -56,6 +49,21 @@ export function readSpellcheck(store: KeyValueStore = browserStore()): boolean {
 export function writeSpellcheck(enabled: boolean, store: KeyValueStore = browserStore()): void {
   store.setItem(SPELLCHECK_KEY, enabled ? '1' : '0');
   if (typeof window !== 'undefined') window.dispatchEvent(new Event(SPELLCHECK_EVENT));
+}
+
+/** Pins, row order, and collapsed sections. Corrupt JSON reads as an empty layout. */
+export function readSidebarLayout(store: KeyValueStore = browserStore()): SidebarLayout {
+  const raw = store.getItem(SIDEBAR_KEY);
+  if (!raw) return { pinnedIds: [], order: [], collapsed: {} };
+  try {
+    return sanitizeSidebarLayout(JSON.parse(raw));
+  } catch {
+    return { pinnedIds: [], order: [], collapsed: {} };
+  }
+}
+
+export function writeSidebarLayout(layout: SidebarLayout, store: KeyValueStore = browserStore()): void {
+  store.setItem(SIDEBAR_KEY, JSON.stringify(sanitizeSidebarLayout(layout)));
 }
 
 export type ComputerIdentity = {

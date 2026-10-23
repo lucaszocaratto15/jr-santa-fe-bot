@@ -408,22 +408,6 @@
   color: var(--color-text-2);
   font-size: 12px;
 }
-.skillHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-.skillHeader > label {
-  color: var(--color-text-2);
-  font-size: 12px;
-}
-.skillToggle:global(.arco-btn) {
-  height: 28px;
-  padding: 0 10px;
-  border-radius: 999px;
-  color: var(--color-text-2);
-}
 .botHint {
   margin: 0 0 4px;
   color: var(--color-text-3);
@@ -440,14 +424,39 @@
   flex-wrap: wrap;
 }
 .shapeChoice:global(.arco-btn) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 48px;
   height: 48px;
+  min-width: 48px;
   padding: 0;
   border: none;
   border-radius: 50%;
+  line-height: 0;
+  background: transparent;
+  overflow: visible;
 }
-.shapeSelected:global(.arco-btn) {
+.shapeChoice:global(.arco-btn):hover,
+.shapeChoice:global(.arco-btn):active {
+  background: transparent;
+}
+.shapeMark {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  line-height: 0;
+}
+.shapeMark .character {
+  display: block;
+  width: 36px;
+  height: 36px;
+}
+.shapeMarkOn {
   background: var(--color-fill-3);
+  box-shadow: 0 0 0 6px var(--color-fill-3);
 }
 .colorPicker {
   width: min(100%, 232px);
@@ -512,11 +521,13 @@
   position: absolute;
   inset-inline-end: 10px;
   top: 10px;
+  z-index: 2;
   width: 32px;
   height: 32px;
   min-width: 32px;
   padding: 0;
   color: var(--color-text-3);
+  -webkit-app-region: no-drag;
 }
 .sendButton:global(.arco-btn) {
   width: 32px;

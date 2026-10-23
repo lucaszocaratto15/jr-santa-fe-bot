@@ -180,6 +180,34 @@ export const createInitStyle = (
     line-height: inherit;
     font-weight: inherit;
   }
+  /* The caret lives inside the last text run. A ::after on the bubble itself
+     wraps under the shadow host, which is a block, so it sits on its own line
+     and would paint on every assistant bubble. Follow only the last-child
+     chain and stop at the element that holds the text. */
+  .markdown-shadow-body.markdown-streaming > :last-child:not(:has(> *))::after,
+  .markdown-shadow-body.markdown-streaming > :last-child > :last-child:not(:has(> *))::after,
+  .markdown-shadow-body.markdown-streaming > :last-child > :last-child > :last-child:not(:has(> *))::after,
+  .markdown-shadow-body.markdown-streaming > :last-child > :last-child > :last-child > :last-child:not(:has(> *))::after,
+  .markdown-shadow-body.markdown-streaming > :last-child > :last-child > :last-child > :last-child > :last-child:not(:has(> *))::after,
+  .markdown-shadow-body.markdown-streaming > :last-child > :last-child > :last-child > :last-child > :last-child > :last-child:not(:has(> *))::after {
+    content: '';
+    display: inline-block;
+    width: 2px;
+    height: 1em;
+    margin-inline-start: 2px;
+    background: currentColor;
+    vertical-align: text-bottom;
+    pointer-events: none;
+    animation: jr-caret 1s steps(1) infinite;
+  }
+  @keyframes jr-caret {
+    50% { opacity: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .markdown-shadow-body.markdown-streaming ::after {
+      animation: none;
+    }
+  }
   .markdown-shadow-body code:not(pre code) {
     background: var(--bg-3);
     color: var(--text-primary);

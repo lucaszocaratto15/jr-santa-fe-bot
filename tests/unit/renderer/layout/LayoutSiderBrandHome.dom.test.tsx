@@ -65,7 +65,10 @@ vi.mock('@renderer/hooks/ui/useConversationShortcuts', () => ({
     shortcutMocks.params = params;
   },
 }));
-vi.mock('@renderer/utils/platform', () => ({ isElectronDesktop: platformMocks.isElectronDesktopMock }));
+vi.mock('@renderer/utils/platform', () => ({
+  isElectronDesktop: platformMocks.isElectronDesktopMock,
+  isMacOS: () => false,
+}));
 vi.mock('@renderer/pages/conversation/Preview/context/PreviewContext', () => ({
   usePreviewContext: () => ({ closePreview: () => {} }),
 }));
@@ -97,6 +100,7 @@ describe('Layout sider brand Home button', () => {
     shortcutMocks.params = undefined;
     featureMocks.teamModeEnabled = false;
     sessionStorage.clear();
+    localStorage.clear();
     currentPathname = '/guid';
   });
 
@@ -123,6 +127,42 @@ describe('Layout sider brand Home button', () => {
 
     fireEvent.click(screen.getByRole('img', { name: 'common.jr.companyName' }));
     expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('collapses from the sidebar header and keeps an expand control that is not a drag region', () => {
+    currentPathname = '/conversation/xyz';
+    const { container } = renderLayout();
+    const sider = container.querySelector('.layout-sider');
+    const collapse = screen.getByRole('button', { name: 'common.collapse' });
+
+    expect(collapse.className).toContain('jr-sider-toggle');
+    expect(collapse.getAttribute('data-app-region')).toBe('no-drag');
+    expect(sider).not.toHaveClass('collapsed');
+
+    fireEvent.click(collapse);
+    expect(sider).toHaveClass('collapsed');
+    expect(localStorage.getItem('jr.sider-collapsed')).toBe('1');
+    const expand = screen.getByRole('button', { name: 'common.expandMore' });
+    expect(expand.className).toContain('jr-sider-toggle--floating');
+    expect(expand.getAttribute('data-app-region')).toBe('no-drag');
+
+    fireEvent.click(expand);
+    expect(sider).not.toHaveClass('collapsed');
+    expect(localStorage.getItem('jr.sider-collapsed')).toBe('0');
+  });
+
+  it('restores a saved collapse and ignores a corrupt stored value', () => {
+    currentPathname = '/guid';
+    localStorage.setItem('jr.sider-collapsed', '1');
+    const collapsed = renderLayout();
+    expect(collapsed.container.querySelector('.layout-sider')).toHaveClass('collapsed');
+    expect(screen.getByRole('button', { name: 'common.expandMore' })).toBeInTheDocument();
+    collapsed.unmount();
+
+    localStorage.setItem('jr.sider-collapsed', 'maybe');
+    const expanded = renderLayout();
+    expect(expanded.container.querySelector('.layout-sider')).not.toHaveClass('collapsed');
+    expect(screen.getByRole('button', { name: 'common.collapse' })).toBeInTheDocument();
   });
 
   it('provides common shortcuts with a functional sider toggle', () => {

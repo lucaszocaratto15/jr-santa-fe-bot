@@ -10,7 +10,7 @@ import PwaPullToRefresh from '@/renderer/components/layout/PwaPullToRefresh';
 import Titlebar from '@/renderer/components/layout/Titlebar';
 import { Layout as ArcoLayout, Button } from '@arco-design/web-react';
 import classNames from 'classnames';
-import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { setGlobalNavigate } from '@/renderer/utils/navigation';
@@ -35,11 +35,38 @@ import { useBrowserNotification } from '@renderer/hooks/system/notification/useB
 import { useDesktopTurnNotification } from '@renderer/hooks/system/notification/useDesktopTurnNotification';
 import { cleanupSiderTooltips } from '@renderer/utils/ui/siderTooltip';
 import { useConversationShortcuts } from '@renderer/hooks/ui/useConversationShortcuts';
-import { isElectronDesktop } from '@renderer/utils/platform';
+import { isElectronDesktop, isMacOS } from '@renderer/utils/platform';
 import { IS_DISCONTINUED_BUILD } from '@/renderer/utils/discontinuedBuild';
 import UpdateMigrationDialog from '@/renderer/components/settings/UpdateMigrationDialog';
 import '@renderer/styles/layout.css';
 import { JrLogo } from '@renderer/pages/Jr/JrCharacter';
+
+// Native button, same as the titlebar controls. The style is applied after commit
+// because React drops `-webkit-app-region` from the style prop, and a drag region
+// on top of this control swallows the click.
+const SiderToggleButton: React.FC<{ label: string; className?: string; onClick: () => void }> = ({
+  label,
+  className,
+  onClick,
+}) => {
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    buttonRef.current?.style.setProperty('-webkit-app-region', 'no-drag');
+  });
+  return (
+    <button
+      ref={buttonRef}
+      type='button'
+      className={classNames('jr-sider-toggle', className)}
+      aria-label={label}
+      title={label}
+      data-app-region='no-drag'
+      onClick={onClick}
+    >
+      <SidebarIcon size={18} strokeWidth={2.5} />
+    </button>
+  );
+};
 
 const SidebarIcon: React.FC<{ size?: number; strokeWidth?: number }> = ({ size = 18, strokeWidth = 4 }) => (
   <svg
@@ -92,7 +119,25 @@ const useDebug = () => {
 
 const UpdateModal = React.lazy(() => import('@/renderer/components/settings/UpdateModal'));
 
+const SIDER_COLLAPSED_STORAGE_KEY = 'jr.sider-collapsed';
 const DEFAULT_SIDER_WIDTH = 270;
+
+const readStoredSiderCollapsed = (): boolean => {
+  if (typeof localStorage === 'undefined') return false;
+  try {
+    return localStorage.getItem(SIDER_COLLAPSED_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+};
+
+const writeStoredSiderCollapsed = (next: boolean): void => {
+  try {
+    localStorage.setItem(SIDER_COLLAPSED_STORAGE_KEY, next ? '1' : '0');
+  } catch {
+    // Private mode and disabled storage leave the in-memory toggle working.
+  }
+};
 const DESKTOP_COLLAPSED_WIDTH = 0;
 // Match the reference sidebar's 240–400px range; dragging below the minimum collapses it.
 const SIDER_MIN_WIDTH = 240;
@@ -119,7 +164,8 @@ const Layout: React.FC<{
   sider: React.ReactNode;
   onSessionClick?: () => void;
 }> = ({ sider, onSessionClick: _onSessionClick }) => {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsedState] = useState(readStoredSiderCollapsed);
+  const [workspaceToggleVisible, setWorkspaceToggleVisible] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [viewportWidth, setViewportWidth] = useState<number>(() =>
     typeof window === 'undefined' ? 390 : window.innerWidth
@@ -133,9 +179,18 @@ const Layout: React.FC<{
   const location = useLocation();
   const workspaceAvailable =
     location.pathname.startsWith('/conversation/') || (TEAM_MODE_ENABLED && location.pathname.startsWith('/team/'));
-  const toggleSider = useCallback(() => {
-    setCollapsed((previous) => !previous);
+  const isMobileRef = useRef(isMobile);
+  isMobileRef.current = isMobile;
+  const persistCollapsed = useCallback((value: boolean | ((previous: boolean) => boolean)) => {
+    setCollapsedState((previous) => {
+      const next = typeof value === 'function' ? value(previous) : value;
+      if (!isMobileRef.current) writeStoredSiderCollapsed(next);
+      return next;
+    });
   }, []);
+  const toggleSider = useCallback(() => {
+    persistCollapsed((previous) => !previous);
+  }, [persistCollapsed]);
   useConversationShortcuts({ navigate, toggleSider });
   // Expose navigate to code running outside the Router tree (e.g. the globally
   // mounted FeedbackReportModal's "via chat" action).
@@ -225,7 +280,7 @@ const Layout: React.FC<{
     collapseThreshold: SIDER_MIN_WIDTH,
     collapsedWidth: DESKTOP_COLLAPSED_WIDTH,
     collapsed,
-    onCollapsedChange: setCollapsed,
+    onCollapsedChange: persistCollapsed,
   });
 
   // 检测移动端并响应窗口大小变化
@@ -244,12 +299,14 @@ const Layout: React.FC<{
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // 进入移动端后立即折叠 / Collapse immediately when switching to mobile
+  // Mobile always covers the sider. Desktop restores the last explicit choice
+  // and does not let the automatic mobile collapse overwrite that preference.
   useEffect(() => {
-    if (!isMobile || collapsedRef.current) {
+    if (isMobile) {
+      setCollapsedState(true);
       return;
     }
-    setCollapsed(true);
+    setCollapsedState(readStoredSiderCollapsed());
   }, [isMobile]);
 
   // 清理侧栏 Tooltip 残留节点，避免移动端路由切换后浮层卡在左上角
@@ -344,17 +401,43 @@ const Layout: React.FC<{
       }
     : {
         position: 'relative' as const,
-        overflow: 'visible' as const,
+        // Expanded keeps the resize handle visible past the edge. Collapsed must
+        // clip, or a width of 0 still paints the sidebar and the toggle looks dead.
+        overflow: collapsed ? ('hidden' as const) : ('visible' as const),
       };
 
+  const macDesktop = isElectronDesktop() && isMacOS();
+  const layoutContextValue = useMemo(
+    () => ({
+      isMobile,
+      siderCollapsed: collapsed,
+      setSiderCollapsed: persistCollapsed,
+      workspaceToggleVisible,
+      setWorkspaceToggleVisible,
+    }),
+    [isMobile, collapsed, persistCollapsed, workspaceToggleVisible]
+  );
+
   return (
-    <LayoutContext.Provider value={{ isMobile, siderCollapsed: collapsed, setSiderCollapsed: setCollapsed }}>
+    <LayoutContext.Provider value={layoutContextValue}>
       <NavigationHistoryProvider>
-        <div className='app-shell flex flex-col size-full min-h-0'>
+        <div
+          className={classNames('app-shell flex flex-col size-full min-h-0', {
+            'app-shell--desktop': isElectronDesktop(),
+            'app-shell--mac': macDesktop,
+          })}
+        >
           <Titlebar workspaceAvailable={workspaceAvailable} />
+          {!isMobile && collapsed && (
+            <SiderToggleButton
+              className='jr-sider-toggle--floating'
+              label={t('common.expandMore')}
+              onClick={toggleSider}
+            />
+          )}
           {/* 移动端左侧边栏蒙板 / Mobile left sider backdrop */}
           {isMobile && !collapsed && (
-            <div className='fixed inset-0 bg-black/30 z-90' onClick={() => setCollapsed(true)} aria-hidden='true' />
+            <div className='fixed inset-0 bg-black/30 z-90' onClick={() => persistCollapsed(true)} aria-hidden='true' />
           )}
 
           <ArcoLayout className={'size-full layout flex-1 min-h-0'}>
@@ -368,36 +451,37 @@ const Layout: React.FC<{
               style={siderStyle}
             >
               <ArcoLayout.Header
-                className={classNames(
-                  'flex items-center justify-center pt-8px pb-8px ps-18px pe-16px gap-12px layout-sider-header',
-                  isMobile && 'layout-sider-header--mobile',
-                  {
-                    'cursor-pointer group ': collapsed,
-                  }
-                )}
+                className={classNames('layout-sider-header jr-sider-header', isMobile && 'layout-sider-header--mobile')}
               >
-                <div className='jr-brand-symbol' onClick={onClick}>
-                  <JrLogo height={20} className='jr-brand-logo' />
-                </div>
-                {isMobile && !collapsed && (
-                  <Button
-                    type='text'
-                    className='app-titlebar__button app-titlebar__button--mobile'
-                    onClick={() => setCollapsed(true)}
-                    title={t('common.collapse')}
-                    aria-label={t('common.collapse')}
-                  >
-                    <SidebarIcon size={18} strokeWidth={2.5} />
-                  </Button>
+                {!isMobile && (
+                  <div className='jr-sider-chrome'>
+                    {!collapsed && <SiderToggleButton label={t('common.collapse')} onClick={toggleSider} />}
+                  </div>
                 )}
-                {/* 侧栏折叠改由标题栏统一控制 / Sidebar folding handled by Titlebar toggle */}
+                <div className='jr-sider-brandline'>
+                  <div className='jr-brand-symbol' onClick={onClick}>
+                    <JrLogo height={20} className='jr-brand-logo' />
+                  </div>
+                  <div id='jr-sider-actions-slot' className='jr-sider-actions-slot' />
+                  {isMobile && !collapsed && (
+                    <Button
+                      type='text'
+                      className='app-titlebar__button app-titlebar__button--mobile'
+                      onClick={() => persistCollapsed(true)}
+                      title={t('common.collapse')}
+                      aria-label={t('common.collapse')}
+                    >
+                      <SidebarIcon size={18} strokeWidth={2.5} />
+                    </Button>
+                  )}
+                </div>
               </ArcoLayout.Header>
               <ArcoLayout.Content className='pt-0 px-8px pb-0 layout-sider-content'>
                 {React.isValidElement(sider)
                   ? React.cloneElement(sider, {
                       onSessionClick: () => {
                         cleanupSiderTooltips();
-                        if (isMobile) setCollapsed(true);
+                        if (isMobile) persistCollapsed(true);
                       },
                       collapsed,
                     } as any)
@@ -420,7 +504,7 @@ const Layout: React.FC<{
               <ArcoLayout.Content
                 className={'bg-1 layout-content flex flex-col min-h-0 flex-1'}
                 onClick={() => {
-                  if (isMobile && !collapsed) setCollapsed(true);
+                  if (isMobile && !collapsed) persistCollapsed(true);
                 }}
                 style={
                   isMobile

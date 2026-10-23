@@ -1,5 +1,7 @@
-import type { JrAccessState } from '@/common/config/clientSettings';
+import { isJrAdmin, type JrAccessState } from '@/common/config/clientSettings';
 import { createContext, useContext } from 'react';
+
+export { isJrAdmin };
 
 export type JrAccessContextValue = { state: JrAccessState; logout: () => Promise<void> };
 export const JrAccessContext = createContext<JrAccessContextValue | undefined>(undefined);

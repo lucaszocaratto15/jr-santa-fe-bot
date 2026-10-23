@@ -28,6 +28,7 @@ import { bootstrapJrConnection, configureJrProvider } from './process/services/j
 import {
   createJrSessionStore,
   getJrControlUrl,
+  applyJrProxyDenial,
   JrAccessController,
   setJrAccessController,
 } from './process/services/jr/auth';
@@ -53,8 +54,10 @@ import { registerWindowsAppUserModelId } from './process/startup/windowsAppUserM
 import {
   MIN_WINDOW_WIDTH,
   MIN_WINDOW_HEIGHT,
+  MAC_TRAFFIC_LIGHT_POSITION,
   attachWindowBoundsPersistence,
   loadSavedWindowBounds,
+  macTitleBarOptions,
   resolveInitialBounds,
 } from './process/utils/windowBounds';
 import {
@@ -499,23 +502,23 @@ const createWindow = ({ showOnReady = true }: { showOnReady?: boolean } = {}): v
     // Set icon for Windows/Linux in development mode
     ...(devIcon && process.platform !== 'darwin' ? { icon: devIcon } : {}),
     // Custom titlebar configuration / 自定义标题栏配置
-    ...(process.platform === 'darwin'
-      ? {
-          titleBarStyle: 'hidden',
-          // Align traffic-light vertical center with the titlebar button centers.
-          // Titlebar is 45px; buttons are 36px flex-centered → button center y≈22.5.
-          // Empirically y=13 places the traffic lights on the same horizontal line
-          // as the sidebar / back / forward icons.
-          // NOTE: requires a full app restart to take effect (BrowserWindow option).
-          trafficLightPosition: { x: 10, y: 13 },
-        }
-      : { frame: false }),
+    // macOS: hiddenInset keeps native traffic lights. The position is reapplied
+    // after show because AppKit can reset it. Requires a full app restart.
+    ...(process.platform === 'darwin' ? macTitleBarOptions() : { frame: false }),
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       webviewTag: true, // 启用 webview 标签用于 HTML 预览 / Enable webview tag for HTML preview
     },
   });
   console.log(`[AionUi] Main window created (id=${mainWindow.id})`);
+
+  const placeMacTrafficLights = (): void => {
+    if (process.platform !== 'darwin' || mainWindow.isDestroyed()) return;
+    mainWindow.setWindowButtonPosition({ x: MAC_TRAFFIC_LIGHT_POSITION.x, y: MAC_TRAFFIC_LIGHT_POSITION.y });
+  };
+  placeMacTrafficLights();
+  // Fullscreen hands the controls back to AppKit; put them back on the way out.
+  mainWindow.on('leave-full-screen', placeMacTrafficLights);
 
   scheduleStartupLogReport(mainWindow);
 
@@ -532,6 +535,7 @@ const createWindow = ({ showOnReady = true }: { showOnReady?: boolean } = {}): v
     };
     mainWindow.once('ready-to-show', () => {
       console.log('[AionUi] Window ready-to-show');
+      placeMacTrafficLights();
       showWindow();
     });
     // Belt-and-suspenders: also show on did-finish-load in case ready-to-show already fired
@@ -924,10 +928,10 @@ const handleAppReady = async (): Promise<void> => {
     configureCore: (connection) =>
       serializeRuntime(async () => {
         await proxy?.close();
-        proxy = await startJrAuthProxy(connection, () => {
-          void controller
-            .rejectSession(connection.token)
-            .catch(() => console.warn('[JR] Access could not be cleared.'));
+        proxy = await startJrAuthProxy(connection, (notice) => {
+          applyJrProxyDenial(controller, connection.token, notice, () =>
+            console.warn('[JR] Access could not be cleared.')
+          );
         });
         try {
           const result = await startJrCore();

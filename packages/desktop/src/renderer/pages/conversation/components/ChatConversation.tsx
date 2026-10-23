@@ -186,7 +186,11 @@ const AionrsConversationPanel: React.FC<{ conversation: AionrsConversation; slid
   );
   const chatLayoutProps = {
     title: jrBot ? <span className='jr-chat-bot-title'>{jrBot.name}</span> : conversation.name,
-    headerLeading: jrBot ? <JrCharacter appearance={jrBot.appearance} size={28} /> : undefined,
+    headerLeading: jrBot ? (
+      <span className='jr-chat-bot-mark'>
+        <JrCharacter appearance={jrBot.appearance} size={32} still />
+      </span>
+    ) : undefined,
     siderTitle: sliderTitle,
     sider: <ChatSlider conversation={conversation} />,
     headerExtra: (

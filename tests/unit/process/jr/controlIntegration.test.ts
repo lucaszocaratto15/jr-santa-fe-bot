@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { createControlServer } from '../../../../services/control/server.mjs';
-import { JrAccessController } from '@/process/services/jr/auth';
+import { applyJrProxyDenial, JrAccessController } from '@/process/services/jr/auth';
 import type { JrStoredSession } from '@/process/services/jr/auth';
 import { startJrAuthProxy } from '@/process/services/jr/authProxy';
 
@@ -46,8 +46,8 @@ async function fixture() {
       onChange: () => {},
       stopCore,
       configureCore: async (remote) => {
-        proxy = await startJrAuthProxy(remote, () => {
-          void controller.rejectSession();
+        proxy = await startJrAuthProxy(remote, (notice) => {
+          applyJrProxyDenial(controller, remote.token, notice);
         });
       },
     });
@@ -99,6 +99,28 @@ it('authenticates real invites, meters the actual model proxy and stops the clie
   expect(denied.status).toBe(401);
   expect(employee.controller.state).toEqual({ status: 'revoked', user: null });
   expect(employee.stopCore).toHaveBeenCalledOnce();
+  expect(employee.saved?.token).toBeNull();
+});
+
+it('a blocked employee loses the workspace on the next gateway call and can return after unblock', async () => {
+  const { adminCode, client } = await fixture();
+  const owner = client(),
+    employee = client();
+  await owner.controller.initialize();
+  await owner.controller.login({ code: adminCode });
+  const invitation = await owner.controller.createInvite({ name: 'Ana' });
+  await employee.controller.initialize();
+  await employee.controller.login({ code: invitation.code });
+  const kept = employee.saved?.token;
+  await owner.controller.setBlocked({ employeeId: invitation.id, blocked: true });
+  const local = employee.proxy!.connection;
+  const denied = await fetch(`${local.url}/models`, { headers: { Authorization: `Bearer ${local.token}` } });
+  expect(denied.status).toBe(403);
+  expect(await denied.text()).toBe('');
+  expect(employee.controller.state).toEqual({ status: 'blocked', user: null });
+  expect(employee.saved?.token).toBe(kept);
+  await owner.controller.setBlocked({ employeeId: invitation.id, blocked: false });
+  expect((await employee.controller.accessStatus()).status).toBe('authenticated');
 });
 
 it('preserves an installation binding after logout and reuses only a new invite for the same employee', async () => {
@@ -121,4 +143,56 @@ it('preserves an installation binding after logout and reuses only a new invite 
   const renewed = await owner.controller.reissueInvite({ employeeId: first.id });
   await employee.controller.login({ code: renewed.code });
   expect(employee.controller.state.user?.id).toBe(first.id);
+});
+
+it('recognizes the owner as an administrator and creates an employee with an optional email', async () => {
+  const { adminCode, client } = await fixture();
+  const owner = client();
+  await owner.controller.initialize();
+  const signedIn = await owner.controller.login({ code: adminCode });
+  expect(signedIn.user).toMatchObject({ id: 'owner', name: 'Lucas Zocaratto', role: 'admin' });
+  const invitation = await owner.controller.createInvite({ name: 'Ana', email: 'ana@empresa.com' });
+  const listed = await owner.controller.listEmployees();
+  expect(listed).toHaveLength(1);
+  expect(listed[0]).toMatchObject({
+    id: invitation.id,
+    name: 'Ana',
+    email: 'ana@empresa.com',
+    role: 'employee',
+    revoked: false,
+    blocked: false,
+    tokenLimit: null,
+    accessStart: null,
+    accessEnd: null,
+  });
+  expect(invitation.code.startsWith('JR-')).toBe(true);
+});
+
+it('lists an employee created without an email and rejects a malformed email before saving', async () => {
+  const { adminCode, client } = await fixture();
+  const owner = client();
+  await owner.controller.initialize();
+  await owner.controller.login({ code: adminCode });
+  const invitation = await owner.controller.createInvite({ name: 'Bruno', email: '   ' });
+  expect((await owner.controller.listEmployees())[0]).toMatchObject({ id: invitation.id, email: null });
+  await expect(owner.controller.createInvite({ name: 'Carlos', email: 'not-an-email' })).rejects.toThrow(
+    'JR_ACCESS_INVALID_EMAIL'
+  );
+  expect(await owner.controller.listEmployees()).toHaveLength(1);
+});
+
+it('blocks and revokes an employee created through the control service', async () => {
+  const { adminCode, client } = await fixture();
+  const owner = client();
+  await owner.controller.initialize();
+  await owner.controller.login({ code: adminCode });
+  const invitation = await owner.controller.createInvite({ name: 'Ana', email: 'ana@empresa.com' });
+  await owner.controller.setBlocked({ employeeId: invitation.id, blocked: true });
+  expect((await owner.controller.listEmployees())[0]).toMatchObject({
+    id: invitation.id,
+    blocked: true,
+    revoked: false,
+  });
+  await owner.controller.revoke({ employeeId: invitation.id });
+  expect((await owner.controller.listEmployees())[0]).toMatchObject({ id: invitation.id, revoked: true });
 });

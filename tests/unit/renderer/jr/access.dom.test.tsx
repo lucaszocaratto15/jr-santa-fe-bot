@@ -20,6 +20,16 @@ beforeEach(() => {
   mocks.listener.mockReturnValue(() => {});
   mocks.status.mockResolvedValue({ status: 'signed-out', user: null });
 });
+it('skips the login screen when the desktop process already restored a session', async () => {
+  mocks.status.mockResolvedValue({ status: 'authenticated', user: { id: 'person', name: 'Pessoa', role: 'employee' } });
+  render(
+    <JrAccessGate>
+      <div>private content</div>
+    </JrAccessGate>
+  );
+  expect(await screen.findByText('private content')).toBeInTheDocument();
+  expect(screen.queryByLabelText('common.jr.access.code')).not.toBeInTheDocument();
+});
 it('blocks company contents until a code is verified by the native service', async () => {
   render(
     <JrAccessGate>

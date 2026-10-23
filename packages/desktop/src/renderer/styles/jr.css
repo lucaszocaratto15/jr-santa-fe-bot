@@ -11,8 +11,12 @@
   --jr-border-strong: #1c1c1c3d;
   --jr-composer-shadow: 0 2px 8px -1px #0000000d, 0 1px 2px #00000008, 0 0 0 1px #e4e4e40a;
   --jr-shadow: #0000000a;
-  --jr-focus: #1e86fc;
+  --jr-focus: #90182c;
   --jr-accent: #90182c;
+  --jr-composer-idle: #e4e4e4;
+  --jr-composer-idle-icon: #1c1c1c;
+  --jr-composer-muted: #ececec;
+  --jr-composer-muted-icon: #5c5c5c;
   --accent: #90182c;
   --jr-on-accent: #ffffff;
   --jr-chat: #ffffff;
@@ -91,6 +95,10 @@ body[arco-theme='dark'] {
   --primary-5: 222, 222, 222;
   --primary-6: 244, 244, 244;
   --primary-7: 255, 255, 255;
+  --jr-composer-idle: #3a3a3a;
+  --jr-composer-idle-icon: #f4f4f4;
+  --jr-composer-muted: #2c2c2c;
+  --jr-composer-muted-icon: #a3a3a3;
 }
 
 .app-shell {
@@ -117,11 +125,22 @@ body[arco-theme='dark'] {
 .app-shell .layout-sider > .arco-layout-sider-children {
   overflow: hidden;
 }
-.app-shell .layout-sider-header,
 .app-shell .chat-layout-header {
   -webkit-app-region: drag;
 }
+.app-shell .layout-sider-header,
+.app-shell .jr-sider-chrome,
+.app-shell .jr-sider-brandline,
+.app-shell [data-app-region='no-drag'],
+.app-shell .jr-sider-toggle {
+  -webkit-app-region: no-drag;
+}
 .app-shell button,
+.app-shell input,
+.app-shell textarea,
+.app-shell select,
+.app-shell a,
+.app-shell [role='button'],
 .jr-brand-symbol {
   -webkit-app-region: no-drag;
 }
@@ -139,41 +158,171 @@ body[arco-theme='dark'] {
   display: none;
 }
 .jr-chat-bot-title {
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 15px;
+  font-weight: 600;
   line-height: 20px;
+  color: var(--color-text-1);
 }
 
 .app-shell .layout-sider-header {
   min-height: 0;
-  padding-top: calc(var(--titlebar-height, 36px) + 2px);
-  padding-bottom: 0;
+  padding: 0 0 8px;
+}
+.app-shell .jr-sider-header {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 4px;
+}
+.app-shell .jr-sider-chrome {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  box-sizing: border-box;
+  height: 40px;
+  min-height: 40px;
+  padding: 0 12px;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 40;
+  pointer-events: none;
+}
+.app-shell--mac .jr-sider-chrome {
+  height: 44px;
+  min-height: 44px;
+  padding-left: 96px;
+}
+.app-shell button.jr-sider-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  color: var(--color-text-2);
+  background: transparent;
+  position: relative;
+  z-index: 41;
+  pointer-events: auto;
+}
+.app-shell button.jr-sider-toggle:hover {
+  color: var(--color-text-1);
+  background: var(--bg-hover);
+}
+.app-shell button.jr-sider-toggle--floating {
+  position: absolute;
+  top: 4px;
+  left: 12px;
+  z-index: 50;
+}
+.app-shell--mac button.jr-sider-toggle--floating {
+  top: 6px;
+  left: 96px;
+}
+.app-shell .jr-sider-brandline {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  min-height: 40px;
+  padding: 0 12px;
+}
+.app-shell .jr-sider-brandline .jr-brand-symbol {
+  justify-content: flex-start;
+  height: 28px;
+  max-width: 140px;
+}
+.app-shell .jr-sider-brandline .jr-brand-logo {
+  height: 20px !important;
+  width: auto !important;
+  max-width: 120px !important;
+  max-height: 20px !important;
+}
+.app-shell .jr-sider-actions-slot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.app-shell .jr-sider-actions-slot .arco-btn {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+}
+.app-shell .layout-sider.arco-layout-sider {
+  transition: width 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.app-shell .layout-sider.layout-sider--dragging {
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-shell .layout-sider.arco-layout-sider {
+    transition: none;
+  }
 }
 .app-shell .chat-layout-header {
-  min-height: 64px;
+  min-height: 56px;
   background: transparent;
 }
 .app-shell .chat-layout-header:has(.jr-chat-bot-title) {
+  display: grid;
+  grid-template-columns: minmax(40px, 1fr) auto minmax(40px, 1fr);
+  align-items: center;
+  min-height: 56px;
+  padding: 0 12px !important;
+  overflow: visible;
+  contain: none;
   background: transparent !important;
 }
-.app-shell .chat-layout-header:has(.jr-chat-bot-title) > :first-child {
-  position: absolute;
-  left: 50%;
-  top: 12px;
-  transform: translateX(-50%);
+.app-shell .chat-layout-header:has(.jr-chat-bot-title) > .chat-layout-header__title {
+  grid-column: 2;
+  justify-self: center;
+  flex: none;
   width: auto;
+  min-width: 0;
   height: auto;
-  justify-content: center;
-  z-index: 1;
 }
-.app-shell .chat-layout-header:has(.jr-chat-bot-title) .group {
+.app-shell .chat-layout-header:has(.jr-chat-bot-title) > .chat-layout-header__extra {
+  grid-column: 3;
+  justify-self: end;
+  align-self: center;
+}
+.app-shell .chat-layout-header:has(.jr-chat-bot-title) .group,
+.app-shell .chat-layout-header:has(.jr-chat-bot-title) .group:hover,
+.app-shell .chat-layout-header:has(.jr-chat-bot-title) .group:focus-within {
   width: auto !important;
-  max-width: 280px !important;
-  border-radius: 999px !important;
-  background: var(--jr-surface-2);
-  border: 1px solid var(--jr-hairline) !important;
-  padding-inline-end: 14px;
+  max-width: 320px !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  padding-inline-end: 0;
   color: var(--color-text-1);
+}
+.app-shell .chat-layout-header:has(.jr-chat-bot-title) .group > .shrink-0 {
+  padding-inline-start: 0;
+}
+.app-shell .chat-layout-header:has(.jr-chat-bot-title) .group > .w-0 {
+  display: none !important;
+}
+.jr-chat-bot-mark {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+}
+.jr-chat-bot-mark img {
+  display: block;
+  width: 32px;
+  height: 32px;
+  box-shadow: none;
 }
 .jr-brand-symbol {
   display: flex;
@@ -197,6 +346,10 @@ body[arco-theme='dark'] {
 .jr-bubble {
   box-sizing: border-box;
   color: var(--color-text-1);
+  /* A real text caret must never blink in a finished bubble. Selection stays on. */
+  caret-color: transparent;
+  user-select: text;
+  -webkit-user-select: text;
 }
 .jr-bubble-user {
   display: inline-block;
@@ -221,53 +374,147 @@ body[arco-theme='dark'] {
   padding: 4px 0 8px !important;
   color: var(--color-text-2);
 }
-.jr-working-avatar {
-  display: inline-flex;
-  width: 22px;
-  height: 22px;
-  flex-shrink: 0;
-}
-.jr-working-avatar img {
-  width: 22px;
-  height: 22px;
-}
-.jr-working-dots {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-}
-.jr-working-dots i {
+.jr-working-mark {
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background: var(--jr-accent);
-  animation: jr-pulse 1.2s ease-out infinite;
-}
-.jr-working-dots i:nth-child(2) {
-  animation-delay: 0.15s;
-}
-.jr-working-dots i:nth-child(3) {
-  animation-delay: 0.3s;
-}
-body[data-jr-streaming='1'] .jr-bubble-assistant::after {
-  content: '';
-  display: inline-block;
-  width: 2px;
-  height: 1em;
-  margin-inline-start: 2px;
-  background: currentColor;
-  vertical-align: text-bottom;
-  animation: jr-caret 1s steps(1) infinite;
+  flex-shrink: 0;
 }
 .app-shell .sendbox-panel {
   border-radius: 24px;
   background: var(--jr-surface-2);
 }
-.app-shell [data-testid='sendbox-send-btn'] {
-  background: var(--jr-accent);
-  border-color: var(--jr-accent);
-  color: var(--jr-on-accent);
+.app-shell .sendbox-panel:focus-within {
+  border-color: var(--jr-accent) !important;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--jr-accent) 40%, transparent) !important;
+}
+.app-shell .sendbox-stop-button.bg-animate,
+.app-shell .sendbox-stop-button.arco-btn.bg-animate,
+.app-shell .sendbox-stop-button.arco-btn-secondary.bg-animate,
+body[arco-theme='dark'] .app-shell .sendbox-stop-button.bg-animate,
+html[data-theme='dark'] .app-shell .sendbox-stop-button.bg-animate,
+[data-theme='dark'] .app-shell .sendbox-stop-button.bg-animate {
+  animation: none !important;
+  background-color: var(--jr-accent) !important;
+  border-color: var(--jr-accent) !important;
+  box-shadow: none !important;
+  color: var(--jr-on-accent) !important;
+}
+.app-shell .sendbox-stop-button .bg-6,
+.app-shell .sendbox-stop-button .arco-btn-icon > div {
+  background-color: var(--jr-on-accent) !important;
+}
+.app-shell .sendbox-panel .send-button-custom--enabled,
+.app-shell .sendbox-panel .send-button-custom--enabled.arco-btn,
+.app-shell .sendbox-panel .send-button-custom--enabled:not(:disabled):hover,
+.app-shell .sendbox-panel .send-button-custom--enabled.arco-btn:not(:disabled):hover,
+.app-shell .sendbox-panel .send-button-custom--enabled:not(:disabled):active,
+.app-shell .sendbox-panel .send-button-custom--enabled.arco-btn:not(:disabled):active,
+.app-shell .sendbox-panel .send-button-custom--enabled:not(:disabled):focus,
+.app-shell .sendbox-panel .send-button-custom--enabled.arco-btn:not(:disabled):focus,
+.app-shell .sendbox-panel .send-button-custom--enabled:not(:disabled):focus-visible,
+.app-shell .sendbox-panel .send-button-custom--enabled.arco-btn:not(:disabled):focus-visible {
+  background-color: var(--jr-accent) !important;
+  border-color: var(--jr-accent) !important;
+  color: var(--jr-on-accent) !important;
+}
+.app-shell .sendbox-panel .send-button-custom--enabled svg,
+.app-shell .sendbox-panel .send-button-custom--enabled svg * {
+  stroke: var(--jr-on-accent) !important;
+  fill: none !important;
+}
+.app-shell .sendbox-panel .send-button-custom--disabled,
+.app-shell .sendbox-panel .send-button-custom--disabled:disabled,
+.app-shell .sendbox-panel .send-button-custom--disabled.arco-btn:disabled,
+.app-shell .sendbox-panel .send-button-custom--disabled.arco-btn-disabled,
+.app-shell .sendbox-panel .sendbox-draft-tool-action--disabled,
+.app-shell .sendbox-panel .sendbox-draft-tool-action--disabled:disabled,
+.app-shell .sendbox-panel .sendbox-draft-tool-action--disabled.arco-btn:disabled,
+.app-shell .sendbox-panel .sendbox-draft-tool-action--disabled.arco-btn-disabled,
+.app-shell .sendbox-panel .sendbox-draft-tool-action--disabled.arco-btn-secondary:disabled {
+  background-color: var(--jr-composer-muted) !important;
+  border-color: var(--jr-composer-muted) !important;
+  color: var(--jr-composer-muted-icon) !important;
+  opacity: 1 !important;
+}
+.app-shell .sendbox-panel .send-button-custom--disabled svg,
+.app-shell .sendbox-panel .send-button-custom--disabled svg *,
+.app-shell .sendbox-panel .sendbox-draft-tool-action--disabled svg,
+.app-shell .sendbox-panel .sendbox-draft-tool-action--disabled svg * {
+  stroke: var(--jr-composer-muted-icon) !important;
+  fill: none !important;
+}
+.app-shell .sendbox-panel .sendbox-draft-tool-action--enabled,
+.app-shell .sendbox-panel .sendbox-draft-tool-action--enabled.arco-btn,
+.app-shell .sendbox-panel .sendbox-draft-tool-action--enabled.arco-btn-secondary,
+.app-shell .sendbox-panel .sendbox-draft-tool-action--enabled:not(:disabled):hover,
+.app-shell .sendbox-panel .sendbox-draft-tool-action--enabled.arco-btn:not(:disabled):hover,
+.app-shell .sendbox-panel .sendbox-draft-tool-action--enabled:not(:disabled):active,
+.app-shell .sendbox-panel .sendbox-draft-tool-action--enabled.arco-btn:not(:disabled):active,
+.app-shell .sendbox-panel .sendbox-draft-tool-action--enabled:not(:disabled):focus,
+.app-shell .sendbox-panel .sendbox-draft-tool-action--enabled.arco-btn:not(:disabled):focus,
+.app-shell .sendbox-panel .sendbox-draft-tool-action--enabled:not(:disabled):focus-visible,
+.app-shell .sendbox-panel .sendbox-draft-tool-action--enabled.arco-btn:not(:disabled):focus-visible {
+  background-color: var(--jr-composer-idle) !important;
+  border-color: var(--jr-composer-idle) !important;
+  color: var(--jr-composer-idle-icon) !important;
+}
+.app-shell .sendbox-panel .sendbox-draft-tool-action--enabled svg,
+.app-shell .sendbox-panel .sendbox-draft-tool-action--enabled svg * {
+  stroke: var(--jr-composer-idle-icon) !important;
+  fill: none !important;
+}
+/* Dark sendbox.css pins disabled icons to --text-disabled with equal !important.
+   These selectors stay one class deeper so the muted icon still wins. */
+html[data-theme='dark'] body .app-shell .sendbox-panel .send-button-custom--disabled,
+html[data-theme='dark'] body .app-shell .sendbox-panel .send-button-custom--disabled:disabled,
+html[data-theme='dark'] body .app-shell .sendbox-panel .send-button-custom--disabled.arco-btn:disabled,
+html[data-theme='dark'] body .app-shell .sendbox-panel .send-button-custom--disabled.arco-btn-disabled,
+body[arco-theme='dark'] .app-shell .sendbox-panel .send-button-custom--disabled,
+body[arco-theme='dark'] .app-shell .sendbox-panel .send-button-custom--disabled:disabled,
+body[arco-theme='dark'] .app-shell .sendbox-panel .send-button-custom--disabled.arco-btn:disabled,
+body[arco-theme='dark'] .app-shell .sendbox-panel .send-button-custom--disabled.arco-btn-disabled,
+html[data-theme='dark'] body .app-shell .sendbox-panel .sendbox-draft-tool-action--disabled,
+html[data-theme='dark'] body .app-shell .sendbox-panel .sendbox-draft-tool-action--disabled:disabled,
+html[data-theme='dark'] body .app-shell .sendbox-panel .sendbox-draft-tool-action--disabled.arco-btn:disabled,
+html[data-theme='dark'] body .app-shell .sendbox-panel .sendbox-draft-tool-action--disabled.arco-btn-disabled,
+html[data-theme='dark'] body .app-shell .sendbox-panel .sendbox-draft-tool-action--disabled.arco-btn-secondary:disabled,
+body[arco-theme='dark'] .app-shell .sendbox-panel .sendbox-draft-tool-action--disabled,
+body[arco-theme='dark'] .app-shell .sendbox-panel .sendbox-draft-tool-action--disabled:disabled,
+body[arco-theme='dark'] .app-shell .sendbox-panel .sendbox-draft-tool-action--disabled.arco-btn:disabled,
+body[arco-theme='dark'] .app-shell .sendbox-panel .sendbox-draft-tool-action--disabled.arco-btn-disabled,
+body[arco-theme='dark'] .app-shell .sendbox-panel .sendbox-draft-tool-action--disabled.arco-btn-secondary:disabled {
+  background-color: var(--jr-composer-muted) !important;
+  border-color: var(--jr-composer-muted) !important;
+  color: var(--jr-composer-muted-icon) !important;
+}
+html[data-theme='dark'] body .app-shell .sendbox-panel .send-button-custom--disabled svg,
+html[data-theme='dark'] body .app-shell .sendbox-panel .send-button-custom--disabled svg *,
+body[arco-theme='dark'] .app-shell .sendbox-panel .send-button-custom--disabled svg,
+body[arco-theme='dark'] .app-shell .sendbox-panel .send-button-custom--disabled svg *,
+html[data-theme='dark'] body .app-shell .sendbox-panel .sendbox-draft-tool-action--disabled svg,
+html[data-theme='dark'] body .app-shell .sendbox-panel .sendbox-draft-tool-action--disabled svg *,
+body[arco-theme='dark'] .app-shell .sendbox-panel .sendbox-draft-tool-action--disabled svg,
+body[arco-theme='dark'] .app-shell .sendbox-panel .sendbox-draft-tool-action--disabled svg * {
+  stroke: var(--jr-composer-muted-icon) !important;
+  fill: none !important;
+}
+html[data-theme='dark'] body .app-shell .sendbox-panel .send-button-custom--enabled,
+html[data-theme='dark'] body .app-shell .sendbox-panel .send-button-custom--enabled.arco-btn,
+body[arco-theme='dark'] .app-shell .sendbox-panel .send-button-custom--enabled,
+body[arco-theme='dark'] .app-shell .sendbox-panel .send-button-custom--enabled.arco-btn {
+  background-color: var(--jr-accent) !important;
+  border-color: var(--jr-accent) !important;
+  color: var(--jr-on-accent) !important;
+}
+html[data-theme='dark'] body .app-shell .sendbox-panel .sendbox-draft-tool-action--enabled,
+html[data-theme='dark'] body .app-shell .sendbox-panel .sendbox-draft-tool-action--enabled.arco-btn,
+body[arco-theme='dark'] .app-shell .sendbox-panel .sendbox-draft-tool-action--enabled,
+body[arco-theme='dark'] .app-shell .sendbox-panel .sendbox-draft-tool-action--enabled.arco-btn {
+  background-color: var(--jr-composer-idle) !important;
+  border-color: var(--jr-composer-idle) !important;
+  color: var(--jr-composer-idle-icon) !important;
 }
 @keyframes jr-message-in {
   from {
@@ -277,22 +524,6 @@ body[data-jr-streaming='1'] .jr-bubble-assistant::after {
   to {
     opacity: 1;
     transform: none;
-  }
-}
-@keyframes jr-pulse {
-  0%,
-  100% {
-    opacity: 0.35;
-    transform: scale(0.85);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-@keyframes jr-caret {
-  50% {
-    opacity: 0;
   }
 }
 body[arco-theme='dark'] .color-black,
@@ -326,9 +557,7 @@ body:not([arco-theme='dark']) .jr-bubble-assistant {
   color: var(--color-text-1);
 }
 @media (prefers-reduced-motion: reduce) {
-  .jr-message-in,
-  .jr-working-dots i,
-  body[data-jr-streaming='1'] .jr-bubble-assistant::after {
+  .jr-message-in {
     animation: none;
   }
 }

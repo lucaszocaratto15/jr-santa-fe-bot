@@ -1,8 +1,8 @@
 import { ipcBridge } from '@/common';
 import type { JrAppearance } from '@/common/config/clientSettings';
 import { Close } from '@icon-park/react';
-import { Alert, Button, Checkbox, Input, Modal, Select } from '@arco-design/web-react';
-import React, { useEffect, useRef, useState } from 'react';
+import { Alert, Button, Input, Modal } from '@arco-design/web-react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { JR_DEFAULT_INSTRUCTIONS, saveJrBot, type JrBot } from './jrBots';
 import { CHARACTER_COLORS, CHARACTER_PALETTE, CHARACTER_SHAPES, normalizeAppearance } from './botAppearance';
@@ -19,11 +19,6 @@ const JrBotDialog: React.FC<{
   const [name, setName] = useState('');
   const [appearance, setAppearance] = useState<JrAppearance>({ shape: 'cloud', color: 'red' });
   const [learning, setLearning] = useState('');
-  const [skillIds, setSkillIds] = useState<string[]>([]);
-  const [availableSkills, setAvailableSkills] = useState<Array<{ name: string; description: string }>>([]);
-  const [skillsUnavailable, setSkillsUnavailable] = useState(false);
-  const [useChrome, setUseChrome] = useState(true);
-  const skillsTouched = useRef(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   useEffect(() => {
@@ -31,25 +26,7 @@ const JrBotDialog: React.FC<{
       setName(bot?.name || '');
       setAppearance(normalizeAppearance(bot?.appearance));
       setLearning(bot?.learning ?? '');
-      setSkillIds(bot?.skillIds ?? []);
-      setUseChrome(bot?.useChrome !== false);
-      skillsTouched.current = false;
       setError('');
-      setSkillsUnavailable(false);
-      let active = true;
-      void ipcBridge.fs.listAvailableSkills.invoke().then(
-        (skills) => {
-          if (!active) return;
-          setAvailableSkills(skills);
-          if (!bot && !skillsTouched.current) setSkillIds(skills.map((skill) => skill.name));
-        },
-        () => {
-          if (active) setSkillsUnavailable(true);
-        }
-      );
-      return () => {
-        active = false;
-      };
     }
   }, [visible, bot]);
   const save = async () => {
@@ -73,8 +50,6 @@ const JrBotDialog: React.FC<{
           workspace,
           appearance,
           learning,
-          skillIds,
-          useChrome,
         },
         bot?.id
       );
@@ -98,6 +73,7 @@ const JrBotDialog: React.FC<{
             icon={<Close size={18} />}
             aria-label={t('common.close')}
             disabled={saving}
+            onMouseDown={(event) => event.stopPropagation()}
             onClick={onClose}
           />
         </>
@@ -145,52 +121,6 @@ const JrBotDialog: React.FC<{
           onPressEnter={() => void save()}
         />
         <div className={styles.botSettings}>
-          <div className={styles.skillHeader}>
-            <label htmlFor='jr-bot-skills'>{t('common.jr.skillsTitle')}</label>
-            <Button
-              type='text'
-              size='mini'
-              className={styles.skillToggle}
-              disabled={saving || !availableSkills.length}
-              onClick={() => {
-                skillsTouched.current = true;
-                const allSelected = availableSkills.every((skill) => skillIds.includes(skill.name));
-                setSkillIds(allSelected ? [] : availableSkills.map((skill) => skill.name));
-              }}
-            >
-              {t(
-                availableSkills.length > 0 && availableSkills.every((skill) => skillIds.includes(skill.name))
-                  ? 'common.jr.skillsSelectNone'
-                  : 'common.jr.skillsSelectAll'
-              )}
-            </Button>
-          </div>
-          <Select
-            id='jr-bot-skills'
-            mode='multiple'
-            allowClear
-            value={skillIds}
-            onChange={(value) => {
-              skillsTouched.current = true;
-              setSkillIds(Array.isArray(value) ? value : []);
-            }}
-            disabled={saving || !availableSkills.length}
-            placeholder={t('common.jr.skillsPlaceholder')}
-            maxTagCount={3}
-          >
-            {availableSkills.map((skill) => (
-              <Select.Option key={skill.name} value={skill.name} title={skill.description}>
-                {skill.name}
-              </Select.Option>
-            ))}
-          </Select>
-          <p className={styles.botHint}>
-            {skillsUnavailable ? t('common.jr.skillsUnavailable') : t('common.jr.skillsHint')}
-          </p>
-          <Checkbox checked={useChrome} disabled={saving} onChange={setUseChrome}>
-            {t('common.jr.chromeEnabled')}
-          </Checkbox>
-          <p className={styles.botHint}>{t('common.jr.chromeEnabledHint')}</p>
           <label htmlFor='jr-bot-learning'>{t('common.jr.learningTitle')}</label>
           <Input.TextArea
             id='jr-bot-learning'
@@ -208,13 +138,15 @@ const JrBotDialog: React.FC<{
             <Button
               key={shape}
               type='text'
-              className={`${styles.shapeChoice} ${shape === appearance.shape ? styles.shapeSelected : ''}`}
+              className={styles.shapeChoice}
               aria-label={t(`common.jr.shapes.${shape}`)}
               aria-pressed={shape === appearance.shape}
               disabled={saving}
               onClick={() => setAppearance({ ...appearance, shape })}
             >
-              <JrCharacter appearance={{ ...appearance, shape }} size={36} />
+              <span className={`${styles.shapeMark} ${shape === appearance.shape ? styles.shapeMarkOn : ''}`}>
+                <JrCharacter appearance={{ ...appearance, shape }} size={36} still />
+              </span>
             </Button>
           ))}
         </div>

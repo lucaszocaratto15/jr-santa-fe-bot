@@ -25,6 +25,25 @@ export type WindowBounds = {
 export const MIN_WINDOW_WIDTH = 400;
 export const MIN_WINDOW_HEIGHT = 600;
 
+/**
+ * Top-left inset of the macOS traffic lights, in the Electron
+ * `trafficLightPosition` coordinate system (y is the distance from the window
+ * top to the top of the buttons). A 13px inset leaves the controls in the
+ * rounded-corner clip, so only the bottom of each light is visible. 20×22
+ * clears that corner and keeps the full controls inside the window.
+ */
+export const MAC_TRAFFIC_LIGHT_POSITION = { x: 20, y: 22 } as const;
+
+export const macTitleBarOptions = (): {
+  titleBarStyle: 'hiddenInset';
+  trafficLightPosition: { x: number; y: number };
+  roundedCorners: true;
+} => ({
+  titleBarStyle: 'hiddenInset',
+  trafficLightPosition: { x: MAC_TRAFFIC_LIGHT_POSITION.x, y: MAC_TRAFFIC_LIGHT_POSITION.y },
+  roundedCorners: true,
+});
+
 // Default window fills 80% of the primary display horizontally and 95%
 // vertically. The tall aspect ratio favors chat / long-form content and
 // avoids the cramped strip shape that a square would have on ultrawide

@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
-import { readFile, stat } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { createControlServer } from '../../../../services/control/server.mjs';
+import { createStore } from '../../../../services/control/store.mjs';
 import { ADMIN_CODE, MODEL, startControl, UPSTREAM_KEY } from './support.mjs';
 
 test('requires explicit strong owner and upstream configuration', () => {
@@ -39,13 +42,99 @@ test('owner authenticates with an opaque session and cannot impersonate an emplo
   const app = await startControl(t);
   const owner = await app.login();
   assert.equal(owner.response.status, 200);
-  assert.deepEqual(owner.user, { id: 'owner', name: 'Administrador', role: 'admin' });
+  assert.deepEqual(owner.user, { id: 'owner', name: 'Lucas Zocaratto', role: 'admin' });
   assert.match(owner.token, /^[a-zA-Z0-9_-]{43}$/);
   const session = await app.request('/auth/session', { token: owner.token });
   assert.deepEqual(await session.json(), { user: owner.user });
   const invalid = await app.login('invalid-code-with-sufficient-length-to-check', 'wrong');
   assert.equal(invalid.response.status, 401);
   assert.equal(JSON.stringify(invalid).includes(ADMIN_CODE), false);
+});
+
+test('replaces a stored role-word owner name and leaves an employee with that same word', async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), 'jr-owner-name-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const databasePath = join(directory, 'control.sqlite');
+  const db = new DatabaseSync(databasePath);
+  db.exec(`CREATE TABLE users (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, role TEXT NOT NULL, created_at INTEGER NOT NULL
+  )`);
+  db.prepare("INSERT INTO users (id,name,role,created_at) VALUES ('owner','Administrador','admin',1)").run();
+  db.prepare("INSERT INTO users (id,name,role,created_at) VALUES ('emp-1','Administrador','employee',2)").run();
+  db.close();
+  const store = createStore({ databasePath, adminCode: ADMIN_CODE, model: MODEL, now: () => 1_700_000_000_000 });
+  t.after(() => store.close());
+  const owner = store.login({ code: ADMIN_CODE, deviceId: 'device-1', deviceName: 'Desk' });
+  assert.equal(owner.user.name, 'Lucas Zocaratto');
+  assert.equal(store.employees().find((person) => person.id === 'emp-1').name, 'Administrador');
+});
+
+test('keeps a real owner name already stored on the account', async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), 'jr-owner-kept-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const databasePath = join(directory, 'control.sqlite');
+  const db = new DatabaseSync(databasePath);
+  db.exec(
+    'CREATE TABLE users (id TEXT PRIMARY KEY, name TEXT NOT NULL, role TEXT NOT NULL, created_at INTEGER NOT NULL)'
+  );
+  db.prepare("INSERT INTO users (id,name,role,created_at) VALUES ('owner','Maria Souza','admin',1)").run();
+  db.close();
+  const store = createStore({ databasePath, adminCode: ADMIN_CODE, model: MODEL, now: () => 1_700_000_000_000 });
+  t.after(() => store.close());
+  const owner = store.login({ code: ADMIN_CODE, deviceId: 'device-1', deviceName: 'Desk' });
+  assert.equal(owner.user.name, 'Maria Souza');
+});
+
+test('stores an optional employee email and rejects a malformed address', async (t) => {
+  const app = await startControl(t);
+  const owner = await app.login();
+  const created = await app.request('/admin/invites', {
+    method: 'POST',
+    token: owner.token,
+    body: { name: 'Ana', email: 'ana@empresa.com' },
+  });
+  assert.equal(created.status, 201);
+  const invitation = await created.json();
+  const withEmail = await (await app.request('/admin/employees', { token: owner.token })).json();
+  assert.equal(withEmail.employees.find((person) => person.id === invitation.id).email, 'ana@empresa.com');
+  const blank = await app.request('/admin/invites', {
+    method: 'POST',
+    token: owner.token,
+    body: { name: 'Bruno', email: '   ' },
+  });
+  assert.equal(blank.status, 201);
+  const listed = await (await app.request('/admin/employees', { token: owner.token })).json();
+  assert.equal(listed.employees.find((person) => person.name === 'Bruno').email, null);
+  const malformed = await app.request('/admin/invites', {
+    method: 'POST',
+    token: owner.token,
+    body: { name: 'Carlos', email: 'not-an-email' },
+  });
+  assert.equal(malformed.status, 400);
+  assert.equal((await malformed.json()).error.code, 'invalid_request');
+});
+
+test('repairs an owner row whose role drifted away from administrator', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'jr-owner-role-'));
+  const databasePath = join(directory, 'control.sqlite');
+  const open = () => createStore({ databasePath, adminCode: ADMIN_CODE, model: MODEL });
+  try {
+    open().close();
+    const db = new DatabaseSync(databasePath);
+    db.prepare("UPDATE users SET role = 'employee' WHERE id = 'owner'").run();
+    db.close();
+    const repaired = open();
+    const session = repaired.login({
+      code: ADMIN_CODE,
+      deviceId: 'device-owner-repair',
+      deviceName: 'Computador',
+    });
+    assert.equal(session.user.role, 'admin');
+    assert.equal(session.user.id, 'owner');
+    repaired.close();
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test('owner creates a one-use invite and employee cannot administer users', async (t) => {
@@ -87,17 +176,24 @@ test('revocation immediately blocks existing sessions and unused invites without
       200
     );
   }
-  assert.equal((await app.request('/auth/session', { token: employee.token })).status, 401);
-  assert.equal(
-    (
-      await app.request('/v1/chat/completions', {
-        method: 'POST',
-        token: employee.token,
-        body: { messages: [{ role: 'user', content: 'Olá' }] },
-      })
-    ).status,
-    401
-  );
+  const employeeId = first.id;
+  for (const [method, path, body] of [
+    ['GET', '/auth/session'],
+    ['POST', '/auth/logout'],
+    ['GET', '/usage'],
+    ['GET', '/v1/models'],
+    ['POST', '/v1/chat/completions', { messages: [{ role: 'user', content: 'Olá' }] }],
+    ['GET', '/admin/employees'],
+    ['POST', '/admin/invites', { name: 'Outro' }],
+    ['POST', `/admin/employees/${employeeId}/revoke`],
+    ['POST', `/admin/employees/${employeeId}/invite`],
+    ['POST', `/admin/employees/${employeeId}/block`, { blocked: true }],
+    ['POST', `/admin/employees/${employeeId}/policy`, { tokenLimit: null, accessStart: null, accessEnd: null }],
+  ]) {
+    const response = await app.request(path, { method, token: employee.token, body });
+    assert.equal(response.status, 401, path);
+    assert.deepEqual(await response.json(), { error: { code: 'invalid_session' } });
+  }
   assert.equal((await app.login(second.code, 'second')).response.status, 401);
   assert.equal(
     (await app.request('/admin/employees/owner/revoke', { method: 'POST', token: owner.token })).status,
@@ -124,15 +220,21 @@ test('administrator can temporarily block and restore an employee without consum
   });
   assert.equal(block.status, 200);
   assert.deepEqual(await block.json(), { blocked: true });
-  for (const response of [
-    await app.request('/auth/session', { token: employee.token }),
-    await app.request('/v1/chat/completions', {
-      method: 'POST',
-      token: employee.token,
-      body: { messages: [{ role: 'user', content: 'Olá' }] },
-    }),
+  for (const [method, path, body] of [
+    ['GET', '/auth/session'],
+    ['POST', '/auth/logout'],
+    ['GET', '/usage'],
+    ['GET', '/v1/models'],
+    ['POST', '/v1/chat/completions', { messages: [{ role: 'user', content: 'Olá' }] }],
+    ['GET', '/admin/employees'],
+    ['POST', '/admin/invites', { name: 'Outro' }],
+    ['POST', `/admin/employees/${invitation.id}/revoke`],
+    ['POST', `/admin/employees/${invitation.id}/invite`],
+    ['POST', `/admin/employees/${invitation.id}/block`, { blocked: false }],
+    ['POST', `/admin/employees/${invitation.id}/policy`, { tokenLimit: 1, accessStart: null, accessEnd: null }],
   ]) {
-    assert.equal(response.status, 403);
+    const response = await app.request(path, { method, token: employee.token, body });
+    assert.equal(response.status, 403, path);
     assert.deepEqual(await response.json(), { error: { code: 'employee_blocked' } });
   }
   assert.equal(upstreamCalls, 0);

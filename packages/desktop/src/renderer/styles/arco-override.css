@@ -328,6 +328,23 @@ body[arco-theme='dark'] .arco-modal-confirm-icon {
   color: var(--warning) !important;
 }
 
+/*
+ * A frameless drag region keeps the click even when a dialog is painted above it.
+ * The open modal layer opts out, so the X, Cancel, fields, and backdrop receive it.
+ */
+.arco-modal-mask,
+.arco-modal-wrapper,
+.arco-modal,
+.arco-modal-close-icon,
+.arco-modal button,
+.arco-modal input,
+.arco-modal textarea,
+.arco-modal select,
+.arco-modal a,
+.arco-modal [role='button'] {
+  -webkit-app-region: no-drag;
+}
+
 /* Modal form controls need visible idle outlines so fields don't disappear into the dialog surface. */
 .arco-modal
   .arco-input:not(.arco-input-disabled):not(.arco-input-error):not(.arco-input-warning):not(.arco-input-focus):not(

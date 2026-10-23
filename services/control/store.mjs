@@ -9,7 +9,22 @@ const ACCESS_TIME_ZONE = 'America/Sao_Paulo';
 const hash = (value) => createHash('sha256').update(value).digest();
 const keyHash = (value) => hash(value).toString('hex');
 const iso = (value) => (value === null || value === undefined ? null : new Date(value).toISOString());
-const publicUser = (row) => ({ id: row.id, name: row.name, role: row.role });
+const publicUser = (row) => ({ id: row.id, name: row.name, role: row.id === 'owner' ? 'admin' : row.role });
+
+function optionalEmail(value) {
+  if (value == null) return null;
+  if (typeof value !== 'string') throw httpError(400, 'invalid_request');
+  const email = value.trim();
+  if (!email) return null;
+  if (
+    email.length > 120 ||
+    [...email].some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127) ||
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(email)
+  ) {
+    throw httpError(400, 'invalid_request');
+  }
+  return email;
+}
 
 function clockMinutes(value) {
   if (typeof value !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/u.test(value)) return null;
@@ -54,6 +69,9 @@ function isWithinAccessHours(start, end, timestamp) {
  * later decision can turn enforcement back on without a schema change.
  */
 export const TOKEN_LIMITS_ENFORCED = false;
+
+/** Shown for the owner. A role word such as "Administrador" is not a person's name. */
+const OWNER_PROFILE_NAME = 'Lucas Zocaratto';
 
 const FIVE_HOURS_MS = 5 * 60 * 60 * 1000;
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
@@ -100,12 +118,18 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
     ['token_limit', 'INTEGER'],
     ['access_start', 'TEXT'],
     ['access_end', 'TEXT'],
+    ['email', 'TEXT'],
   ]) {
     if (!userColumns.has(name)) db.exec(`ALTER TABLE users ADD COLUMN ${name} ${type}`);
   }
-  db.prepare("INSERT OR IGNORE INTO users (id,name,role,created_at) VALUES ('owner','Administrador','admin',?)").run(
+  db.prepare("INSERT OR IGNORE INTO users (id,name,role,created_at) VALUES ('owner',?,'admin',?)").run(
+    OWNER_PROFILE_NAME,
     now()
   );
+  db.prepare("UPDATE users SET role = 'admin' WHERE id = 'owner'").run();
+  db.prepare(
+    "UPDATE users SET name = ? WHERE id = 'owner' AND lower(trim(name)) IN ('administrador', 'administrator', 'admin')"
+  ).run(OWNER_PROFILE_NAME);
   const ownerHash = hash(adminCode);
   const transaction = (action) => {
     db.exec('BEGIN IMMEDIATE');
@@ -213,16 +237,18 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
     },
     invite(name, input = {}) {
       const policy = validatePolicy(input);
+      const email = optionalEmail(input.email);
       return transaction(() => {
         const id = randomUUID();
-        db.prepare(`INSERT INTO users (id,name,role,created_at,token_limit,access_start,access_end)
-          VALUES (?,?,'employee',?,?,?,?)`).run(
+        db.prepare(`INSERT INTO users (id,name,role,created_at,token_limit,access_start,access_end,email)
+          VALUES (?,?,'employee',?,?,?,?,?)`).run(
           id,
           name,
           now(),
           policy.tokenLimit,
           policy.accessStart,
-          policy.accessEnd
+          policy.accessEnd,
+          email
         );
         return issueInvite(id);
       });
@@ -295,6 +321,7 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
           revokedAt: iso(row.revoked_at),
           blocked: row.blocked_at !== null,
           blockedAt: iso(row.blocked_at),
+          email: row.email ?? null,
           tokenLimit: row.token_limit,
           accessStart: row.access_start,
           accessEnd: row.access_end,

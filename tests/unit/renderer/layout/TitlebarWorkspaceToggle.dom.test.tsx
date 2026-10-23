@@ -3,6 +3,9 @@ import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const platform = vi.hoisted(() => ({ desktop: true, mac: false }));
+const layoutState = vi.hoisted(() => ({
+  value: { isMobile: false } as { isMobile: boolean; workspaceToggleVisible?: boolean },
+}));
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -21,7 +24,7 @@ vi.mock('@/renderer/components/layout/WindowControls', () => ({
   default: () => <div data-testid='window-controls' />,
 }));
 vi.mock('@/renderer/hooks/context/LayoutContext', () => ({
-  useLayoutContext: () => ({ isMobile: false }),
+  useLayoutContext: () => layoutState.value,
 }));
 vi.mock('@/renderer/hooks/context/NavigationHistoryContext', () => ({
   useNavigationHistory: () => null,
@@ -44,6 +47,7 @@ describe('Titlebar workspace toggle', () => {
   beforeEach(() => {
     platform.desktop = true;
     platform.mac = false;
+    layoutState.value = { isMobile: false };
   });
 
   it('places the Windows workspace toggle before window controls without the upstream report button', () => {
@@ -78,6 +82,14 @@ describe('Titlebar workspace toggle', () => {
     });
 
     expect(screen.getByRole('button', { name: 'common.collapse' })).toBeInTheDocument();
+  });
+
+  it('omits the workspace toggle when the open chat has no right rail', () => {
+    layoutState.value = { isMobile: false, workspaceToggleVisible: false };
+    render(<Titlebar workspaceAvailable />);
+
+    expect(screen.queryByRole('button', { name: 'common.expandMore' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'common.collapse' })).not.toBeInTheDocument();
   });
 
   it('omits the workspace toggle when no workspace is available', () => {

@@ -16,7 +16,7 @@ No perfil do administrador, abra **Administração**, informe o nome do funcion�
 
 O perfil local fica vinculado ao funcionário e ao serviço que o ativou. Após sair ou expirar a sessão, um novo convite precisa pertencer à mesma pessoa. A transferência do PC para outra pessoa exige limpar/recriar o perfil por procedimento administrativo; não existe troca automática que exponha os arquivos anteriores.
 
-Use **Revogar acesso** para bloquear uma pessoa. A VPS recusa novas chamadas e cancela respostas em andamento. O aplicativo confere a sessão a cada 15 segundos, com timeout de 10 segundos por consulta; em falha de conexão, bloqueia o uso e encerra o agente que iniciou. O teste local observou encerramento em 1.012 ms, conforme o instante do ciclo de consulta.
+Use **Revogar acesso** para bloquear uma pessoa. A VPS recusa novas chamadas e cancela respostas em andamento. O aplicativo valida a sessão ao abrir, em cada chamada ao modelo e cerca de uma vez por minuto, com timeout de 10 segundos por consulta. Resposta de revogação apaga o token cifrado e volta à tela de acesso, sem conversas, bots ou uso. Bloqueio temporário também tira esses dados da tela na hora, mas guarda o token para restaurar o acesso quando o administrador desbloquear. Em falha de conexão, bloqueia o uso e encerra o agente que iniciou. O teste local observou encerramento em 1.012 ms, conforme o instante do ciclo de consulta.
 
 Revogação não recupera nem apaga documentos já copiados. O aplicativo não é um sistema de prevenção de cópia de documentos.
 
@@ -49,7 +49,15 @@ As regras atuais incluem confirmações de ferramentas e o bloqueio central de i
 | Fluxo interrompido na VPS                     | Primeiro trecho em 1.307 ms; término 78 ms após revogação; medição ausente permaneceu desconhecida                                            |
 | Conversa permanente por bot                   | Dois bots criados no Mac, uma conversa por bot; após reiniciar, cada um retomou sua palavra e histórico; editar aparência preservou o vínculo |
 
-A tarefa Chrome teve confirmações manuais, consultas repetidas e reconexão do navegador. Não existe uma medição válida do tempo total automatizado dessa tarefa. As instruções dos novos bots passaram a orientar o reaproveitamento de resultados e uma única verificação; o ganho ainda não foi medido.
+A tarefa Chrome pelo agente MiniMax teve confirmações manuais, consultas repetidas e reconexão do navegador. Não existe uma medição válida do tempo total automatizado dessa tarefa. As instruções dos novos bots passaram a orientar o reaproveitamento de resultados e uma única verificação; o ganho ainda não foi medido.
+
+Para conferir só o conector `chrome-jr` (o mesmo `npx chrome-devtools-mcp@1.12.0` gravado em Conectar aplicativos), sem abrir o Electron nem o modelo:
+
+```sh
+node scripts/jr/check-chrome-connector.mjs
+```
+
+O comando abre um Chrome com perfil temporário, navega até `https://example.com` e lê o título `Example Domain`. Saída `{"ok":true,...}` significa que o conector abriu o Chrome e atuou na página. Isso não substitui um bot já criado: a conversa do bot só recebe o Chrome se a conexão estiver verificada antes de criar o bot.
 
 O visual usa medidas estáticas da referência, com fonte de sistema, ícones e personagens próprios. Não foi comprovada igualdade visual exata; o tema escuro usa uma paleta JR aproximada. Os controles são funcionais, sem autenticação simulada ou conexões inventadas.
 

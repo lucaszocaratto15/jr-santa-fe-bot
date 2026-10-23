@@ -401,9 +401,17 @@
       "pilot": "Edição de desenvolvimento",
       "exit": "Sair",
       "adminTitle": "Administrativo",
+      "roleAdmin": "Administrador",
+      "roleEmployee": "Funcionário",
       "adminOnly": "Esta área é exclusiva do administrador.",
       "employeeName": "Nome do funcionário",
       "generateCode": "Gerar código",
+      "newEmployee": "Novo funcionário",
+      "newEmployeeTitle": "Novo funcionário",
+      "employeeEmail": "E-mail (opcional)",
+      "employeeEmailPlaceholder": "nome@empresa.com",
+      "createEmployee": "Criar e gerar código",
+      "invalidEmail": "Informe um e-mail válido ou deixe o campo vazio.",
       "generatedCode": "Código de acesso gerado",
       "copyCode": "Copiar código",
       "copied": "Código copiado",
@@ -445,15 +453,15 @@
     },
     "executing": "Working",
     "look": {
-      "unsectioned": "No folder",
+      "unsectioned": "Без розділу",
+      "pinnedBots": "Закріплені боти",
       "closeSettings": "Close settings",
       "settingsNav": "Settings",
       "tabs": {
         "general": "General",
         "computer": "Computer",
         "usage": "Usage and billing",
-        "updates": "Updates",
-        "connectors": "Connectors"
+        "updates": "Updates"
       },
       "generalTitle": "General",
       "account": "Account",
@@ -474,8 +482,6 @@
       "executionHint": "How the bot asks before acting on this computer.",
       "allowAlways": "Always allow",
       "askAlways": "Always ask",
-      "routeTraffic": "Route traffic",
-      "routeTrafficHint": "Saved on this computer. It does not change the bot engine yet.",
       "botComputer": "Bot computer",
       "updateBotComputer": "Update the bot computer",
       "updateBotComputerHint": "Keeps this app aligned with the company version.",
@@ -487,55 +493,24 @@
       "noUsage": "No usage has been reported for this session yet.",
       "requestsLabel": "Requests",
       "tokensLabel": "Tokens",
-      "usageCaption": "These numbers are reported usage. This screen has no weekly quota or reset date.",
+      "usageCaption": "Приклад стелі лише для показу. Нічого не блокується.",
       "updatesTitle": "Updates",
       "checking": "Checking for updates…",
       "versionLabel": "Version {{version}}",
       "checkUpdates": "Check for updates",
-      "connectorsTitle": "Connectors",
-      "connectorsIntro": "Services the bot can use once they are connected.",
-      "mockNote": "Connection status on this screen stays on this computer until the integration is ready.",
-      "connect": "Connect",
-      "disconnect": "Disconnect",
-      "connected": "Connected",
-      "disconnected": "Disconnected",
-      "advancedConnections": "Advanced connections",
       "react": "React",
       "reply": "Reply",
       "limit5h": "5-hour limit",
       "limitWeekly": "Weekly limit",
       "percentUsed": "{{percent}}% used",
       "usedLabel": "used",
-      "renewHours": "Renews in {{hours}}h {{minutes}}min",
+      "renewHours": "Скидання через {{hours}} год {{minutes}} хв",
       "renewDays": "Renews in {{count}} days",
       "renewSoon": "Renews soon",
-      "quotaMockNote": "The totals below are reported usage. The 5-hour and weekly limits stay on this computer until the gateway reports the quota.",
-      "connector": {
-        "gmail": {
-          "name": "Gmail",
-          "description": "Read and draft mail from the connected account."
-        },
-        "chrome": {
-          "name": "Chrome",
-          "description": "Use the browser on this computer."
-        },
-        "calendar": {
-          "name": "Calendar",
-          "description": "See events from the connected calendar."
-        },
-        "files": {
-          "name": "Files",
-          "description": "Work with folders on this computer."
-        },
-        "whatsapp": {
-          "name": "WhatsApp",
-          "description": "Draft messages in the connected WhatsApp."
-        }
-      },
-      "usedLast5h": "Últimas 5 horas",
-      "usedThisWeek": "Últimos 7 dias",
+      "usedLast5h": "Використання за 5 годин",
+      "usedThisWeek": "Використання за тиждень",
       "usedTotal": "Total",
-      "usageReportedOnly": "Consumo informado. Não há limite nem renovação."
+      "usageAmount": "{{used}} / {{limit}}"
     },
     "search": "Buscar",
     "newBot": "Novo Bot",

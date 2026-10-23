@@ -7,15 +7,15 @@ import {
   workspaceFolderLabel,
 } from '@/renderer/pages/Jr/JrSidebar/groupBots';
 import { readSpellcheck, type KeyValueStore } from '@/renderer/pages/Jr/JrSidebar/preferences';
+import { readFileSync } from 'node:fs';
 import {
-  applyLiveConnectorStatus,
-  readConnectorRecords,
-  setConnectorStatus,
-} from '@/renderer/pages/Jr/JrSidebar/connectors';
-import {
+  EXAMPLE_USAGE_WINDOW_TOKENS,
   readUsageConsumption,
   reportedTokenUse,
+  USAGE_WINDOW_5H_MS,
+  usageBarsFromSnapshot,
   usageMeterFromSnapshot,
+  usageResetIn,
 } from '@/renderer/pages/Jr/JrSidebar/usageMeter';
 
 const memoryStore = (): KeyValueStore => {
@@ -33,7 +33,7 @@ describe('groupBots', () => {
     expect(groupBots([])).toEqual({ pinned: [], sections: [] });
   });
 
-  it('pins at most the first three bots and groups the rest by folder', () => {
+  it('keeps every bot in a folder section until that bot is pinned', () => {
     const bots = [
       { id: '1', name: 'A', workspace: 'C:\\work\\compras' },
       { id: '2', name: 'B', workspace: '/tmp/vendas' },
@@ -42,9 +42,10 @@ describe('groupBots', () => {
       { id: '5', name: 'E', workspace: 'D:\\' },
     ];
     const grouped = groupBots(bots);
-    expect(grouped.pinned.map((bot) => bot.id)).toEqual(['1', '2', '3']);
+    expect(grouped.pinned).toEqual([]);
     expect(grouped.sections).toEqual([
-      { id: 'vendas', label: 'vendas', bots: [bots[3]] },
+      { id: 'compras', label: 'compras', bots: [bots[0]] },
+      { id: 'vendas', label: 'vendas', bots: [bots[1], bots[2], bots[3]] },
       { id: UNSECTIONED_ID, label: UNSECTIONED_ID, bots: [bots[4]] },
     ]);
   });
@@ -124,22 +125,57 @@ describe('teamChatsForBots', () => {
   });
 });
 
-describe('connector mock', () => {
-  it('replaces gmail and chrome with live MCP status and leaves the other rows local', () => {
-    const store = memoryStore();
-    const stored = readConnectorRecords(store);
-    const live = applyLiveConnectorStatus(stored, { gmail: 'disconnected', chrome: 'connected' });
-    expect(live.find((item) => item.id === 'gmail')?.status).toBe('disconnected');
-    expect(live.find((item) => item.id === 'chrome')?.status).toBe('connected');
-    expect(live.find((item) => item.id === 'calendar')?.status).toBe('disconnected');
-    expect(readConnectorRecords(store).find((item) => item.id === 'gmail')?.status).toBe('connected');
+describe('usage bars', () => {
+  const now = USAGE_WINDOW_5H_MS + 90 * 60 * 1000;
+
+  it('fills both windows from reported usage against the example ceiling', () => {
+    const bars = usageBarsFromSnapshot(
+      {
+        promptTokens: 10,
+        completionTokens: 5,
+        totalTokens: 15,
+        tokensLast5h: 25_000_000,
+        tokensThisWeek: 10_000_000,
+        cachedPromptTokens: 0,
+        modelRequests: 1,
+        startedAt: '2026-10-22T14:00:00.000Z',
+      },
+      now
+    );
+    expect(bars.last5h).toMatchObject({ used: 25_000_000, limit: EXAMPLE_USAGE_WINDOW_TOKENS, percent: 50 });
+    expect(bars.week).toMatchObject({ used: 10_000_000, limit: EXAMPLE_USAGE_WINDOW_TOKENS, percent: 20 });
+    expect(bars.total).toBe(15);
+    expect(bars.last5h.reset).toEqual({ hours: 3, minutes: 30 });
   });
 
-  it('leaves the catalog unchanged for an unknown connector id', () => {
-    const store = memoryStore();
-    const before = setConnectorStatus('gmail', 'disconnected', store);
-    const after = setConnectorStatus('unknown', 'connected', store);
-    expect(after).toEqual(before);
+  it('draws a missing window as empty and caps the bar at 100 percent', () => {
+    const bars = usageBarsFromSnapshot(
+      {
+        promptTokens: 4,
+        completionTokens: 6,
+        totalTokens: null,
+        tokensLast5h: null,
+        tokensThisWeek: EXAMPLE_USAGE_WINDOW_TOKENS + 1,
+        cachedPromptTokens: 0,
+        modelRequests: 1,
+        startedAt: '2026-10-22T14:00:00.000Z',
+      },
+      now
+    );
+    expect(bars.last5h.used).toBe(0);
+    expect(bars.last5h.percent).toBe(0);
+    expect(bars.week.percent).toBe(100);
+    expect(bars.week.used).toBe(EXAMPLE_USAGE_WINDOW_TOKENS + 1);
+  });
+
+  it('reads a bad clock as zero remaining and keeps enforcement off', () => {
+    expect(usageResetIn(Number.NaN, USAGE_WINDOW_5H_MS)).toEqual({ hours: 0, minutes: 0 });
+    expect(usageResetIn(-1, USAGE_WINDOW_5H_MS)).toEqual({ hours: 0, minutes: 0 });
+    const source = readFileSync('services/control/store.mjs', 'utf8');
+    expect(source).toContain('export const TOKEN_LIMITS_ENFORCED = false');
+    expect(
+      readFileSync('packages/desktop/src/renderer/pages/Jr/JrSidebar/usageMeter.ts', 'utf8').match(/50_000_000/g)
+    ).toEqual(['50_000_000']);
   });
 });
 
@@ -153,5 +189,77 @@ describe('accent token', () => {
   it('exposes bg-accent as the accent CSS variable', () => {
     const colors = (unoConfig.theme as { colors?: Record<string, string> } | undefined)?.colors;
     expect(colors?.accent).toBe('var(--accent)');
+  });
+});
+
+describe('settings modal frame', () => {
+  const css = readFileSync('packages/desktop/src/renderer/pages/Jr/JrSidebar/JrSidebar.module.css', 'utf8');
+  const chrome = readFileSync('packages/desktop/src/process/utils/windowBounds.ts', 'utf8');
+  const main = readFileSync('packages/desktop/src/index.ts', 'utf8');
+
+  it('centers the nav icon and label inside the pill', () => {
+    expect(css).toMatch(/\.nav \.tab:global\(\.arco-btn\.arco-btn-long\)\s*\{[^}]*align-items:\s*center/);
+    expect(css).toMatch(/\.nav \.tab:global\(\.arco-btn\.arco-btn-long\)\s*\{[^}]*padding:\s*14px/);
+    expect(css).toMatch(/\.tabLabel\s*\{[^}]*align-items:\s*center/);
+    expect(css).toMatch(/\.tabLabel\s*\{[^}]*line-height:\s*20px/);
+  });
+
+  it('insets the macOS traffic lights inside the rounded window', () => {
+    expect(chrome).toContain("titleBarStyle: 'hiddenInset'");
+    expect(chrome).toContain('roundedCorners: true');
+    expect(chrome).toContain('x: 20, y: 22');
+  });
+
+  it('does not keep the clipped traffic-light position', () => {
+    expect(chrome).not.toContain('y: 13');
+    expect(main).toContain('macTitleBarOptions');
+    expect(main).toContain('setWindowButtonPosition');
+    expect(main).not.toContain('trafficLightPosition: { x: 10, y: 13 }');
+  });
+
+  it('uses one JR status line and a red composer focus ring', () => {
+    const jrCss = readFileSync('packages/desktop/src/renderer/styles/jr.css', 'utf8');
+    const ring = readFileSync('packages/desktop/src/renderer/hooks/chat/useInputFocusRing.ts', 'utf8');
+    const thought = readFileSync('packages/desktop/src/renderer/components/chat/ThoughtDisplay.tsx', 'utf8');
+    expect(jrCss).toContain('.jr-working-mark');
+    expect(jrCss).not.toContain('.jr-working-dots');
+    expect(jrCss).toContain('--jr-composer-idle: #e4e4e4');
+    expect(jrCss).toContain('--jr-composer-idle-icon: #1c1c1c');
+    expect(jrCss).toContain('--jr-composer-muted-icon: #5c5c5c');
+    expect(jrCss).toContain('--jr-composer-idle: #3a3a3a');
+    expect(jrCss).toContain('--jr-composer-idle-icon: #f4f4f4');
+    expect(jrCss).toContain('--jr-composer-muted-icon: #a3a3a3');
+    expect(jrCss).toContain('stroke: var(--jr-on-accent)');
+    expect(jrCss).toContain('stroke: var(--jr-composer-idle-icon)');
+    expect(jrCss).toContain('stroke: var(--jr-composer-muted-icon)');
+    expect(jrCss).toContain('animation: none !important');
+    expect(jrCss).not.toContain('--aou-6-brand');
+    expect(jrCss).not.toContain('#1e86fc');
+    expect(ring).toContain('var(--jr-accent)');
+    expect(ring).not.toContain('#4D4B87');
+    expect(ring).not.toContain('#E1E0FF');
+    expect(thought).toContain("data-testid='jr-working-mark'");
+    expect(thought).not.toContain('jr-working-dots');
+  });
+
+  it('keeps the chat title in flow and the sidebar header on a two-row grid', () => {
+    const chrome = readFileSync('packages/desktop/src/renderer/styles/jr.css', 'utf8');
+    const layout = readFileSync('packages/desktop/src/renderer/components/layout/Layout.tsx', 'utf8');
+    expect(chrome).not.toContain('top: 12px');
+    expect(chrome).toContain('grid-template-columns: minmax(40px, 1fr) auto minmax(40px, 1fr)');
+    expect(chrome).toContain('-webkit-app-region: no-drag');
+    expect(chrome).toContain('transition: width 280ms cubic-bezier(0.22, 1, 0.36, 1)');
+    expect(chrome).toContain('.jr-sider-brandline');
+    expect(layout).toContain('jr.sider-collapsed');
+    expect(layout).toContain('jr-sider-actions-slot');
+    expect(layout).toContain("setProperty('-webkit-app-region', 'no-drag')");
+    expect(layout).toContain("data-app-region='no-drag'");
+  });
+
+  it('lets the close control and the backdrop escape the window drag region', () => {
+    expect(css).toMatch(/\.overlay\s*\{[^}]*-webkit-app-region:\s*no-drag/);
+    expect(css).toMatch(/\.overlayMac\s*\{[^}]*padding-top:\s*56px/);
+    expect(css).toMatch(/\.close:global\(\.arco-btn\)\s*\{[^}]*-webkit-app-region:\s*no-drag/);
+    expect(css).toMatch(/\.windowDrag\s*\{[^}]*-webkit-app-region:\s*drag/);
   });
 });

@@ -2,11 +2,11 @@ import { ipcBridge } from '@/common';
 import type { IProvider, TChatConversation, TProviderWithModel } from '@/common/config/storage';
 import { isAionrsAssistant } from '@/common/types/agent/assistantTypes';
 import { getClientBusinessSetting, setClientBusinessSetting } from '@/renderer/services/clientBusinessSettings';
-import type { JrAppearance } from '@/common/config/clientSettings';
+import type { ClientBusinessSettingMap, JrAppearance } from '@/common/config/clientSettings';
 import { normalizeAppearance } from './botAppearance';
 import { connectionPayload, createChromeDraft, isGmailServer, isJrChromeServer } from './Connections/connections';
 import { toSessionMcpServer } from '@/renderer/hooks/mcp/catalog';
-import { getConversationOrNull } from '@/renderer/pages/conversation/utils/conversationCache';
+import { getConversationOrNull, refreshConversationCache } from '@/renderer/pages/conversation/utils/conversationCache';
 
 export const JR_MODEL = 'MiniMax-M3.1-Flash';
 export const JR_PROVIDER = 'JR MiniMax';
@@ -20,10 +20,13 @@ export type JrBotInput = {
   appearance?: JrAppearance;
   learning?: string;
   skillIds?: string[];
-  /** Defaults to on. Set false to leave Chrome out of this bot's conversation. */
+  /**
+   * Ignored on save. Every bot is stored with Chrome on; a false value is
+   * rewritten the next time the bot is loaded.
+   */
   useChrome?: boolean;
 };
-export type JrBot = JrBotInput & { id: string; teamSelectable?: boolean };
+export type JrBot = JrBotInput & { id: string; teamSelectable?: boolean; conversationId?: string };
 
 function instructionWithLearning(instructions: string, learning: string): string {
   return learning ? `${instructions.trim()}\n\n## Aprendizados deste bot\n${learning}` : instructions;
@@ -37,45 +40,122 @@ export function validateJrBot(input: JrBotInput): 'name' | 'instructions' | 'lea
   return null;
 }
 
+type JrBotRecord = NonNullable<ClientBusinessSettingMap['jr.botWorkspaces']>[string];
+
+const sameIdSet = (left: readonly string[], right: readonly string[]): boolean => {
+  if (left.length !== right.length) return false;
+  const a = [...left].toSorted();
+  const b = [...right].toSorted();
+  return a.every((id, index) => id === b[index]);
+};
+
+/** Every installed skill, in a stable order. Callers cannot pass a subset. */
+export async function listInstalledSkillIds(): Promise<string[]> {
+  const skills = await ipcBridge.fs.listAvailableSkills.invoke();
+  return Array.from(new Set(skills.map((skill) => skill.name.trim()).filter((skill) => skill.length > 0))).toSorted();
+}
+
+/** Null means the catalog could not be read. Load keeps the stored skill ids in that case. */
+async function installedSkillIdsOrNull(): Promise<string[] | null> {
+  try {
+    return await listInstalledSkillIds();
+  } catch {
+    return null;
+  }
+}
+
+function enforcedSkillIds(stored: readonly string[] | undefined, installed: readonly string[] | null): string[] {
+  return installed ? [...installed] : [...(stored ?? [])];
+}
+
+function policyDrift(record: { skillIds?: string[]; useChrome?: boolean }, skillIds: readonly string[]): boolean {
+  return record.useChrome === false || !sameIdSet(record.skillIds ?? [], skillIds);
+}
+
+/** Rewrite stored bots that opted out of skills or Chrome. Failures stay in memory as enforced. */
+async function migrateJrBotRecords(
+  records: Record<string, JrBotRecord>,
+  installed: readonly string[] | null
+): Promise<Record<string, JrBotRecord>> {
+  const next = { ...records };
+  let changed = false;
+  for (const [id, record] of Object.entries(records)) {
+    const skillIds = enforcedSkillIds(record.skillIds, installed);
+    if (!policyDrift(record, skillIds)) continue;
+    changed = true;
+    next[id] = { ...record, skillIds, useChrome: true };
+    try {
+      await ipcBridge.assistants.update.invoke({
+        id,
+        defaults: { skills: { mode: 'fixed', value: skillIds } },
+      });
+    } catch {
+      // The workspace record is what the next chat reads. A defaults write can be retried on save.
+    }
+  }
+  if (changed) await setClientBusinessSetting('jr.botWorkspaces', next);
+  return next;
+}
+
+function jrBotFromRecord(
+  id: string,
+  record: JrBotRecord,
+  profile: { name: string; instructions: string; teamSelectable?: boolean },
+  skillIds: string[]
+): JrBot {
+  return {
+    id,
+    name: profile.name,
+    instructions: record.instructions ?? profile.instructions,
+    workspace: record.workspace,
+    appearance: normalizeAppearance(record.appearance),
+    learning: record.learning ?? '',
+    skillIds,
+    useChrome: true,
+    teamSelectable: profile.teamSelectable,
+    conversationId: record.conversationId,
+  };
+}
+
 export async function listJrBots(): Promise<JrBot[]> {
-  const [assistants, workspaces] = await Promise.all([
+  const [assistants, stored, installed] = await Promise.all([
     ipcBridge.assistants.list.invoke(),
     getClientBusinessSetting('jr.botWorkspaces'),
+    installedSkillIdsOrNull(),
   ]);
+  const workspaces = stored ? await migrateJrBotRecords(stored, installed) : {};
   return assistants
-    .filter((assistant) => assistant.source === 'user' && isAionrsAssistant(assistant) && workspaces?.[assistant.id])
-    .map((assistant) => ({
-      id: assistant.id,
-      name: assistant.name,
-      instructions: workspaces![assistant.id].instructions ?? assistant.context ?? '',
-      workspace: workspaces![assistant.id].workspace,
-      appearance: normalizeAppearance(workspaces![assistant.id].appearance),
-      learning: workspaces![assistant.id].learning ?? '',
-      skillIds: workspaces![assistant.id].skillIds ?? [],
-      useChrome: workspaces![assistant.id].useChrome !== false,
-      teamSelectable: assistant.team_selectable,
-    }));
+    .filter((assistant) => assistant.source === 'user' && isAionrsAssistant(assistant) && workspaces[assistant.id])
+    .map((assistant) =>
+      jrBotFromRecord(
+        assistant.id,
+        workspaces[assistant.id],
+        { name: assistant.name, instructions: assistant.context ?? '', teamSelectable: assistant.team_selectable },
+        enforcedSkillIds(workspaces[assistant.id].skillIds, installed)
+      )
+    );
 }
 
 export async function getJrBot(id: string): Promise<JrBot> {
-  const [detail, workspaces] = await Promise.all([
+  const [detail, stored, installed] = await Promise.all([
     ipcBridge.assistants.get.invoke({ id, locale: 'pt-BR' }),
     getClientBusinessSetting('jr.botWorkspaces'),
+    installedSkillIdsOrNull(),
   ]);
-  if (detail.source !== 'user' || detail.engine.agent?.type !== 'aionrs' || !workspaces?.[id]) {
+  if (detail.source !== 'user' || detail.engine.agent?.type !== 'aionrs' || !stored?.[id]) {
     throw new Error('JR bot not found');
   }
-  return {
+  const workspaces = await migrateJrBotRecords(stored, installed);
+  return jrBotFromRecord(
     id,
-    name: detail.profile.name,
-    instructions: workspaces[id].instructions ?? detail.rules.content,
-    workspace: workspaces[id].workspace,
-    appearance: normalizeAppearance(workspaces[id].appearance),
-    learning: workspaces[id].learning ?? '',
-    skillIds: workspaces[id].skillIds ?? [],
-    useChrome: workspaces[id].useChrome !== false,
-    teamSelectable: detail.team_selectable,
-  };
+    workspaces[id],
+    {
+      name: detail.profile.name,
+      instructions: detail.rules.content,
+      teamSelectable: detail.team_selectable,
+    },
+    enforcedSkillIds(workspaces[id].skillIds, installed)
+  );
 }
 
 export async function saveJrBot(input: JrBotInput, id?: string): Promise<JrBot> {
@@ -83,12 +163,11 @@ export async function saveJrBot(input: JrBotInput, id?: string): Promise<JrBot> 
   if (invalid) throw new Error(`Invalid bot ${invalid}`);
   const name = input.name.trim();
   const learning = input.learning?.trim() ?? '';
-  const skillIds = Array.from(
-    new Set((input.skillIds ?? []).filter((skill) => skill.trim()).map((skill) => skill.trim()))
-  );
-  const useChrome = input.useChrome !== false;
-  const workspaces = (await getClientBusinessSetting('jr.botWorkspaces')) || {};
+  // Ignore any skill list or Chrome flag from the caller. Employees cannot drop either.
+  const skillIds = await listInstalledSkillIds();
+  const useChrome = true;
   const previous = id ? await getJrBot(id) : null;
+  const workspaces = (await getClientBusinessSetting('jr.botWorkspaces')) || {};
   if (!id) {
     const assistants = await ipcBridge.assistants.list.invoke();
     const runtime = assistants.find(isAionrsAssistant);
@@ -176,6 +255,52 @@ async function ensureJrChromeServer(): Promise<void> {
   if (!created.enabled) await ipcBridge.mcpService.toggleServer.invoke({ id: created.id });
 }
 
+/** Enabled connectors for a JR chat. Chrome is created when it is missing. Gmail stays out. */
+async function jrConversationServers() {
+  try {
+    await ensureJrChromeServer();
+  } catch {
+    // Chrome is required, but a missing runtime must not block the chat.
+  }
+  return (await ipcBridge.mcpService.listServers.invoke()).filter((server) => server.enabled && !isGmailServer(server));
+}
+
+async function alignConversationPolicy(
+  conversation: TChatConversation,
+  skillIds: readonly string[]
+): Promise<TChatConversation> {
+  const servers = await jrConversationServers();
+  const extra = (conversation.extra ?? {}) as {
+    skills?: string[];
+    mcp_server_ids?: string[];
+    selected_mcp_server_ids?: string[];
+  };
+  const mcpIds = servers.map((server) => server.id);
+  const currentMcp = extra.mcp_server_ids ?? extra.selected_mcp_server_ids ?? [];
+  if (sameIdSet(extra.skills ?? [], skillIds) && sameIdSet(currentMcp, mcpIds)) return conversation;
+  const session = servers.map(toSessionMcpServer);
+  await ipcBridge.conversation.update.invoke({
+    id: conversation.id,
+    merge_extra: true,
+    updates: {
+      extra: {
+        skills: [...skillIds],
+        mcp_server_ids: mcpIds,
+        mcp_servers: servers.map((server) => server.name),
+        session_mcp_servers: session,
+        selected_mcp_server_ids: servers.filter((server) => !server.builtin).map((server) => server.id),
+        selected_session_mcp_servers: session,
+      },
+    } as Partial<TChatConversation>,
+  });
+  try {
+    await refreshConversationCache(conversation.id);
+  } catch {
+    // The stored snapshot is already updated. Opening the chat reads it again.
+  }
+  return conversation;
+}
+
 const openingConversations = new Map<string, Promise<TChatConversation>>();
 let conversationQueue: Promise<unknown> = Promise.resolve();
 
@@ -207,11 +332,17 @@ async function resolveJrConversation(bot: JrBot): Promise<TChatConversation> {
       extra?.workspace?.normalize('NFC') === bot.workspace.normalize('NFC')
     );
   };
+  let skillIds: string[];
+  try {
+    skillIds = await listInstalledSkillIds();
+  } catch {
+    skillIds = [...(bot.skillIds ?? [])];
+  }
   const workspaces = (await getClientBusinessSetting('jr.botWorkspaces')) || {};
   const boundId = workspaces[bot.id]?.conversationId;
   if (boundId) {
     const bound = await getConversationOrNull(boundId);
-    if (bound && matchesBot(bound)) return bound;
+    if (bound && matchesBot(bound)) return alignConversationPolicy(bound, skillIds);
   }
   const bind = async (conversation: TChatConversation) => {
     const latest = (await getClientBusinessSetting('jr.botWorkspaces')) || {};
@@ -226,29 +357,18 @@ async function resolveJrConversation(bot: JrBot): Promise<TChatConversation> {
   const previous = history.items
     .filter(matchesBot)
     .toSorted((a, b) => b.modified_at - a.modified_at || b.created_at - a.created_at)[0];
-  if (previous) return bind(previous);
+  if (previous) return alignConversationPolicy(await bind(previous), skillIds);
   if (history.has_more) throw new Error('Conversation history is incomplete');
   const model = selectJrModel(await ipcBridge.mode.listProviders.invoke());
   if (!model) throw new Error('JR MiniMax connection is unavailable');
-  const includeChrome = bot.useChrome !== false;
-  if (includeChrome) {
-    try {
-      await ensureJrChromeServer();
-    } catch {
-      // Chrome is the default connector, but a missing runtime must not block the chat.
-    }
-  }
-  // shortcut: Gmail OAuth is incomplete; admit it after real client authorization is supported.
-  const servers = (await ipcBridge.mcpService.listServers.invoke()).filter(
-    (server) => server.enabled && !isGmailServer(server) && (includeChrome || !isJrChromeServer(server))
-  );
+  const servers = await jrConversationServers();
   const conversation = await ipcBridge.conversation.create.invoke({
     name: bot.name,
     model,
     assistant: {
       id: bot.id,
       locale: 'pt-BR',
-      conversation_overrides: { skill_ids: bot.skillIds ?? [], mcp_ids: servers.map((server) => server.id) },
+      conversation_overrides: { skill_ids: skillIds, mcp_ids: servers.map((server) => server.id) },
     },
     extra: {
       workspace: bot.workspace,

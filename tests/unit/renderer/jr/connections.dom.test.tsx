@@ -417,7 +417,7 @@ describe('advanced connection configuration form', () => {
     fireEvent.click(screen.getByRole('button', { name: 'common.save' }));
     expect(await screen.findByText('common.jr.mcp.saveError')).toBeInTheDocument();
     expect(screen.getByLabelText('common.jr.mcp.name')).toHaveValue('Custom local');
-    expect(screen.queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
   });
 
   it('rejects malformed arguments before calling a save API', async () => {

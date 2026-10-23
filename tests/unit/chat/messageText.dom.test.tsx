@@ -87,9 +87,11 @@ vi.mock('@/renderer/components/Markdown', () => ({
   __esModule: true,
   default: ({
     children,
+    streaming,
     onLocalFileLink,
   }: {
     children?: React.ReactNode;
+    streaming?: boolean;
     onLocalFileLink?: (
       path: string,
       reference?: {
@@ -101,7 +103,7 @@ vi.mock('@/renderer/components/Markdown', () => ({
       }
     ) => void | Promise<void>;
   }) => (
-    <div>
+    <div data-streaming={streaming ? '1' : '0'}>
       {children}
       {onLocalFileLink && (
         <button
@@ -845,5 +847,38 @@ describe('MessageText fork entry point', () => {
       expect(forkMocks.navigate).toHaveBeenCalledWith('/conversation/conv-forked');
       expect(forkMocks.ensureRuntime).toHaveBeenCalledWith({ conversation_id: 'conv-forked' });
     });
+  });
+});
+
+describe('assistant bubble caret', () => {
+  const message: IMessageText = {
+    id: 'msg-caret',
+    msg_id: 'msg-caret',
+    conversation_id: 'conv-1',
+    type: 'text',
+    position: 'left',
+    created_at: Date.now(),
+    content: { content: 'Endpoint identificado.' },
+  };
+
+  const renderBubble = (streaming = false) =>
+    render(
+      <ConversationProvider value={{ conversationId: 'conv-1', workspace: '/workspace/demo', type: 'acp' }}>
+        <MessageText message={message} streaming={streaming} />
+      </ConversationProvider>
+    );
+
+  it('keeps a finished reply non-editable and without a streaming caret', () => {
+    renderBubble();
+    const bubble = document.querySelector('.jr-bubble-assistant');
+    expect(bubble).toHaveAttribute('contenteditable', 'false');
+    expect(bubble).not.toHaveClass('jr-bubble-streaming');
+    expect(screen.getByText('Endpoint identificado.')).toHaveAttribute('data-streaming', '0');
+  });
+
+  it('marks only an actively streaming reply for an inline caret', () => {
+    renderBubble(true);
+    expect(document.querySelector('.jr-bubble-assistant')).toHaveClass('jr-bubble-streaming');
+    expect(screen.getByText('Endpoint identificado.')).toHaveAttribute('data-streaming', '1');
   });
 });
