@@ -38,6 +38,18 @@ describe('release packaging configuration', () => {
     expect(winBlock).not.toContain('    - zip');
   });
 
+  it('publishes a space-free Windows installer with updater metadata', () => {
+    const config = readProjectFile('packages/desktop/electron-builder.yml');
+    const workflow = readProjectFile('.github/workflows/_build-reusable.yml');
+    const version = JSON.parse(readProjectFile('package.json')).version as string;
+
+    expect(version).toBe('2.2.4');
+    expect(config).toContain('artifactName: JR-Bot-${version}-${os}-${arch}.${ext}');
+    expect(config).toContain('url: https://jrsantafe.stratacerta.com.br/mmx/updates');
+    expect(workflow).toContain('out/*.blockmap');
+    expect(workflow).not.toContain('rm -f out/*.blockmap');
+  });
+
   it('uploads mac zip artifacts without a stale Windows zip glob', () => {
     const workflow = readProjectFile('.github/workflows/_build-reusable.yml');
 

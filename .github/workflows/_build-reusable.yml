@@ -20,7 +20,7 @@ on:
         type: boolean
         default: false
       upload_installers_only:
-        description: 'Only upload primary installers (exe/msi/dmg/deb), skip zip/yml/blockmap'
+        description: 'Upload installers plus updater metadata (latest.yml and blockmap). Skip zip and builder debug logs.'
         type: boolean
         default: false
       aioncore_run_id:
@@ -646,8 +646,8 @@ jobs:
           (!startsWith(matrix.platform, 'windows') || steps.windows-build.outputs.result == 'success')
         shell: bash
         run: |
-          echo "Removing non-installer files from out/ ..."
-          rm -f out/*.blockmap out/*.zip out/*.yml out/builder-debug.yml 2>/dev/null || true
+          echo "Removing zip and builder debug logs from out/ (keeping latest.yml and blockmaps) ..."
+          rm -f out/*.zip out/builder-debug.yml 2>/dev/null || true
           echo "Remaining artifacts:"
           ls -lh out/ || true
 
@@ -663,6 +663,7 @@ jobs:
             out/*.msi
             out/*.dmg
             out/*.deb
+            out/*.blockmap
             out/AionUi-*-mac-*.zip
             out/*.yml
           if-no-files-found: warn

@@ -160,12 +160,12 @@ Var /GLOBAL AionUiInnerFailureReadResult
   !insertmacro AIONUI_LOG_UNINSTALL_RESULT "${_ROOT_KEY}" "$AionUiUninstallHadErrors"
 
   ${If} $AionUiUninstallHadErrors == "1"
-    DetailPrint `Uninstall was not successful. Not able to launch uninstaller!`
+    DetailPrint `A desinstalação não foi concluída. Não foi possível iniciar o desinstalador.`
     Return
   ${EndIf}
 
   ${If} $R0 != 0
-      DetailPrint `Uninstall was not successful. Uninstaller error code: $R0.`
+      DetailPrint `A desinstalação não foi concluída. Código do desinstalador: $R0.`
       !insertmacro AIONUI_READ_LAST_INNER_FAILURE
       ${If} $AionUiLockerList != ""
         StrCpy $AionUiInnerFailureSummary "- Failure: previous uninstaller failed with exit code $R0$\r$\n- File or folder: $INSTDIR$\r$\n- Blocking process: $AionUiLockerList"

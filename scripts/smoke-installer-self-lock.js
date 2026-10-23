@@ -88,15 +88,15 @@ function main() {
 
   const nsi = `
 Unicode true
-Name "AionUi Installer Self Lock Smoke"
+Name "JR Bot"
 OutFile "${nsisQuote(exePath)}"
 RequestExecutionLevel user
 SilentInstall silent
 !define VERSION "self-lock-smoke"
 !define AIONUI_TARGET_ARCH "x64"
 !define AIONUI_FALLBACK_LOG "aionui-installer-self-lock-fallback.log"
-!define AIONUI_APP_EXECUTABLE_FILENAME "AionUi.exe"
-!define UNINSTALL_FILENAME "Uninstall AionUi.exe"
+!define AIONUI_APP_EXECUTABLE_FILENAME "JRSantaFeBot.exe"
+!define UNINSTALL_FILENAME "Uninstall JRSantaFeBot.exe"
 !define PROJECT_DIR "${nsisQuote(repoRoot)}"
 !include LogicLib.nsh
 !include "${nsisQuote(processControlPath)}"
@@ -159,8 +159,8 @@ SectionEnd
       throw new Error(`expected currentOutDir ${installDir}, got ${lockers.currentOutDir}`);
     }
     const blocking = lockers.blockingProcesses || [];
-    if (!blocking.some((process) => process.name === 'AionUi installer' && Number(process.pid) > 0)) {
-      throw new Error(`expected AionUi installer blocker, got ${JSON.stringify(blocking)}`);
+    if (!blocking.some((process) => process.name === 'JR Bot' && Number(process.pid) > 0)) {
+      throw new Error(`expected JR Bot installer blocker, got ${JSON.stringify(blocking)}`);
     }
 
     console.log(`[self-lock] ok: ${logPath}`);

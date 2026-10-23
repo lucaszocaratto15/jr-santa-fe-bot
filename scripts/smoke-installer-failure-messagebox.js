@@ -21,8 +21,8 @@ const INSTALLER_ERROR_SCENARIOS = [
     id: 'uninstaller-copy-or-rebuild-failed',
     defineName: 'AIONUI_E_UNINSTALLER_COPY_OR_REBUILD_FAILED',
     code: 'E1001',
-    message: 'AionUi could not repair the installed uninstaller.',
-    action: 'Close AionUi, restart Windows if needed, then run this installer again.',
+    message: 'O JR Bot não conseguiu reparar o desinstalador.',
+    action: 'Feche o JR Bot, reinicie o Windows se for preciso e execute este instalador de novo.',
     diagnostics:
       'scenario=uninstaller-copy-or-rebuild-failed phase=uninstaller-repair result=copy-failed-retry-bundled-missing',
   },
@@ -30,89 +30,89 @@ const INSTALLER_ERROR_SCENARIOS = [
     id: 'old-uninstall-failed',
     defineName: 'AIONUI_E_OLD_UNINSTALL_FAILED',
     code: 'E1002',
-    message: 'The previous AionUi uninstaller returned an error.',
+    message: 'O desinstalador da versão anterior retornou um erro.',
     action:
-      'Close any program using the install folder, then run this installer again. If no program is listed, restart Windows and run this installer again.',
+      'Feche qualquer programa que use a pasta de instalação e execute este instalador de novo. Se nenhum programa aparecer, reinicie o Windows e tente outra vez.',
     diagnostics: 'scenario=old-uninstall-failed phase=old-uninstaller exitCode=2',
   },
   {
     id: 'install-dir-remove-or-locked',
     defineName: 'AIONUI_E_INSTALL_DIR_REMOVE_OR_LOCKED',
     code: 'E1003',
-    message: 'AionUi could not remove or replace the previous installation directory.',
-    action: 'Close AionUi and any program using the install folder, then run this installer again.',
+    message: 'O JR Bot não conseguiu remover ou substituir a pasta da instalação anterior.',
+    action: 'Feche o JR Bot e qualquer programa que use a pasta de instalação e execute este instalador de novo.',
     diagnostics: 'scenario=install-dir-remove-or-locked phase=atomic-failed failedPath=install-dir',
   },
   {
     id: 'extract-failed',
     defineName: 'AIONUI_E_EXTRACT_FAILED',
     code: 'E1010',
-    message: 'AionUi could not extract the application files correctly.',
-    action: 'Download a fresh installer and run it again.',
-    diagnostics: 'scenario=extract-failed phase=extract method=zip missing=AionUi.exe',
+    message: 'O JR Bot não conseguiu extrair os arquivos do aplicativo.',
+    action: 'Baixe o instalador novamente e execute outra vez.',
+    diagnostics: 'scenario=extract-failed phase=extract method=zip missing=JRSantaFeBot.exe',
   },
   {
     id: 'disk-insufficient',
     defineName: 'AIONUI_E_DISK_INSUFFICIENT',
     code: 'E1020',
-    message: 'AionUi cannot continue because the target disk does not have enough free space.',
-    action: 'Free disk space on the target drive, then run this installer again.',
+    message: 'O JR Bot não pode continuar porque o disco de destino não tem espaço livre suficiente.',
+    action: 'Libere espaço no disco de destino e execute este instalador de novo.',
     diagnostics: 'scenario=disk-insufficient phase=preflight requiredMb=1024 availableMb=0',
   },
   {
     id: 'bundled-aioncore-incomplete',
     defineName: 'AIONUI_E_BUNDLED_AIONCORE_INCOMPLETE',
     code: 'E1030',
-    message: 'AionUi installed, but the bundled AionCore resources are incomplete.',
-    action: 'Download a fresh installer and run it again.',
+    message: 'O JR Bot foi instalado, mas os recursos internos estão incompletos.',
+    action: 'Baixe o instalador novamente e execute outra vez.',
     diagnostics: 'scenario=bundled-aioncore-incomplete phase=verify-bundled-aioncore runtime=win32-x64 result=1',
   },
   {
     id: 'core-app-files-incomplete',
     defineName: 'AIONUI_E_CORE_APP_FILES_INCOMPLETE',
     code: 'E1031',
-    message: 'AionUi installation is incomplete because a required application file is missing.',
-    action: 'Reinstall AionUi or download a newer installer.',
+    message: 'A instalação do JR Bot está incompleta porque um arquivo obrigatório está ausente.',
+    action: 'Baixe o instalador novamente e execute outra vez.',
     diagnostics: 'scenario=core-app-files-incomplete phase=verify-required-file missing=resources/app.asar',
   },
   {
     id: 'arch-mismatch',
     defineName: 'AIONUI_E_ARCH_MISMATCH',
     code: 'E1040',
-    message: 'Installation package architecture mismatch.',
-    action: 'Download the AionUi installer that matches this Windows architecture, then run it again.',
+    message: 'A arquitetura deste instalador não corresponde a este Windows.',
+    action: 'Baixe o instalador do JR Bot compatível com a arquitetura deste Windows e execute outra vez.',
     diagnostics: 'scenario=arch-mismatch phase=arch-check target=x64 actual=arm64',
   },
   {
     id: 'active-installer-conflict',
     defineName: 'AIONUI_E_ACTIVE_INSTALLER_CONFLICT',
     code: 'E1050',
-    message: 'Another AionUi installer appears to still be active.',
-    action: 'Close the other installer window or wait for it to finish, then run this installer again.',
+    message: 'Outro instalador do JR Bot ainda parece estar ativo.',
+    action: 'Feche a outra janela do instalador ou espere ela terminar e execute este instalador de novo.',
     diagnostics: 'scenario=active-installer-conflict phase=active-installer-marker state=active',
   },
   {
     id: 'registry-state-invalid',
     defineName: 'AIONUI_E_REGISTRY_STATE_INVALID',
     code: 'E1060',
-    message: 'AionUi found an invalid previous-install registry state.',
-    action: 'Uninstall the old AionUi from Windows Settings, then run this installer again.',
+    message: 'O JR Bot encontrou um registro inválido da instalação anterior.',
+    action: 'Desinstale a versão anterior em Configurações do Windows e execute este instalador de novo.',
     diagnostics: 'scenario=registry-state-invalid phase=registry-heal installLocation=invalid uninstallString=missing',
   },
   {
     id: 'active-marker-write-failed',
     defineName: 'AIONUI_E_ACTIVE_MARKER_WRITE_FAILED',
     code: 'E1070',
-    message: 'AionUi could not write the active-installer marker.',
-    action: 'Restart Windows, then run this installer again.',
+    message: 'O JR Bot não conseguiu gravar o marcador de instalação ativa.',
+    action: 'Reinicie o Windows e execute este instalador de novo.',
     diagnostics: 'scenario=active-marker-write-failed phase=active-installer-marker-write result=failed',
   },
   {
     id: 'invalid-install-path',
     defineName: 'AIONUI_E_INVALID_INSTALL_PATH',
     code: 'E1090',
-    message: 'The selected install path is invalid.',
-    action: 'Choose a local install path that is writable, then run this installer again.',
+    message: 'O caminho de instalação escolhido é inválido.',
+    action: 'Escolha uma pasta local com permissão de escrita e execute este instalador de novo.',
     diagnostics: 'scenario=invalid-install-path phase=path-validation installPath=invalid',
   },
 ];
@@ -314,8 +314,7 @@ function Find-FailureWindow([string]$Code, [int]$TimeoutSec = 90) {
     $windows = $root.FindAll([System.Windows.Automation.TreeScope]::Children, $windowCond)
     foreach ($window in $windows) {
       $text = Get-WindowText $window
-      if ($text -like "*AionUi installation failed ($Code)*" -or
-          ($text -like "*($Code)*" -and $text -like '*Send this installer failure report*')) {
+      if ($text -like "*A instalação do JR Bot falhou ($Code)*") {
         return [ordered]@{ window = $window; text = $text; title = $window.Current.Name }
       }
     }
@@ -329,16 +328,18 @@ $proc = Start-Process -FilePath $ExePath -PassThru
 try {
   $failure = Find-FailureWindow $Code
   foreach ($required in @(
-    "AionUi installation failed ($Code)",
+    "A instalação do JR Bot falhou ($Code)",
     "scenario=$ScenarioId",
-    'Suggested action:',
-    'Diagnostics:',
-    'Installer log:',
-    'Send this installer failure report'
+    'O que fazer:',
+    'Detalhes:',
+    'Registro da instalação:'
   )) {
     if ($failure.text -notlike "*$required*") {
       throw "Failure dialog for $Code is missing: $required"
     }
+  }
+  if ($failure.text -like '*AionUi*' -or $failure.text -like '*equipe*') {
+    throw "Failure dialog for $Code still offers an AionUi report."
   }
   $logFileName = Split-Path -Leaf $LogPath
   if ($failure.text -notlike "*$LogPath*" -and $failure.text -notlike "*$logFileName*") {
@@ -347,15 +348,9 @@ try {
   if ($failure.text -like '*Blocking diagnostics:*') {
     throw "Failure dialog for $Code still uses the old Blocking diagnostics label."
   }
-  if ($Answer -eq 'yes') {
-    $yesZh = [string][char]26159
-    $buttons = @('Yes', $yesZh, "$yesZh(Y)", "$yesZh(&Y)")
-  } else {
-    $noZh = [string][char]21542
-    $buttons = @('No', $noZh, "$noZh(N)", "$noZh(&N)")
-  }
+  $buttons = @('OK', 'Ok')
   if (-not (Try-ClickWindowButton $failure.window $buttons)) {
-    throw "$Answer button not found for $Code failure dialog."
+    throw "OK button not found for $Code failure dialog."
   }
 
   if (-not $proc.WaitForExit(60000)) {
@@ -381,7 +376,7 @@ function createHarnessNsi({ exePath, logPath, projectRoot, scenario }) {
   const detail = `${scenario.diagnostics} smoke=messagebox`;
   return `
 Unicode true
-Name "AionUi Failure MessageBox Smoke"
+Name "JR Bot"
 OutFile "${nsisQuote(exePath)}"
 RequestExecutionLevel user
 SilentInstall normal
@@ -481,8 +476,8 @@ function runHarness({ autoDecline, compileOnly, makensis, scenario }) {
     }
 
     if (autoDecline) {
-      const answer = autoDecline === 'consent' ? 'yes' : 'no';
-      const expectedReportReason = autoDecline === 'consent' ? 'empty-dsn' : 'user-declined';
+      const answer = 'ok';
+      const expectedReportReason = 'no-prompt';
       rmSync(reportStatusPath, { force: true });
       console.log(
         `[failure-messagebox] ${code}: launching harness and auto-${answer === 'yes' ? 'consenting to' : 'declining'} report...`
@@ -520,7 +515,7 @@ function runHarness({ autoDecline, compileOnly, makensis, scenario }) {
         if (status.status !== 'skipped' || status.reason !== 'empty-dsn') {
           throw new Error(`unexpected report status for ${code}: ${JSON.stringify(status)}`);
         }
-        if (typeof status.copyText !== 'string' || !status.copyText.includes(`AionUi installer failure ${code}`)) {
+        if (typeof status.copyText !== 'string' || !status.copyText.includes(`Falha do instalador do JR Bot ${code}`)) {
           throw new Error(`report copyText missing support payload for ${code}`);
         }
       }
@@ -533,7 +528,7 @@ function runHarness({ autoDecline, compileOnly, makensis, scenario }) {
     if (run.status !== 2) {
       throw new Error(`harness exited with ${run.status}; expected installer failure exit code 2`);
     }
-    verifyFailureLog(logPath, scenario, 'user-declined');
+    verifyFailureLog(logPath, scenario, 'no-prompt');
     return { code, exePath, logPath, mode: 'manual' };
   } finally {
     if (compileOnly || autoDecline || process.argv.includes('--cleanup')) {
@@ -568,6 +563,9 @@ function main() {
   const allScenarios = process.argv.includes('--all-scenarios') || process.argv.includes('--all-codes');
   const autoConsent = process.argv.includes('--auto-consent');
   const autoDecline = process.argv.includes('--auto-decline');
+  if (autoConsent) {
+    throw new Error('The JR Bot installer does not offer to send failure reports.');
+  }
   if (autoConsent && autoDecline) {
     throw new Error('Use only one of --auto-consent or --auto-decline.');
   }

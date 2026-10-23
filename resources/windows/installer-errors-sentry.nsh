@@ -19,38 +19,18 @@
 
 !macro AIONUI_FAIL_UX _CODE _DETAIL _MSG_ZH _MSG_EN _ACTION_ZH _ACTION_EN _DIAGNOSTICS_ZH _DIAGNOSTICS_EN
   !insertmacro AIONUI_SLOG "event=session-end result=fail code=${_CODE} detail=${_DETAIL}"
-  Push $9
   ${If} ${Silent}
-    StrCpy $9 "auto"
-  ${Else}
-    StrCpy $9 "yes"
-    MessageBox MB_YESNO|MB_ICONSTOP \
-      "${AIONUI_MSG_INSTALL_FAILED_ZH} (${_CODE})$\r$\n$\r$\n\
-      ${_MSG_ZH}$\r$\n$\r$\n\
-      ${AIONUI_MSG_SUGGESTED_ACTION_ZH}:$\r$\n${_ACTION_ZH}$\r$\n$\r$\n\
-      ${AIONUI_MSG_DIAGNOSTICS_ZH}:$\r$\n${_DIAGNOSTICS_ZH}$\r$\n$\r$\n\
-      ${AIONUI_MSG_INSTALLER_LOG_ZH}:$\r$\n$AionUiSessionLogPath$\r$\n$\r$\n\
-      ${AIONUI_MSG_SEND_REPORT_ZH}$\r$\n$\r$\n\
-      ${AIONUI_MSG_BLOCK_SEPARATOR}$\r$\n$\r$\n\
-      ${AIONUI_MSG_INSTALL_FAILED_EN} (${_CODE})$\r$\n$\r$\n\
-      ${_MSG_EN}$\r$\n$\r$\n\
-      ${AIONUI_MSG_SUGGESTED_ACTION_EN}:$\r$\n${_ACTION_EN}$\r$\n$\r$\n\
-      ${AIONUI_MSG_DIAGNOSTICS_EN}:$\r$\n${_DIAGNOSTICS_EN}$\r$\n$\r$\n\
-      ${AIONUI_MSG_INSTALLER_LOG_EN}:$\r$\n$AionUiSessionLogPath$\r$\n$\r$\n\
-      ${AIONUI_MSG_SEND_REPORT_EN}" \
-      /SD IDNO IDNO +2
-    Goto +2
-    StrCpy $9 "no"
-  ${EndIf}
-  ${If} $9 == "no"
-    !insertmacro AIONUI_SLOG "event=report-skipped reason=user-declined code=${_CODE}"
-  ${ElseIf} $9 == "auto"
     !insertmacro AIONUI_SLOG "event=report-auto reason=silent code=${_CODE}"
     !insertmacro AIONUI_REPORT_TO_SENTRY_NOUI "${_CODE}" "${_DETAIL}"
   ${Else}
-    !insertmacro AIONUI_REPORT_TO_SENTRY "${_CODE}" "${_DETAIL}"
+    MessageBox MB_OK|MB_ICONSTOP \
+      "${AIONUI_MSG_INSTALL_FAILED_EN} (${_CODE})$\r$\n$\r$\n\
+      ${_MSG_EN}$\r$\n$\r$\n\
+      ${AIONUI_MSG_SUGGESTED_ACTION_EN}:$\r$\n${_ACTION_EN}$\r$\n$\r$\n\
+      ${AIONUI_MSG_DIAGNOSTICS_EN}:$\r$\n${_DIAGNOSTICS_EN}$\r$\n$\r$\n\
+      ${AIONUI_MSG_INSTALLER_LOG_EN}:$\r$\n$AionUiSessionLogPath"
+    !insertmacro AIONUI_SLOG "event=report-skipped reason=no-prompt code=${_CODE}"
   ${EndIf}
-  Pop $9
   !insertmacro AIONUI_CLEAR_ACTIVE_INSTALLER_MARKER
   SetErrorLevel 2
   Quit

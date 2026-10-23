@@ -44,11 +44,11 @@ if ($status.code -ne 'E1003') {
 if ($status.wrapperCode -ne 'E1002') {
   throw "Expected wrapperCode E1002, got $($status.wrapperCode)"
 }
-if ($status.copyText -notlike '*AionUi installer failure E1003*') {
+if ($status.copyText -notlike '*Falha do instalador do JR Bot E1003*') {
   throw 'copyText does not include failure heading'
 }
-if ($status.copyText -notlike '*To AionUi Team*') {
-  throw 'copyText does not include team footer'
+if ($status.copyText -like '*AionUi*') {
+  throw 'copyText still names AionUi'
 }
 if ($status.copyText -like '*Blocking process: Windows`r`n*' -or $status.copyText -like '*Blocking process: Windows`n*') {
   throw 'copyText appears to contain truncated Blocking process text'

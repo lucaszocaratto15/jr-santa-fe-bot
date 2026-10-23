@@ -114,9 +114,9 @@ Var /GLOBAL AionUiCurrentOutDir
         Add-Content -LiteralPath $$log -Encoding UTF8 -Value ($$payload | ConvertTo-Json -Compress -Depth 8); \
         if ($$resources.Count -eq 0) { \
           if ($$installerSelfLock -and $$installerPid -gt 0) { \
-            $$lockerText = 'AionUi installer(' + $$installerPid + ')'; \
+            $$lockerText = 'JR Bot(' + $$installerPid + ')'; \
             [System.IO.File]::WriteAllText($$lockerListPath, $$lockerText, (New-Object System.Text.UTF8Encoding $$false)); \
-            $$selfLockers = @([pscustomobject]@{ name = 'AionUi installer'; pid = [int]$$installerPid }); \
+            $$selfLockers = @([pscustomobject]@{ name = 'JR Bot'; pid = [int]$$installerPid }); \
             $$payload = [ordered]@{ schemaVersion = 1; ts = (Get-Date -Format o); session = '$AionUiSessionId'; version = '${VERSION}'; arch = '${AIONUI_TARGET_ARCH}'; updated = ('$AionUiIsUpdated' -eq '1'); instDir = '$INSTDIR'; event = 'rm-lockers'; target = $$targetPath; resources = 0; count = 1; blockingProcesses = @($$selfLockers); fallbackReason = 'installer-self-lock'; message = 'The installer process is using the install directory as its current output directory.'; outerInstallerPid = $$installerPid; currentOutDir = $$currentOutDir; installerSelfLock = $$true }; \
             Add-Content -LiteralPath $$log -Encoding UTF8 -Value ($$payload | ConvertTo-Json -Compress -Depth 10); \
             exit 0 \
@@ -156,7 +156,7 @@ Var /GLOBAL AionUiCurrentOutDir
             [pscustomobject]@{ name = $$name; pid = [int]$$_.Process.dwProcessId } \
           }); \
         } \
-        if ($$lockers.Count -eq 0 -and $$installerSelfLock -and $$installerPid -gt 0) { $$lockers = @([pscustomobject]@{ name = 'AionUi installer'; pid = [int]$$installerPid }) }; \
+        if ($$lockers.Count -eq 0 -and $$installerSelfLock -and $$installerPid -gt 0) { $$lockers = @([pscustomobject]@{ name = 'JR Bot'; pid = [int]$$installerPid }) }; \
         $$lockerText = @($$lockers | ForEach-Object { $$_.name + '(' + $$_.pid + ')' }) -join ', '; \
         [System.IO.File]::WriteAllText($$lockerListPath, $$lockerText, (New-Object System.Text.UTF8Encoding $$false)); \
         $$payload = [ordered]@{ schemaVersion = 1; ts = (Get-Date -Format o); session = '$AionUiSessionId'; version = '${VERSION}'; arch = '${AIONUI_TARGET_ARCH}'; updated = ('$AionUiIsUpdated' -eq '1'); instDir = '$INSTDIR'; event = 'rm-lockers'; target = $$targetPath; resources = $$resources.Count; count = $$needed; blockingProcesses = @($$lockers); fallbackReason = ''; message = ''; outerInstallerPid = $$installerPid; currentOutDir = $$currentOutDir; installerSelfLock = $$installerSelfLock }; \
@@ -211,7 +211,7 @@ Var /GLOBAL AionUiCurrentOutDir
   !insertmacro AIONUI_CAPTURE_FAILED_PATH_LOCKERS "${_FAILED_PATH}"
   ${If} $AionUiLockerResult == 0
     ${IfNot} ${Silent}
-      MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "${AIONUI_MSG_FILE_OR_FOLDER_IN_USE_ZH}$\r$\n${_FAILED_PATH}$\r$\n$\r$\n${AIONUI_MSG_APPLICATION_USING_IT_ZH}$\r$\n$AionUiLockerListZh$\r$\n$\r$\n${AIONUI_MSG_CLOSE_LISTED_RETRY_ZH}$\r$\n$\r$\n${AIONUI_MSG_INSTALLER_LOG_ZH}:$\r$\n$AionUiSessionLogPath$\r$\n$\r$\n${AIONUI_MSG_BLOCK_SEPARATOR}$\r$\n$\r$\n${AIONUI_MSG_FILE_OR_FOLDER_IN_USE_EN}$\r$\n${_FAILED_PATH}$\r$\n$\r$\n${AIONUI_MSG_APPLICATION_USING_IT_EN}$\r$\n$AionUiLockerListEn$\r$\n$\r$\n${AIONUI_MSG_CLOSE_LISTED_RETRY_EN}$\r$\n$\r$\n${AIONUI_MSG_INSTALLER_LOG_EN}:$\r$\n$AionUiSessionLogPath" /SD IDCANCEL IDRETRY ${_RETRY_LABEL} IDCANCEL ${_CANCEL_LABEL}
+      MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "${AIONUI_MSG_FILE_OR_FOLDER_IN_USE_EN}$\r$\n${_FAILED_PATH}$\r$\n$\r$\n${AIONUI_MSG_APPLICATION_USING_IT_EN}$\r$\n$AionUiLockerListEn$\r$\n$\r$\n${AIONUI_MSG_CLOSE_LISTED_RETRY_EN}$\r$\n$\r$\n${AIONUI_MSG_INSTALLER_LOG_EN}:$\r$\n$AionUiSessionLogPath" /SD IDCANCEL IDRETRY ${_RETRY_LABEL} IDCANCEL ${_CANCEL_LABEL}
     ${EndIf}
   ${EndIf}
   Goto ${_CONTINUE_LABEL}
@@ -279,7 +279,7 @@ Var /GLOBAL AionUiCurrentOutDir
       ${If} $AionUiCheckResult == 0
         IntOp $AionUiCloseRetries $AionUiCloseRetries + 1
         ${If} $AionUiCloseRetries > 10
-          MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "${AIONUI_MSG_CLOSE_OR_REMOVE_PREVIOUS_ZH}$\r$\n$\r$\n${AIONUI_MSG_MAY_USE_INSTALL_DIR_ZH}$\r$\n$INSTDIR$\r$\n$\r$\n${AIONUI_MSG_RETRY_AFTER_CLOSING_DIR_ZH}$\r$\n$\r$\n${AIONUI_MSG_BLOCK_SEPARATOR}$\r$\n$\r$\n${AIONUI_MSG_CLOSE_OR_REMOVE_PREVIOUS_EN}$\r$\n$\r$\n${AIONUI_MSG_MAY_USE_INSTALL_DIR_EN}$\r$\n$INSTDIR$\r$\n$\r$\n${AIONUI_MSG_RETRY_AFTER_CLOSING_DIR_EN}" /SD IDCANCEL IDRETRY aionui_wait_for_close
+          MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "${AIONUI_MSG_CLOSE_OR_REMOVE_PREVIOUS_EN}$\r$\n$\r$\n${AIONUI_MSG_MAY_USE_INSTALL_DIR_EN}$\r$\n$INSTDIR$\r$\n$\r$\n${AIONUI_MSG_RETRY_AFTER_CLOSING_DIR_EN}" /SD IDCANCEL IDRETRY aionui_wait_for_close
           !insertmacro AIONUI_WRITE_INSTALLER_LAST_FAILURE_MARKER
           !insertmacro AIONUI_FAIL_REPORTABLE_BILINGUAL_DIAGNOSTICS ${AIONUI_E_INSTALL_DIR_REMOVE_OR_LOCKED} "event=session-end result=fail code=${AIONUI_E_INSTALL_DIR_REMOVE_OR_LOCKED} phase=app-cannot-be-closed retryCount=$AionUiCloseRetries instDir=$INSTDIR" "${AIONUI_MSG_CLOSE_OR_REMOVE_PREVIOUS_EN}" "${AIONUI_MSG_CLOSE_OR_REMOVE_PREVIOUS_ZH}" "${AIONUI_MSG_CLOSE_INSTALL_DIR_ACTION_EN}" "${AIONUI_MSG_CLOSE_INSTALL_DIR_ACTION_ZH}" "app-cannot-be-closed retryCount=$AionUiCloseRetries instDir=$INSTDIR" "app-cannot-be-closed retryCount=$AionUiCloseRetries instDir=$INSTDIR"
         ${Else}
