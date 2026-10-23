@@ -7,6 +7,7 @@ import {
   loadBotPreviews,
   PIN_ZONE_ID,
   previewFromMessages,
+  pruneSidebarLayout,
   SECTION_PREFIX,
   setSectionCollapsed,
 } from '@/renderer/pages/Jr/JrSidebar/groupBots';
@@ -31,11 +32,19 @@ const memoryStore = (): KeyValueStore => {
 };
 
 describe('groupBots layout', () => {
+  it('forgets pins and order entries that do not belong to a visible bot', () => {
+    const orphan = 'aa67fc9c-923b-48d2-8c7a-7ec88aecdb11';
+    const saved = { pinnedIds: ['3', orphan], order: [orphan, '1', '2'], collapsed: { vendas: true } };
+    const next = pruneSidebarLayout(bots, saved);
+    expect(next).toEqual({ pinnedIds: ['3'], order: ['1', '2'], collapsed: { vendas: true } });
+    expect(pruneSidebarLayout(bots, next)).toBe(next);
+  });
+
   it('puts saved pins above sections and keeps the saved order inside a folder', () => {
     const grouped = groupBots(bots, { pinnedIds: ['3', 'missing'], order: ['2', '1', '3'], collapsed: {} });
     expect(grouped.pinned.map((bot) => bot.id)).toEqual(['3']);
-    expect(grouped.sections.map((section) => section.id)).toEqual(['vendas', 'compras']);
-    expect(grouped.sections[0]?.bots.map((bot) => bot.id)).toEqual(['2']);
+    expect(grouped.loose.map((bot) => bot.id)).toEqual(['2', '1']);
+    expect(grouped.sections).toEqual([]);
   });
 
   it('ignores a pinned id that is not a current bot', () => {
@@ -56,8 +65,9 @@ describe('applySidebarDrag', () => {
     expect(next.pinnedIds).toEqual(['1', '2', '3']);
   });
 
-  it('unpins a bot dropped on a section and moves it beside that section', () => {
-    const next = applySidebarDrag(bots, { ...layout, pinnedIds: ['1'] }, '1', `${SECTION_PREFIX}vendas`);
+  it('unpins a bot dropped on a user section and moves it beside that section', () => {
+    const sectioned = bots.map((bot) => (bot.id === '1' ? bot : { ...bot, section: 'vendas' }));
+    const next = applySidebarDrag(sectioned, { ...layout, pinnedIds: ['1'] }, '1', `${SECTION_PREFIX}vendas`);
     expect(next.pinnedIds).toEqual([]);
     expect(next.order.indexOf('1')).toBeLessThan(next.order.indexOf('2'));
   });

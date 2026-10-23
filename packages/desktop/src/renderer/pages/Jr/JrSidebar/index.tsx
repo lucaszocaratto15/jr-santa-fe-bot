@@ -1,6 +1,6 @@
 import { ipcBridge } from '@/common';
 import type { TTeam } from '@/common/types/team/teamTypes';
-import { Button, Spin } from '@arco-design/web-react';
+import { Button, Dropdown, Menu, Spin } from '@arco-design/web-react';
 import {
   DndContext,
   PointerSensor,
@@ -24,6 +24,7 @@ import useSWR from 'swr';
 import ConversationSearchPopover from '@/renderer/pages/conversation/GroupedHistory/ConversationSearchPopover';
 import { listJrBots, type JrBot } from '../jrBots';
 import JrCharacter from '../JrCharacter';
+import { isJrAdmin } from '@/common/config/clientSettings';
 import { useJrAccess } from '../Access/context';
 import {
   applySidebarDrag,
@@ -31,6 +32,7 @@ import {
   isSectionExpanded,
   loadBotPreviews,
   PIN_ZONE_ID,
+  pruneSidebarLayout,
   SECTION_PREFIX,
   setSectionCollapsed,
   teamChatsForBots,
@@ -105,7 +107,7 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
-  const { state } = useJrAccess();
+  const { state, logout } = useJrAccess();
   const { user } = useAuth();
   const [connectionsOpen, setConnectionsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
@@ -138,6 +140,17 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
       : profile.role === 'employee'
         ? t('common.jr.access.roleEmployee')
         : null;
+
+  useEffect(() => {
+    // SWR starts as undefined. Pruning that empty placeholder would wipe saved pins.
+    if (!Array.isArray(bots)) return;
+    setLayout((current) => {
+      const next = pruneSidebarLayout(bots, current);
+      if (next === current) return current;
+      writeSidebarLayout(next);
+      return next;
+    });
+  }, [bots]);
 
   useEffect(() => {
     if (!ipcBridge.database?.getConversationMessages) return undefined;
@@ -174,6 +187,7 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
 
   const sortableIds = [
     ...grouped.pinned.map((bot) => bot.id),
+    ...grouped.loose.map((bot) => bot.id),
     ...grouped.sections.flatMap((section) =>
       isSectionExpanded(
         layout,
@@ -230,6 +244,15 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
           <div className={styles.list}>
             {error && <span className={styles.hint}>{t('common.jr.loadError')}</span>}
             {!error && botList.length === 0 && <span className={styles.hint}>{t('common.jr.noBots')}</span>}
+            {grouped.loose.map((bot) => (
+              <BotRow
+                key={bot.id}
+                bot={bot}
+                preview={previews[bot.id] ?? ''}
+                active={activeBot === bot.id}
+                onOpen={() => openBot(bot)}
+              />
+            ))}
             {grouped.sections.map((section) => {
               const expanded = isSectionExpanded(
                 layout,
@@ -293,17 +316,38 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
         </SortableContext>
       </DndContext>
       <div className={styles.bottom}>
-        <Button type='text' className={styles.profile} onClick={() => setSettingsTab('general')}>
-          <span className={styles.profileIdentity}>
-            <span className={styles.initials} aria-hidden='true'>
-              {initials}
+        <Dropdown
+          trigger='click'
+          position='tl'
+          droplist={
+            <Menu
+              onClickMenuItem={(key) => {
+                if (key === 'admin') {
+                  setSettingsTab(null);
+                  void navigate('/admin');
+                }
+                if (key === 'settings') setSettingsTab('general');
+                if (key === 'sign-out') void logout();
+              }}
+            >
+              {isJrAdmin(state.user) && <Menu.Item key='admin'>{t('common.jr.access.adminTitle')}</Menu.Item>}
+              <Menu.Item key='settings'>{t('common.settings')}</Menu.Item>
+              <Menu.Item key='sign-out'>{t('common.jr.access.signOut')}</Menu.Item>
+            </Menu>
+          }
+        >
+          <Button type='text' className={styles.profile} aria-haspopup='menu'>
+            <span className={styles.profileIdentity}>
+              <span className={styles.initials} aria-hidden='true'>
+                {initials}
+              </span>
+              <span className={styles.profileText}>
+                <span className={styles.profileName}>{profileName}</span>
+                {roleLabel ? <span className={styles.profileRole}>{roleLabel}</span> : null}
+              </span>
             </span>
-            <span className={styles.profileText}>
-              <span className={styles.profileName}>{profileName}</span>
-              {roleLabel ? <span className={styles.profileRole}>{roleLabel}</span> : null}
-            </span>
-          </span>
-        </Button>
+          </Button>
+        </Dropdown>
         <Button
           type='text'
           className={styles.iconButton}

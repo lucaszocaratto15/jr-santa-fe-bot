@@ -30,29 +30,42 @@ const memoryStore = (): KeyValueStore => {
 
 describe('groupBots', () => {
   it('returns no pins or sections for an empty list', () => {
-    expect(groupBots([])).toEqual({ pinned: [], sections: [] });
+    expect(groupBots([])).toEqual({ pinned: [], loose: [], sections: [] });
   });
 
-  it('keeps every bot in a folder section until that bot is pinned', () => {
+  it('lists bots directly until a person gives them a section', () => {
     const bots = [
       { id: '1', name: 'A', workspace: 'C:\\work\\compras' },
-      { id: '2', name: 'B', workspace: '/tmp/vendas' },
-      { id: '3', name: 'C', workspace: '/tmp/vendas' },
+      { id: '2', name: 'B', workspace: '/tmp/vendas', section: 'Equipe' },
+      { id: '3', name: 'C', workspace: '/tmp/vendas', section: 'Equipe' },
       { id: '4', name: 'D', workspace: '/tmp/vendas' },
       { id: '5', name: 'E', workspace: 'D:\\' },
     ];
     const grouped = groupBots(bots);
     expect(grouped.pinned).toEqual([]);
-    expect(grouped.sections).toEqual([
-      { id: 'compras', label: 'compras', bots: [bots[0]] },
-      { id: 'vendas', label: 'vendas', bots: [bots[1], bots[2], bots[3]] },
-      { id: UNSECTIONED_ID, label: UNSECTIONED_ID, bots: [bots[4]] },
-    ]);
+    expect(grouped.loose).toEqual([bots[0], bots[3], bots[4]]);
+    expect(grouped.sections).toEqual([{ id: 'Equipe', label: 'Equipe', bots: [bots[1], bots[2]] }]);
   });
 
   it('treats a drive root as unsectioned', () => {
     expect(workspaceFolderLabel('C:\\')).toBe(UNSECTIONED_ID);
     expect(workspaceFolderLabel('   ')).toBe(UNSECTIONED_ID);
+  });
+
+  it('does not turn jr-workspaces into a section and still shows the named bot', () => {
+    const id = 'aa67fc9c-923b-48d2-8c7a-7ec88aecdb11';
+    expect(workspaceFolderLabel(`/Users/owner/Library/Application Support/jr-workspaces/${id}`)).toBe('jr-workspaces');
+    const grouped = groupBots([
+      { id, name: id, workspace: `/tmp/jr-workspaces/${id}` },
+      {
+        id: 'bot-1',
+        name: 'Compras',
+        workspace: `/Users/owner/Library/Application Support/JR Bot/jr-workspaces/${id}`,
+      },
+    ]);
+    expect(grouped.loose.map((bot) => bot.name)).toEqual(['Compras']);
+    expect(grouped.sections).toEqual([]);
+    expect(grouped.sections.some((section) => section.label === 'jr-workspaces' || section.label === id)).toBe(false);
   });
 });
 
@@ -122,6 +135,18 @@ describe('teamChatsForBots', () => {
       new Set(['a', 'b'])
     );
     expect(chats.map((chat) => chat.id)).toEqual(['ok']);
+  });
+
+  it('hides a team titled with a raw id and keeps a team whose id is a uuid', () => {
+    const id = 'aa67fc9c-923b-48d2-8c7a-7ec88aecdb11';
+    const chats = teamChatsForBots(
+      [
+        { id, name: 'Equipe', assistants: [{ assistant_id: 'a' }, { assistant_id: 'b' }] },
+        { id: 'titled-with-id', name: id, assistants: [{ assistant_id: 'a' }, { assistant_id: 'b' }] },
+      ],
+      new Set(['a', 'b'])
+    );
+    expect(chats.map((chat) => chat.id)).toEqual([id]);
   });
 });
 

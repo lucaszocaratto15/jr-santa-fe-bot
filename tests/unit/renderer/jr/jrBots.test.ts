@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { BackendHttpError } from '@/common/adapter/httpBridge';
 import type { Assistant } from '@/common/types/agent/assistantTypes';
 import type { IProvider } from '@/common/config/storage';
 
@@ -21,6 +22,9 @@ const mocks = vi.hoisted(() => ({
   systemInfo: vi.fn(),
   createMcp: vi.fn(),
   toggleMcp: vi.fn(),
+  ensure: vi.fn(),
+  readProviders: vi.fn(),
+  report: vi.fn(),
 }));
 vi.mock('@/common', () => ({
   ipcBridge: {
@@ -36,6 +40,11 @@ vi.mock('@/common', () => ({
       listAvailableSkills: { invoke: mocks.skills },
     },
     mode: { listProviders: { invoke: mocks.providers } },
+    jr: {
+      ensureGateway: { invoke: mocks.ensure },
+      readProviders: { invoke: mocks.readProviders },
+      reportOpenError: { invoke: mocks.report },
+    },
     conversation: {
       create: { invoke: mocks.conversation },
       get: { invoke: mocks.getConversation },
@@ -58,6 +67,7 @@ vi.mock('@/renderer/services/clientBusinessSettings', () => ({
 import {
   JR_DEFAULT_INSTRUCTIONS,
   listJrBots,
+  reportJrOpenError,
   saveJrBot,
   selectJrModel,
   startJrConversation,
@@ -90,12 +100,26 @@ beforeEach(() => {
   mocks.skills.mockResolvedValue([]);
   mocks.updateConversation.mockResolvedValue(true);
   mocks.providers.mockResolvedValue([provider]);
+  mocks.ensure.mockResolvedValue(undefined);
+  mocks.get.mockResolvedValue({ source: 'user', engine: { agent: { type: 'aionrs' } } });
+  mocks.readProviders.mockResolvedValue([]);
+  mocks.report.mockResolvedValue(undefined);
   mocks.mcps.mockResolvedValue([]);
   mocks.systemInfo.mockResolvedValue({ cacheDir: '/tmp/jr-cache' });
   mocks.createMcp.mockRejectedValue(new Error('chrome-unavailable'));
   mocks.conversations.mockResolvedValue({ items: [], total: 0, has_more: false });
   mocks.getConversation.mockResolvedValue(null);
   mocks.conversation.mockResolvedValue({ id: 'real-conversation' });
+});
+
+it('records the open failure without a bearer token', () => {
+  const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  const secret = 'b'.repeat(64);
+  const message = reportJrOpenError(new Error(`upstream Bearer ${secret}`));
+  expect(message).toBe('upstream Bearer [redacted]');
+  expect(message).not.toContain(secret);
+  expect(mocks.report).toHaveBeenCalledWith(expect.objectContaining({ message: 'upstream Bearer [redacted]' }));
+  errorSpy.mockRestore();
 });
 
 describe('JR bot persistence', () => {
@@ -168,6 +192,20 @@ describe('JR bot persistence', () => {
     expect((await listJrBots()).map((bot) => bot.id)).toEqual(['ours']);
   });
 
+  it('drops a bot whose name is only a raw id', async () => {
+    const orphanId = 'aa67fc9c-923b-48d2-8c7a-7ec88aecdb11';
+    mocks.list.mockResolvedValue([
+      runtime,
+      { id: orphanId, name: orphanId, source: 'user', agent: { type: 'aionrs' } },
+      { id: 'ours', name: 'Nosso bot', source: 'user', agent: { type: 'aionrs' } },
+    ]);
+    mocks.readSetting.mockResolvedValue({
+      [orphanId]: { workspace: `/tmp/jr-workspaces/${orphanId}` },
+      ours: { workspace: '/tmp/ours' },
+    });
+    expect((await listJrBots()).map((bot) => bot.name)).toEqual(['Nosso bot']);
+  });
+
   it('never falls back to another provider and strips credentials from the model selection', () => {
     expect(selectJrModel([{ ...provider, name: 'Other' }])).toBeNull();
     expect(selectJrModel([{ ...provider, models: ['Other'] }])).toBeNull();
@@ -175,6 +213,62 @@ describe('JR bot persistence', () => {
     expect(selectJrModel([provider])).toEqual(
       expect.objectContaining({ id: 'jr-provider', use_model: 'MiniMax-M3.1-Flash', api_key: '' })
     );
+    expect(
+      selectJrModel([{ ...provider, models: [{ id: 'MiniMax-M3.1-Flash' }] as unknown as string[] }])?.use_model
+    ).toBe('MiniMax-M3.1-Flash');
+    expect(selectJrModel([{ ...provider, models: '["MiniMax-M3.1-Flash"]' as unknown as string[] }])?.use_model).toBe(
+      'MiniMax-M3.1-Flash'
+    );
+    expect(selectJrModel([{ ...provider, enabled: 0 as unknown as boolean }])).toBeNull();
+  });
+
+  it('opens the conversation when gateway registration fails but the provider is already listed', async () => {
+    mocks.ensure.mockRejectedValue(new Error('gateway down'));
+    const result = await startJrConversation({ id: 'jr-bot', ...input });
+    expect(result.id).toBe('real-conversation');
+    expect(mocks.readProviders).not.toHaveBeenCalled();
+  });
+
+  it('reads the loopback provider list when the session list omits JR MiniMax', async () => {
+    mocks.providers.mockResolvedValue([]);
+    mocks.readProviders.mockResolvedValue([provider]);
+    await startJrConversation({ id: 'jr-bot', ...input });
+    expect(mocks.conversation).toHaveBeenCalledWith(expect.objectContaining({ name: input.name }));
+  });
+
+  it('retries conversation creation once when the assistant row is missing', async () => {
+    mocks.conversation
+      .mockRejectedValueOnce(new Error('TEAM_ASSISTANT_NOT_FOUND'))
+      .mockResolvedValueOnce({ id: 'real-conversation' });
+    await startJrConversation({ id: 'jr-bot', ...input });
+    expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ id: 'jr-bot' }));
+    expect(mocks.conversation).toHaveBeenCalledTimes(2);
+  });
+
+  it('recreates a missing assistant and then opens the conversation', async () => {
+    mocks.get.mockRejectedValue(new Error('ASSISTANT_NOT_FOUND'));
+    await startJrConversation({ id: 'jr-bot', ...input });
+    expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ id: 'jr-bot', name: input.name }));
+    expect(mocks.conversation).toHaveBeenCalled();
+  });
+
+  it('reports a missing embedded agent instead of the company-connection banner text', async () => {
+    mocks.get.mockRejectedValue(new Error('missing'));
+    mocks.list.mockResolvedValue([]);
+    await expect(startJrConversation({ id: 'jr-bot', ...input })).rejects.toThrow('Embedded agent is unavailable');
+  });
+
+  it('registers the company gateway before reading providers for a new conversation', async () => {
+    const order: string[] = [];
+    mocks.ensure.mockImplementation(async () => {
+      order.push('ensure');
+    });
+    mocks.providers.mockImplementation(async () => {
+      order.push('providers');
+      return [provider];
+    });
+    await startJrConversation({ id: 'jr-bot', ...input });
+    expect(order).toEqual(['ensure', 'providers']);
   });
 
   it('starts a real aionrs conversation in the chosen bot workspace', async () => {
@@ -335,7 +429,7 @@ describe('one persistent conversation per JR bot', () => {
     expect(mocks.updateConversation).not.toHaveBeenCalled();
   });
 
-  it('patches a bound conversation that is missing skills or Chrome', async () => {
+  it('reuses a bound conversation that is missing skills or Chrome without patching it', async () => {
     const chrome = {
       id: 'chrome-jr-1',
       name: 'chrome-jr',
@@ -351,20 +445,38 @@ describe('one persistent conversation per JR bot', () => {
     };
     mocks.readSetting.mockResolvedValue({ [bot.id]: { workspace: bot.workspace, conversationId: existing.id } });
     mocks.getConversation.mockResolvedValue(existing);
-    await startJrConversation({ ...bot, skillIds: [], useChrome: false });
+    expect(await startJrConversation({ ...bot, skillIds: [], useChrome: false })).toEqual(existing);
     expect(mocks.conversation).not.toHaveBeenCalled();
-    expect(mocks.updateConversation).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: existing.id,
-        merge_extra: true,
-        updates: expect.objectContaining({
-          extra: expect.objectContaining({
-            skills: ['planilhas'],
-            mcp_server_ids: ['chrome-jr-1'],
-          }),
-        }),
+    expect(mocks.updateConversation).not.toHaveBeenCalled();
+  });
+
+  it('reuses the stored chat when a skills or MCP patch would be rejected', async () => {
+    const chrome = {
+      id: 'chrome-jr-1',
+      name: 'chrome-jr',
+      enabled: true,
+      builtin: false,
+      transport: { type: 'stdio', command: 'npx', args: [] },
+    };
+    const existing = {
+      ...conversation,
+      id: '57c3b73d',
+      extra: { workspace: input.workspace, skills: [] as string[], mcp_server_ids: [] as string[] },
+    };
+    mocks.skills.mockResolvedValue([{ name: 'planilhas' }]);
+    mocks.mcps.mockResolvedValue([chrome]);
+    mocks.updateConversation.mockRejectedValue(
+      new BackendHttpError({
+        method: 'PATCH',
+        path: '/api/conversations/57c3b73d',
+        status: 400,
+        body: { error: 'extra.skills and MCP snapshots are immutable post-creation', code: 'BAD_REQUEST' },
       })
     );
+    mocks.conversations.mockResolvedValue({ items: [existing], total: 1, has_more: false });
+    await expect(startJrConversation(bot)).resolves.toEqual(existing);
+    expect(mocks.conversation).not.toHaveBeenCalled();
+    expect(mocks.updateConversation).not.toHaveBeenCalled();
   });
 
   it('adopts the most recent matching history and preserves its messages', async () => {

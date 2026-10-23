@@ -21,7 +21,7 @@
  */
 
 import React from 'react';
-import { render, cleanup } from '@testing-library/react';
+import { render, cleanup, waitFor } from '@testing-library/react';
 import { SWRConfig } from 'swr';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -62,7 +62,8 @@ const renderIndex = () =>
 
 beforeEach(() => {
   resetCurrentProjectForTest();
-  getConversationOrNull.mockClear();
+  getConversationOrNull.mockReset();
+  getConversationOrNull.mockImplementation(() => new Promise(() => {}));
   currentId = 'c1';
   // snapshot loaded from GET /api/conversations — every row carries project_id.
   setConversationProjectMapForTest([
@@ -93,6 +94,20 @@ describe('conversation route — synchronous project publish from list snapshot 
       </SWRConfig>
     );
     expect(getCurrentProject()).toBe('p2');
+  });
+
+  it('does not open the files panel for a JR conversation that already has a project id', () => {
+    setConversationProjectMapForTest([['c1', 'p-backfill', true]]);
+    renderIndex();
+    expect(getCurrentProject()).toBeNull();
+  });
+
+  it('closes the files panel once a loaded JR conversation reports a backfilled project', async () => {
+    getConversationOrNull.mockImplementation(
+      async () => ({ id: 'c1', type: 'aionrs', project_id: 'p-backfill' }) as TChatConversation
+    );
+    renderIndex();
+    await waitFor(() => expect(getCurrentProject()).toBeNull());
   });
 
   it('publishes null placeholder for an unknown conversation — never the previous project', () => {

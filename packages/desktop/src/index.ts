@@ -243,8 +243,11 @@ let rendererInitialLanguage: string | null = null;
 let backendMigrationsScheduled = false;
 let ensureAdminUserPromise: Promise<void> | null = null;
 
+let rendererBackendPort = 0;
 ipcMain.on('get-backend-port', (event) => {
-  event.returnValue = backendStartedOk ? backendManager.port : 0;
+  const port = backendStartedOk ? backendManager.port : 0;
+  rendererBackendPort = port;
+  event.returnValue = port;
 });
 
 ipcMain.on('get-initial-language', (event) => {
@@ -397,6 +400,13 @@ function ensureAdminUserOnce(backendPort: number): Promise<void> {
   return ensureAdminUserPromise;
 }
 
+/** The preload reads the backend port once. Reload when that snapshot is stale. */
+function reloadRendererIfPortStale(): void {
+  if (!appReadyDone || !mainWindow || mainWindow.isDestroyed() || !backendStartedOk) return;
+  if (rendererBackendPort === backendManager.port) return;
+  mainWindow.webContents.reload();
+}
+
 function markBackendReady(backendPort: number, source: string): void {
   if (backendStartedOk) return;
   console.log(`[AionUi] ${source} ready (port=${backendPort})`);
@@ -410,6 +420,7 @@ function markBackendReady(backendPort: number, source: string): void {
   broadcastBackendStartupState(null);
   void ensureAdminUserOnce(backendPort);
   scheduleBackendMigrations();
+  reloadRendererIfPortStale();
 }
 
 function resolveDebugBackendStartupFailure(): BackendStartupFailureInfo | null {
@@ -925,8 +936,20 @@ const handleAppReady = async (): Promise<void> => {
     },
     onChange: (state) => ipcBridge.jr.accessChanged.emit(state),
     stopCore: stopJrRuntime,
+    ensurePilot: () =>
+      serializeRuntime(async () => {
+        if (!backendStartedOk || !backendManager.port) return;
+        await bootstrapJrConnection(backendManager.port);
+      }),
     configureCore: (connection) =>
       serializeRuntime(async () => {
+        // A restored session asks again when a bot opens. Rewrite the provider
+        // on the core that is already running instead of restarting it.
+        if (proxy && backendStartedOk && backendManager.port) {
+          await configureJrProvider(backendManager.port, proxy.connection);
+          reloadRendererIfPortStale();
+          return;
+        }
         await proxy?.close();
         proxy = await startJrAuthProxy(connection, (notice) => {
           applyJrProxyDenial(controller, connection.token, notice, () =>
@@ -938,8 +961,10 @@ const handleAppReady = async (): Promise<void> => {
           if (!result.ok) throw new Error('JR_ACCESS_CORE_UNAVAILABLE');
           await ensureAdminUserOnce(result.port);
           await configureJrProvider(result.port, proxy.connection);
-          // Preload captures the port once; a new login must refresh that native value.
-          if (appReadyDone && mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.reload();
+          // Preload captures the port once. Login used to reload the window
+          // afterwards; a restored session starts the core before that window
+          // exists, so reload only when the renderer is still on another port.
+          reloadRendererIfPortStale();
         } catch (error) {
           await proxy.close();
           proxy = null;

@@ -11,7 +11,10 @@ import { setCurrentProject } from '@/renderer/pages/conversation/explorer/curren
 import { setCurrentConversation } from '@/renderer/pages/conversation/explorer/currentConversationStore';
 import { useAutoTitle } from '@/renderer/hooks/chat/useAutoTitle';
 import { getConversationOrNull } from '@/renderer/pages/conversation/utils/conversationCache';
-import { getSnapshotConversationProjectId } from '@/renderer/pages/conversation/GroupedHistory/hooks/useConversationListSync';
+import {
+  getSnapshotConversationProjectId,
+  snapshotHidesWorkspacePanel,
+} from '@/renderer/pages/conversation/GroupedHistory/hooks/useConversationListSync';
 
 const ChatConversationIndex: React.FC = () => {
   const { id } = useParams();
@@ -48,6 +51,11 @@ const ChatConversationIndex: React.FC = () => {
   // never a stale project. Runs before paint (layout effect) so no stale frame.
   useLayoutEffect(() => {
     if (!id) return;
+    // A JR chat never grows a files column, even after the backend backfills a project.
+    if (snapshotHidesWorkspacePanel(id)) {
+      setCurrentProject(null);
+      return;
+    }
     setCurrentProject(getSnapshotConversationProjectId(id) ?? null);
   }, [id]);
 
@@ -55,9 +63,15 @@ const ChatConversationIndex: React.FC = () => {
   // its project_id (also the backfill path — a workspace conversation's
   // project_id flips None→Some server-side and re-flows here via the refetch
   // below). `setCurrentProject` dedups, so when the sync effect already set the
-  // right value this is a no-op.
+  // right value this is a no-op. JR conversations stay without a project so the
+  // Arquivos column and its workspace-folder UUID never mount.
   useEffect(() => {
-    if (data) setCurrentProject(data.project_id ?? null);
+    if (!data) return;
+    if (data.type === 'aionrs') {
+      setCurrentProject(null);
+      return;
+    }
+    setCurrentProject(data.project_id ?? null);
   }, [data]);
 
   // Publish the active conversation id so the Layout-level Explorer's "add to

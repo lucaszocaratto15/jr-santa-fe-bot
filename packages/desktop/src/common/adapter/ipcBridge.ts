@@ -169,6 +169,9 @@ export const jr = {
   accessStatus: bridge.buildProvider<JrAccessState, void>('jr-access-status'),
   login: bridge.buildProvider<JrAccessState, { code: string }>('jr-access-login'),
   logout: bridge.buildProvider<JrAccessState, void>('jr-access-logout'),
+  ensureGateway: bridge.buildProvider<void, void>('jr-ensure-gateway'),
+  readProviders: bridge.buildProvider<IProvider[], void>('jr-read-providers'),
+  reportOpenError: bridge.buildProvider<void, { message: string; stack?: string }>('jr-report-open-error'),
   accessChanged: bridge.buildEmitter<JrAccessState>('jr-access-changed'),
   personalUsage: bridge.buildProvider<JrConnectionStatus, void>('jr-personal-usage'),
   admin: {

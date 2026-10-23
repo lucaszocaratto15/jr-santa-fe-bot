@@ -7,9 +7,10 @@ const mocks = vi.hoisted(() => ({
   start: vi.fn(),
   theme: vi.fn(),
   logout: vi.fn(),
+  report: vi.fn((error: unknown) => (error instanceof Error ? error.message : String(error))),
   search: vi.fn(),
   refresh: vi.fn(),
-  user: { name: 'Funcionário JR', role: 'admin' },
+  user: { id: 'owner', name: 'Lucas', role: 'admin' as const },
   bot: { id: 'bot-1', name: 'Compras', workspace: '/tmp/compras', appearance: { shape: 'cloud', color: 'red' } },
 }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
@@ -33,6 +34,7 @@ vi.mock('@/renderer/pages/Jr/jrBots', () => ({
   getJrBot: vi.fn(),
   deleteJrBot: vi.fn(),
   startJrConversation: mocks.start,
+  reportJrOpenError: (error: unknown) => mocks.report(error),
 }));
 vi.mock('@/renderer/pages/Jr/JrBotDialog', () => ({ default: () => null }));
 vi.mock('@/renderer/pages/Jr/Connections', () => ({
@@ -67,6 +69,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
   sessionStorage.clear();
+  mocks.user = { id: 'owner', name: 'Lucas', role: 'admin' };
   mocks.start.mockResolvedValue({ id: 'conversation-1' });
 });
 
@@ -87,10 +90,13 @@ it('loads bot details before opening its conversation from a summary in the side
   expect(screen.queryByLabelText('common.jr.recentChats')).not.toBeInTheDocument();
 });
 
-it('shows a localized retry when the bot conversation cannot be opened', async () => {
-  mocks.start.mockRejectedValueOnce(new Error('offline'));
+it('shows a localized retry and the underlying error when the bot conversation cannot be opened', async () => {
+  mocks.start.mockRejectedValueOnce(new Error('TEAM_ASSISTANT_NOT_FOUND'));
   render(<JrWorkspace />);
   expect(await screen.findByText('common.jr.connectionError')).toBeInTheDocument();
+  expect(screen.queryByText('TEAM_ASSISTANT_NOT_FOUND')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'common.jr.errorDetail' }));
+  expect(screen.getByText('TEAM_ASSISTANT_NOT_FOUND')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'common.jr.retry' }));
   await waitFor(() =>
     expect(mocks.navigate).toHaveBeenCalledWith('/conversation/conversation-1?bot=bot-1', { replace: true })
@@ -110,26 +116,41 @@ it('keeps search and new bot controls first, with real search and creation actio
   expect(mocks.navigate).toHaveBeenCalledWith('/guid?create=1');
 });
 
-it('opens settings from the user row with theme, administration, usage and logout', async () => {
+async function openSettingsFromUserMenu(): Promise<void> {
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: /Lucas/ }));
+  });
+  fireEvent.click(await screen.findByText('common.settings'));
+}
+
+it('opens a user menu with settings and sign out, and signs out from the account card', async () => {
   render(<JrSidebar />);
   expect(screen.queryByRole('dialog', { name: 'common.jr.look.settingsNav' })).not.toBeInTheDocument();
-  await act(async () => fireEvent.click(screen.getByRole('button', { name: /Funcionário JR/ })));
+  await act(async () => fireEvent.click(screen.getByRole('button', { name: /Lucas/ })));
+  expect(await screen.findByText('common.settings')).toBeInTheDocument();
+  fireEvent.click(screen.getByText('common.jr.access.signOut'));
+  expect(mocks.logout).toHaveBeenCalledTimes(1);
+  expect(screen.queryByRole('dialog', { name: 'common.jr.look.settingsNav' })).not.toBeInTheDocument();
+
+  mocks.logout.mockClear();
+  await act(async () => fireEvent.click(screen.getByRole('button', { name: /Lucas/ })));
+  fireEvent.click(screen.getByText('common.settings'));
   expect(await screen.findByRole('dialog', { name: 'common.jr.look.settingsNav' })).toBeInTheDocument();
-  expect(screen.getByText('common.jr.access.adminTitle')).toBeInTheDocument();
-  expect(screen.getByText('common.jr.access.exit')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'common.jr.access.adminTitle' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'common.jr.access.signOut' })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'common.jr.look.theme' }));
   fireEvent.click(await screen.findByText('common.jr.look.themeDark'));
   expect(mocks.theme).toHaveBeenCalledWith('dark');
   fireEvent.click(screen.getByRole('button', { name: 'common.jr.look.tabs.usage' }));
   expect(await screen.findByRole('heading', { name: 'common.jr.look.usageTitle' })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'common.jr.look.tabs.general' }));
-  fireEvent.click(screen.getByRole('button', { name: 'common.jr.access.exit' }));
-  expect(mocks.logout).toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'common.jr.access.signOut' }));
+  expect(mocks.logout).toHaveBeenCalledTimes(1);
 });
 
 it('closes settings from the close button', async () => {
   render(<JrSidebar />);
-  await act(async () => fireEvent.click(screen.getByRole('button', { name: /Funcionário JR/ })));
+  await openSettingsFromUserMenu();
   expect(await screen.findByRole('dialog', { name: 'common.jr.look.settingsNav' })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'common.jr.look.closeSettings' }));
   await waitFor(() =>
@@ -139,7 +160,7 @@ it('closes settings from the close button', async () => {
 
 it('keeps settings open when the dialog is clicked', async () => {
   render(<JrSidebar />);
-  await act(async () => fireEvent.click(screen.getByRole('button', { name: /Funcionário JR/ })));
+  await openSettingsFromUserMenu();
   const dialog = await screen.findByRole('dialog', { name: 'common.jr.look.settingsNav' });
   fireEvent.click(dialog);
   expect(screen.getByRole('dialog', { name: 'common.jr.look.settingsNav' })).toBeInTheDocument();
@@ -149,7 +170,7 @@ it('keeps settings open when the dialog is clicked', async () => {
 
 it('closes settings when the backdrop is clicked', async () => {
   render(<JrSidebar />);
-  await act(async () => fireEvent.click(screen.getByRole('button', { name: /Funcionário JR/ })));
+  await openSettingsFromUserMenu();
   const dialog = await screen.findByRole('dialog', { name: 'common.jr.look.settingsNav' });
   const backdrop = dialog.parentElement;
   if (!backdrop) throw new Error('settings dialog has no backdrop');
@@ -161,7 +182,7 @@ it('closes settings when the backdrop is clicked', async () => {
 
 it('leaves connectors and route traffic out of settings', async () => {
   render(<JrSidebar />);
-  await act(async () => fireEvent.click(screen.getByRole('button', { name: /Funcionário JR/ })));
+  await openSettingsFromUserMenu();
   expect(screen.queryByRole('button', { name: 'common.jr.look.tabs.connectors' })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'common.jr.look.tabs.computer' }));
   expect(screen.getByRole('button', { name: 'common.jr.look.execution' })).toBeInTheDocument();
@@ -170,7 +191,7 @@ it('leaves connectors and route traffic out of settings', async () => {
 
 it('shows example usage bars instead of an unreported placeholder', async () => {
   render(<JrSidebar />);
-  await act(async () => fireEvent.click(screen.getByRole('button', { name: /Funcionário JR/ })));
+  await openSettingsFromUserMenu();
   fireEvent.click(screen.getByRole('button', { name: 'common.jr.look.tabs.usage' }));
   const bars = await screen.findAllByRole('progressbar');
   expect(bars.map((bar) => bar.getAttribute('aria-valuemax'))).toEqual(['50000000', '50000000']);
@@ -181,7 +202,7 @@ it('shows example usage bars instead of an unreported placeholder', async () => 
 
 it('shows the update status beside the check button', async () => {
   render(<JrSidebar />);
-  await act(async () => fireEvent.click(screen.getByRole('button', { name: /Funcionário JR/ })));
+  await openSettingsFromUserMenu();
   fireEvent.click(screen.getByRole('button', { name: 'common.jr.look.tabs.updates' }));
   expect(await screen.findByText('common.jr.look.versionLabel')).toBeInTheDocument();
   await waitFor(() => expect(screen.getByRole('button', { name: 'common.jr.look.checkUpdates' })).toBeEnabled());

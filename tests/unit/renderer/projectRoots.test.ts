@@ -36,6 +36,20 @@ describe('entryToRootRef title fallback', () => {
     expect(entryToRootRef(entry({ display_name: null, display_path: 'C:\\Users\\me\\proj' })).title).toBe('proj');
   });
 
+  it('never uses a UUID workspace folder as the visible name', () => {
+    const uuid = '6fe1b6a5-7520-4e4f-8728-c6aaaaaaaaaa';
+    expect(
+      entryToRootRef(
+        entry({
+          pe_id: uuid,
+          display_name: uuid,
+          display_path: `/Users/me/Library/Application Support/JR Bot/jr-workspaces/${uuid}`,
+        })
+      ).title
+    ).toBe('jr-workspaces');
+    expect(entryToRootRef(entry({ pe_id: uuid, display_name: null, display_path: `/${uuid}` })).title).toBe('');
+  });
+
   it('last-resort falls back to pe_id when both name and path basename are empty', () => {
     expect(entryToRootRef(entry({ pe_id: 'pe-x', display_name: null, display_path: '' })).title).toBe('pe-x');
   });

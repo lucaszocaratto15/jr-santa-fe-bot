@@ -22,6 +22,105 @@ export function getJrRelayConfig(env: RelayEnvironment = process.env): JrRelayCo
   });
 }
 
+function providerRows(value: unknown): Array<{ id: string; name: string }> {
+  const rows = Array.isArray(value)
+    ? value
+    : value && typeof value === 'object' && Array.isArray((value as { data?: unknown }).data)
+      ? (value as { data: unknown[] }).data
+      : [];
+  return rows.filter(
+    (row): row is { id: string; name: string } =>
+      Boolean(row) &&
+      typeof row === 'object' &&
+      typeof (row as { id?: unknown }).id === 'string' &&
+      typeof (row as { name?: unknown }).name === 'string'
+  );
+}
+
+export type LoopbackProvider = {
+  id: string;
+  name: string;
+  platform: string;
+  base_url: string;
+  api_key: '';
+  enabled?: boolean;
+  models: string[];
+};
+
+function modelIdsFrom(value: unknown): string[] {
+  let rows: unknown[] = [];
+  if (Array.isArray(value)) rows = value;
+  else if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed.startsWith('[')) {
+      try {
+        const parsed: unknown = JSON.parse(trimmed);
+        rows = Array.isArray(parsed) ? parsed : [trimmed];
+      } catch {
+        rows = [trimmed];
+      }
+    } else if (trimmed) rows = [trimmed];
+  }
+  return rows
+    .map((model) => {
+      if (typeof model === 'string') return model;
+      if (model && typeof model === 'object' && 'id' in model && typeof model.id === 'string') return model.id;
+      return '';
+    })
+    .filter((id) => id.length > 0);
+}
+
+/** Read the local catalog the same way the gateway writer does, without a renderer session. */
+export function providersFromList(value: unknown): LoopbackProvider[] {
+  const record = value && typeof value === 'object' ? (value as { data?: unknown }) : null;
+  const rows = Array.isArray(value) ? value : Array.isArray(record?.data) ? record.data : [];
+  const result: LoopbackProvider[] = [];
+  for (const row of rows) {
+    if (!row || typeof row !== 'object') continue;
+    const item = row as {
+      id?: unknown;
+      name?: unknown;
+      platform?: unknown;
+      base_url?: unknown;
+      enabled?: unknown;
+      models?: unknown;
+    };
+    if (typeof item.id !== 'string' || typeof item.name !== 'string') continue;
+    const enabled =
+      item.enabled === true || item.enabled === 1
+        ? true
+        : item.enabled === false || item.enabled === 0
+          ? false
+          : undefined;
+    result.push({
+      id: item.id,
+      name: item.name,
+      platform: typeof item.platform === 'string' ? item.platform : '',
+      base_url: typeof item.base_url === 'string' ? item.base_url : '',
+      api_key: '',
+      ...(enabled === undefined ? {} : { enabled }),
+      models: modelIdsFrom(item.models),
+    });
+  }
+  return result;
+}
+
+export async function readLoopbackProviders(port: number, request: typeof fetch = fetch): Promise<LoopbackProvider[]> {
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) return [];
+  const response = await request(`http://127.0.0.1:${port}/api/providers`, {
+    redirect: 'error',
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!response.ok) throw new Error(`Provider list failed (${response.status})`);
+  return providersFromList(await response.json());
+}
+
+function providerAccepted(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  const body = value as { success?: unknown; id?: unknown; data?: { id?: unknown } };
+  return body.success === true || typeof body.id === 'string' || typeof body.data?.id === 'string';
+}
+
 function validateLocalConnection(config: JrRelayConfig): JrRelayConfig {
   let url: URL;
   try {
@@ -69,14 +168,14 @@ export async function configureJrProvider(
   const options = { redirect: 'error' as const, signal: AbortSignal.timeout(10000) };
   const listed = await request(base, options);
   if (!listed.ok) throw new Error('Company connection could not be configured');
-  const list = (await listed.json()) as { data?: Array<{ id: string; name: string }> };
-  const existing = list.data?.find((provider) => provider.name === 'JR MiniMax');
+  const existing = providerRows(await listed.json()).find((provider) => provider.name === 'JR MiniMax');
   const body = {
     name: 'JR MiniMax',
     platform: 'openai',
     base_url: config.url,
     api_key: config.token,
     models: [config.model],
+    enabled: true,
     capabilities: [{ type: 'text' }, { type: 'function_calling' }],
     context_limit: 65536,
     model_settings: { [config.model]: { openai_api_mode: 'chat_completions' } },
@@ -89,6 +188,5 @@ export async function configureJrProvider(
     body: JSON.stringify(body),
   });
   if (!response.ok) throw new Error('Company connection could not be configured');
-  const result = (await response.json()) as { success?: boolean };
-  if (!result.success) throw new Error('Company connection was not accepted');
+  if (!providerAccepted(await response.json())) throw new Error('Company connection was not accepted');
 }
