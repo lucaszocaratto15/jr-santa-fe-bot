@@ -54,6 +54,17 @@ describe('groupBots', () => {
     expect(workspaceFolderLabel('C:\\')).toBe(UNSECTIONED_ID);
     expect(workspaceFolderLabel('   ')).toBe(UNSECTIONED_ID);
   });
+
+  it('does not use a workspace uuid as the section label', () => {
+    const id = 'aa67fc9c-923b-48d2-8c7a-7ec88aecdb11';
+    expect(workspaceFolderLabel(`/Users/owner/Library/Application Support/jr-workspaces/${id}`)).toBe('jr-workspaces');
+    const grouped = groupBots([
+      { id, name: id, workspace: `/tmp/jr-workspaces/${id}` },
+      { id: 'bot-1', name: 'Compras', workspace: `/tmp/jr-workspaces/${id}` },
+    ]);
+    expect(grouped.sections.flatMap((section) => section.bots.map((bot) => bot.name))).toEqual(['Compras']);
+    expect(grouped.sections.some((section) => section.label === id)).toBe(false);
+  });
 });
 
 describe('usageMeterFromSnapshot', () => {
@@ -122,6 +133,18 @@ describe('teamChatsForBots', () => {
       new Set(['a', 'b'])
     );
     expect(chats.map((chat) => chat.id)).toEqual(['ok']);
+  });
+
+  it('hides a team titled with a raw id and keeps a team whose id is a uuid', () => {
+    const id = 'aa67fc9c-923b-48d2-8c7a-7ec88aecdb11';
+    const chats = teamChatsForBots(
+      [
+        { id, name: 'Equipe', assistants: [{ assistant_id: 'a' }, { assistant_id: 'b' }] },
+        { id: 'titled-with-id', name: id, assistants: [{ assistant_id: 'a' }, { assistant_id: 'b' }] },
+      ],
+      new Set(['a', 'b'])
+    );
+    expect(chats.map((chat) => chat.id)).toEqual([id]);
   });
 });
 

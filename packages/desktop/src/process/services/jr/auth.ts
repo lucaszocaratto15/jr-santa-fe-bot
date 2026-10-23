@@ -33,6 +33,8 @@ type ControllerOptions = {
   url: string | null;
   store: JrSessionStore;
   configureCore: (connection: JrRelayConfig) => Promise<void>;
+  /** Re-register the local pilot relay when this install is not using the company session. */
+  ensurePilot?: () => Promise<void>;
   stopCore: () => Promise<void>;
   onChange: (state: JrAccessState) => void;
   request?: typeof fetch;
@@ -493,6 +495,24 @@ export class JrAccessController {
     } finally {
       this.authenticating = false;
     }
+  }
+  /**
+   * Register the local JR MiniMax gateway again.
+   * A restored session already passed login, so opening a bot and "Tentar novamente"
+   * must be able to rewrite the provider without asking for the invite.
+   */
+  async ensureGateway(): Promise<void> {
+    if (this.options.pilot) {
+      await this.options.ensurePilot?.();
+      return;
+    }
+    if (this.current.status !== 'authenticated' || !this.saved?.token || !this.options.url)
+      return fail('JR_ACCESS_REQUIRED');
+    await this.options.configureCore({
+      url: `${this.options.url}/v1`,
+      token: this.saved.token,
+      model: 'MiniMax-M3.1-Flash',
+    });
   }
   async logout(): Promise<JrAccessState> {
     return this.blockTransitions(async () => {

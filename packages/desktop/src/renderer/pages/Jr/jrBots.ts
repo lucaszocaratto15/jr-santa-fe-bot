@@ -4,6 +4,7 @@ import { isAionrsAssistant } from '@/common/types/agent/assistantTypes';
 import { getClientBusinessSetting, setClientBusinessSetting } from '@/renderer/services/clientBusinessSettings';
 import type { ClientBusinessSettingMap, JrAppearance } from '@/common/config/clientSettings';
 import { normalizeAppearance } from './botAppearance';
+import { isPresentableBot } from './JrSidebar/groupBots';
 import { connectionPayload, createChromeDraft, isGmailServer, isJrChromeServer } from './Connections/connections';
 import { toSessionMcpServer } from '@/renderer/hooks/mcp/catalog';
 import { getConversationOrNull, refreshConversationCache } from '@/renderer/pages/conversation/utils/conversationCache';
@@ -133,7 +134,8 @@ export async function listJrBots(): Promise<JrBot[]> {
         { name: assistant.name, instructions: assistant.context ?? '', teamSelectable: assistant.team_selectable },
         enforcedSkillIds(workspaces[assistant.id].skillIds, installed)
       )
-    );
+    )
+    .filter((bot) => isPresentableBot(bot));
 }
 
 export async function getJrBot(id: string): Promise<JrBot> {
@@ -234,11 +236,25 @@ export async function deleteJrBot(id: string): Promise<void> {
   await setClientBusinessSetting('jr.botWorkspaces', workspaces);
 }
 
-export function selectJrModel(providers: IProvider[]): TProviderWithModel | null {
-  const provider = providers.find(
-    (item) => item.name === JR_PROVIDER && item.enabled !== false && item.models.includes(JR_MODEL)
+function listedModelId(model: unknown): string {
+  if (typeof model === 'string') return model;
+  if (model && typeof model === 'object' && 'id' in model && typeof model.id === 'string') return model.id;
+  return '';
+}
+
+export function selectJrModel(providers: IProvider[] | null | undefined): TProviderWithModel | null {
+  const provider = (providers ?? []).find(
+    (item) =>
+      item.name === JR_PROVIDER &&
+      item.enabled !== false &&
+      (Array.isArray(item.models) ? item.models : []).some((model) => listedModelId(model) === JR_MODEL)
   );
   return provider ? { ...provider, api_key: '', use_model: JR_MODEL } : null;
+}
+
+/** Ask the main process to register the local gateway. Safe to call on every open. */
+async function ensureJrGateway(): Promise<void> {
+  await ipcBridge.jr.ensureGateway.invoke();
 }
 
 /** Create or enable the app Chrome connector so a new bot can use it immediately. */
@@ -359,6 +375,7 @@ async function resolveJrConversation(bot: JrBot): Promise<TChatConversation> {
     .toSorted((a, b) => b.modified_at - a.modified_at || b.created_at - a.created_at)[0];
   if (previous) return alignConversationPolicy(await bind(previous), skillIds);
   if (history.has_more) throw new Error('Conversation history is incomplete');
+  await ensureJrGateway();
   const model = selectJrModel(await ipcBridge.mode.listProviders.invoke());
   if (!model) throw new Error('JR MiniMax connection is unavailable');
   const servers = await jrConversationServers();

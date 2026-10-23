@@ -87,7 +87,23 @@ describe('company access state', () => {
     await second.controller.initialize();
     expect(second.controller.state).toEqual({ status: 'authenticated', user });
     expect(second.request.mock.calls.some((call) => String(call[0]).endsWith('/auth/login'))).toBe(false);
+    expect(second.configureCore).toHaveBeenCalledWith({ url: url + '/v1', token, model: 'MiniMax-M3.1-Flash' });
     expect(JSON.stringify(second.controller.state)).not.toContain(token);
+  });
+
+  it('registers the gateway again when a restored session retries the connection', async () => {
+    const { controller, configureCore } = setup(stored);
+    await controller.initialize();
+    configureCore.mockClear();
+    await controller.ensureGateway();
+    expect(configureCore).toHaveBeenCalledWith({ url: url + '/v1', token, model: 'MiniMax-M3.1-Flash' });
+  });
+
+  it('does not register the gateway when nobody is signed in', async () => {
+    const { controller, configureCore } = setup();
+    await controller.initialize();
+    await expect(controller.ensureGateway()).rejects.toThrow('JR_ACCESS_REQUIRED');
+    expect(configureCore).not.toHaveBeenCalled();
   });
 
   it('rejects a revoked session during startup before the local agent starts and clears the stored token', async () => {

@@ -397,6 +397,7 @@
       "unconfigured": "O serviço da empresa ainda não está configurado. Procure o administrador.",
       "pilot": "Edição de desenvolvimento",
       "exit": "Sair",
+      "signOut": "Sair da conta",
       "adminTitle": "Administrativo",
       "roleAdmin": "Administrador",
       "roleEmployee": "Funcionário",

@@ -22,6 +22,27 @@ export function getJrRelayConfig(env: RelayEnvironment = process.env): JrRelayCo
   });
 }
 
+function providerRows(value: unknown): Array<{ id: string; name: string }> {
+  const rows = Array.isArray(value)
+    ? value
+    : value && typeof value === 'object' && Array.isArray((value as { data?: unknown }).data)
+      ? (value as { data: unknown[] }).data
+      : [];
+  return rows.filter(
+    (row): row is { id: string; name: string } =>
+      Boolean(row) &&
+      typeof row === 'object' &&
+      typeof (row as { id?: unknown }).id === 'string' &&
+      typeof (row as { name?: unknown }).name === 'string'
+  );
+}
+
+function providerAccepted(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  const body = value as { success?: unknown; id?: unknown; data?: { id?: unknown } };
+  return body.success === true || typeof body.id === 'string' || typeof body.data?.id === 'string';
+}
+
 function validateLocalConnection(config: JrRelayConfig): JrRelayConfig {
   let url: URL;
   try {
@@ -69,14 +90,14 @@ export async function configureJrProvider(
   const options = { redirect: 'error' as const, signal: AbortSignal.timeout(10000) };
   const listed = await request(base, options);
   if (!listed.ok) throw new Error('Company connection could not be configured');
-  const list = (await listed.json()) as { data?: Array<{ id: string; name: string }> };
-  const existing = list.data?.find((provider) => provider.name === 'JR MiniMax');
+  const existing = providerRows(await listed.json()).find((provider) => provider.name === 'JR MiniMax');
   const body = {
     name: 'JR MiniMax',
     platform: 'openai',
     base_url: config.url,
     api_key: config.token,
     models: [config.model],
+    enabled: true,
     capabilities: [{ type: 'text' }, { type: 'function_calling' }],
     context_limit: 65536,
     model_settings: { [config.model]: { openai_api_mode: 'chat_completions' } },
@@ -89,6 +110,5 @@ export async function configureJrProvider(
     body: JSON.stringify(body),
   });
   if (!response.ok) throw new Error('Company connection could not be configured');
-  const result = (await response.json()) as { success?: boolean };
-  if (!result.success) throw new Error('Company connection was not accepted');
+  if (!providerAccepted(await response.json())) throw new Error('Company connection was not accepted');
 }

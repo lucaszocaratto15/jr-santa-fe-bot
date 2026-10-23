@@ -117,6 +117,7 @@ export function initApplicationBridge(): void {
   ipcBridge.jr.accessStatus.provider(() => getJrAccessController().accessStatus());
   ipcBridge.jr.login.provider((input) => getJrAccessController().login(input));
   ipcBridge.jr.logout.provider(() => getJrAccessController().logout());
+  ipcBridge.jr.ensureGateway.provider(() => getJrAccessController().ensureGateway());
   ipcBridge.jr.personalUsage.provider(() => getJrAccessController().personalUsage());
   ipcBridge.jr.admin.list.provider(() => getJrAccessController().listEmployees());
   ipcBridge.jr.admin.createInvite.provider((input) => getJrAccessController().createInvite(input));

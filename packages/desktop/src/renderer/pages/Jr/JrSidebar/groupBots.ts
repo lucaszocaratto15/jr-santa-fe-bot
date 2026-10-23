@@ -27,14 +27,37 @@ export type SidebarLayout = {
 
 export const EMPTY_SIDEBAR_LAYOUT: SidebarLayout = { pinnedIds: [], order: [], collapsed: {} };
 
+/** A bare UUID is an internal id, never a name a person chose. */
+export function isRawIdentifier(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.trim());
+}
+
+/** Hide a bot whose only label is its id. Real names, including one-letter names, stay. */
+export function isPresentableBot(bot: { id: string; name: string }): boolean {
+  const name = bot.name.trim();
+  return name.length > 0 && name !== bot.id && !isRawIdentifier(name);
+}
+
 /** Last directory of a workspace path. Windows and POSIX separators are both accepted. */
 export function workspaceFolderLabel(workspace: string): string {
   const trimmed = workspace.trim().replace(/[\\/]+$/, '');
   if (!trimmed) return UNSECTIONED_ID;
   const parts = trimmed.split(/[\\/]/).filter((part) => part.length > 0);
-  const name = parts[parts.length - 1] ?? '';
-  if (!name || /^[A-Za-z]:$/.test(name)) return UNSECTIONED_ID;
-  return name;
+  for (let index = parts.length - 1; index >= 0; index -= 1) {
+    const name = parts[index] ?? '';
+    if (!name || /^[A-Za-z]:$/.test(name) || isRawIdentifier(name)) continue;
+    return name;
+  }
+  return UNSECTIONED_ID;
+}
+
+/** Drop saved pins and order entries that no longer match a visible bot. */
+export function pruneSidebarLayout(bots: readonly { id: string }[], layout: SidebarLayout): SidebarLayout {
+  const ids = new Set(bots.map((bot) => bot.id));
+  const pinnedIds = layout.pinnedIds.filter((id) => ids.has(id));
+  const order = layout.order.filter((id) => ids.has(id));
+  if (pinnedIds.length === layout.pinnedIds.length && order.length === layout.order.length) return layout;
+  return { ...layout, pinnedIds, order };
 }
 
 function uniqueStrings(value: unknown): string[] {
@@ -91,7 +114,8 @@ export function groupBots<T extends GroupableBot>(
   bots: readonly T[],
   layout: SidebarLayout = EMPTY_SIDEBAR_LAYOUT
 ): { pinned: T[]; sections: BotSection<T>[] } {
-  const byId = new Map(bots.map((bot) => [bot.id, bot]));
+  const visible = bots.filter((bot) => isPresentableBot(bot));
+  const byId = new Map(visible.map((bot) => [bot.id, bot]));
   const pinned: T[] = [];
   const pinnedIds = new Set<string>();
   for (const id of layout.pinnedIds) {
@@ -101,7 +125,7 @@ export function groupBots<T extends GroupableBot>(
     pinned.push(bot);
   }
   const groups = new Map<string, T[]>();
-  for (const bot of orderedBots(bots, layout.order)) {
+  for (const bot of orderedBots(visible, layout.order)) {
     if (pinnedIds.has(bot.id)) continue;
     const label = workspaceFolderLabel(bot.workspace);
     const list = groups.get(label);
@@ -256,6 +280,7 @@ export async function loadBotPreviews(
 
 export type TeamChatRef = {
   id: string;
+  name?: string;
   assistants?: Array<{ assistant_id?: string | null }>;
 };
 
@@ -263,6 +288,7 @@ export type TeamChatRef = {
 export function teamChatsForBots<T extends TeamChatRef>(teams: readonly T[], botIds: ReadonlySet<string>): T[] {
   return teams.filter(
     (team) =>
+      !isRawIdentifier(team.name ?? '') &&
       Array.isArray(team.assistants) &&
       team.assistants.length > 1 &&
       team.assistants.every(

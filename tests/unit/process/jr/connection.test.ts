@@ -33,8 +33,28 @@ it('registers the fixed JR provider with only the temporary token', async () => 
     .mockResolvedValueOnce(Response.json({ success: true, data: { id: 'provider' } }));
   await bootstrapJrConnection(8000, env, request);
   const body = JSON.parse(request.mock.calls[1][1].body);
-  expect(body).toMatchObject({ name: 'JR MiniMax', api_key: env.JR_RELAY_TOKEN, models: ['MiniMax-M3.1-Flash'] });
+  expect(body).toMatchObject({
+    name: 'JR MiniMax',
+    api_key: env.JR_RELAY_TOKEN,
+    models: ['MiniMax-M3.1-Flash'],
+    enabled: true,
+  });
   expect(request.mock.calls[1][0]).toBe('http://127.0.0.1:8000/api/providers');
+});
+
+it('reenables an existing JR provider instead of leaving it disabled', async () => {
+  const request = vi
+    .fn()
+    .mockResolvedValueOnce(Response.json({ success: true, data: [{ id: 'provider-1', name: 'JR MiniMax' }] }))
+    .mockResolvedValueOnce(Response.json({ success: true, data: { id: 'provider-1' } }));
+  await configureJrProvider(
+    8000,
+    { url: env.JR_RELAY_URL, token: env.JR_RELAY_TOKEN, model: env.JR_MINIMAX_MODEL },
+    request
+  );
+  expect(request.mock.calls[1][0]).toBe('http://127.0.0.1:8000/api/providers/provider-1');
+  expect(request.mock.calls[1][1].method).toBe('PUT');
+  expect(JSON.parse(request.mock.calls[1][1].body).enabled).toBe(true);
 });
 
 it('reports unavailable usage as null and keeps source tokens out of the renderer status', async () => {

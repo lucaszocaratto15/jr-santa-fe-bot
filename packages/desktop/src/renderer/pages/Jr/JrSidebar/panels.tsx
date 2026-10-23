@@ -84,7 +84,7 @@ export const GeneralPanel: React.FC = () => {
               <span className={styles.muted}>{t('common.jr.access.pilot')}</span>
             ) : (
               <Button type='outline' onClick={() => void logout()}>
-                {t('common.jr.access.exit')}
+                {t('common.jr.access.signOut')}
               </Button>
             )}
           </div>

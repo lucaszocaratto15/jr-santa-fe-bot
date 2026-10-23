@@ -354,6 +354,7 @@ export type I18nKey =
   | 'common.jr.access.roleAdmin'
   | 'common.jr.access.roleEmployee'
   | 'common.jr.access.savePolicy'
+  | 'common.jr.access.signOut'
   | 'common.jr.access.startTime'
   | 'common.jr.access.storageUnavailable'
   | 'common.jr.access.title'

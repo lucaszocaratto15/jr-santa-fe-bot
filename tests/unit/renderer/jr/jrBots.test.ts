@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   systemInfo: vi.fn(),
   createMcp: vi.fn(),
   toggleMcp: vi.fn(),
+  ensure: vi.fn(),
 }));
 vi.mock('@/common', () => ({
   ipcBridge: {
@@ -36,6 +37,7 @@ vi.mock('@/common', () => ({
       listAvailableSkills: { invoke: mocks.skills },
     },
     mode: { listProviders: { invoke: mocks.providers } },
+    jr: { ensureGateway: { invoke: mocks.ensure } },
     conversation: {
       create: { invoke: mocks.conversation },
       get: { invoke: mocks.getConversation },
@@ -90,6 +92,7 @@ beforeEach(() => {
   mocks.skills.mockResolvedValue([]);
   mocks.updateConversation.mockResolvedValue(true);
   mocks.providers.mockResolvedValue([provider]);
+  mocks.ensure.mockResolvedValue(undefined);
   mocks.mcps.mockResolvedValue([]);
   mocks.systemInfo.mockResolvedValue({ cacheDir: '/tmp/jr-cache' });
   mocks.createMcp.mockRejectedValue(new Error('chrome-unavailable'));
@@ -168,6 +171,20 @@ describe('JR bot persistence', () => {
     expect((await listJrBots()).map((bot) => bot.id)).toEqual(['ours']);
   });
 
+  it('drops a bot whose name is only a raw id', async () => {
+    const orphanId = 'aa67fc9c-923b-48d2-8c7a-7ec88aecdb11';
+    mocks.list.mockResolvedValue([
+      runtime,
+      { id: orphanId, name: orphanId, source: 'user', agent: { type: 'aionrs' } },
+      { id: 'ours', name: 'Nosso bot', source: 'user', agent: { type: 'aionrs' } },
+    ]);
+    mocks.readSetting.mockResolvedValue({
+      [orphanId]: { workspace: `/tmp/jr-workspaces/${orphanId}` },
+      ours: { workspace: '/tmp/ours' },
+    });
+    expect((await listJrBots()).map((bot) => bot.name)).toEqual(['Nosso bot']);
+  });
+
   it('never falls back to another provider and strips credentials from the model selection', () => {
     expect(selectJrModel([{ ...provider, name: 'Other' }])).toBeNull();
     expect(selectJrModel([{ ...provider, models: ['Other'] }])).toBeNull();
@@ -175,6 +192,22 @@ describe('JR bot persistence', () => {
     expect(selectJrModel([provider])).toEqual(
       expect.objectContaining({ id: 'jr-provider', use_model: 'MiniMax-M3.1-Flash', api_key: '' })
     );
+    expect(
+      selectJrModel([{ ...provider, models: [{ id: 'MiniMax-M3.1-Flash' }] as unknown as string[] }])?.use_model
+    ).toBe('MiniMax-M3.1-Flash');
+  });
+
+  it('registers the company gateway before reading providers for a new conversation', async () => {
+    const order: string[] = [];
+    mocks.ensure.mockImplementation(async () => {
+      order.push('ensure');
+    });
+    mocks.providers.mockImplementation(async () => {
+      order.push('providers');
+      return [provider];
+    });
+    await startJrConversation({ id: 'jr-bot', ...input });
+    expect(order).toEqual(['ensure', 'providers']);
   });
 
   it('starts a real aionrs conversation in the chosen bot workspace', async () => {

@@ -7,6 +7,7 @@ import {
   loadBotPreviews,
   PIN_ZONE_ID,
   previewFromMessages,
+  pruneSidebarLayout,
   SECTION_PREFIX,
   setSectionCollapsed,
 } from '@/renderer/pages/Jr/JrSidebar/groupBots';
@@ -31,6 +32,14 @@ const memoryStore = (): KeyValueStore => {
 };
 
 describe('groupBots layout', () => {
+  it('forgets pins and order entries that do not belong to a visible bot', () => {
+    const orphan = 'aa67fc9c-923b-48d2-8c7a-7ec88aecdb11';
+    const saved = { pinnedIds: ['3', orphan], order: [orphan, '1', '2'], collapsed: { vendas: true } };
+    const next = pruneSidebarLayout(bots, saved);
+    expect(next).toEqual({ pinnedIds: ['3'], order: ['1', '2'], collapsed: { vendas: true } });
+    expect(pruneSidebarLayout(bots, next)).toBe(next);
+  });
+
   it('puts saved pins above sections and keeps the saved order inside a folder', () => {
     const grouped = groupBots(bots, { pinnedIds: ['3', 'missing'], order: ['2', '1', '3'], collapsed: {} });
     expect(grouped.pinned.map((bot) => bot.id)).toEqual(['3']);
