@@ -144,7 +144,7 @@ function parseUser(value: unknown): JrAccessUser {
 
 /** Resolve the explicitly configured control service; insecure HTTP is test-only. */
 export function getJrControlUrl(env: Environment = process.env): string | null {
-  const configured = env.JR_CONTROL_URL === undefined ? 'https://bot.jrsantafe.com.br/bot' : env.JR_CONTROL_URL;
+  const configured = env.JR_CONTROL_URL === undefined ? 'https://jrsantafe.stratacerta.com.br/bot' : env.JR_CONTROL_URL;
   if (!configured) return null;
   let url: URL;
   try {

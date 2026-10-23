@@ -14,7 +14,7 @@ import { createServer } from 'node:http';
 import { once } from 'node:events';
 
 const key = 'test-only-not-a-real-credential';
-const providerConfig = (baseURL = 'https://bot.jrsantafe.com.br/mmx/v1', apiKey = key) => ({
+const providerConfig = (baseURL = 'https://jrsantafe.stratacerta.com.br/mmx/v1', apiKey = key) => ({
   provider: { 'jr-minimax': { options: { baseURL, apiKey }, models: { 'MiniMax-M3.1-Flash': {} } } },
 });
 
@@ -44,7 +44,7 @@ test('loads only the explicitly configured JR MiniMax provider', () => {
   const result = loadProvider(providerConfig());
   assert.equal(result.model, 'MiniMax-M3.1-Flash');
   assert.equal(result.key, key);
-  assert.equal(result.baseURL, 'https://bot.jrsantafe.com.br/mmx/v1');
+  assert.equal(result.baseURL, 'https://jrsantafe.stratacerta.com.br/mmx/v1');
 });
 
 test('missing or unresolved credentials fail without including credential content', () => {
@@ -55,10 +55,10 @@ test('missing or unresolved credentials fail without including credential conten
 
 test('rejects credential forwarding to another host or URL carrying hidden destinations', () => {
   for (const address of [
-    'http://bot.jrsantafe.com.br/mmx/v1',
+    'http://jrsantafe.stratacerta.com.br/mmx/v1',
     'https://example.com/mmx/v1',
-    'https://user:pass@bot.jrsantafe.com.br/mmx/v1',
-    'https://bot.jrsantafe.com.br/mmx/v1?target=other',
+    'https://user:pass@jrsantafe.stratacerta.com.br/mmx/v1',
+    'https://jrsantafe.stratacerta.com.br/mmx/v1?target=other',
   ]) {
     assert.throws(() => loadProvider(providerConfig(address)), /gateway/i);
   }

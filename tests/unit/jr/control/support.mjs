@@ -13,7 +13,7 @@ export async function startControl(t, options = {}) {
   const control = createControlServer({
     databasePath: join(directory, 'control.sqlite'),
     adminCode: ADMIN_CODE,
-    upstreamUrl: 'https://bot.jrsantafe.com.br/mmx/v1',
+    upstreamUrl: 'https://jrsantafe.stratacerta.com.br/mmx/v1',
     upstreamKey: UPSTREAM_KEY,
     model: MODEL,
     upstreamFetch: async () => Response.json({ choices: [], usage: { prompt_tokens: 12, completion_tokens: 3 } }),

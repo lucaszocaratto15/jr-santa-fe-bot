@@ -46,7 +46,7 @@ function setup(initial: JrStoredSession | null = null) {
 
 describe('company access configuration', () => {
   it('uses the branded service and never accepts embedded credentials or query strings', () => {
-    expect(getJrControlUrl({})).toBe('https://bot.jrsantafe.com.br/bot');
+    expect(getJrControlUrl({})).toBe('https://jrsantafe.stratacerta.com.br/bot');
     expect(getJrControlUrl({ JR_CONTROL_URL: '' })).toBeNull();
     expect(getJrControlUrl({ JR_CONTROL_URL: url + '/' })).toBe(url);
     for (const candidate of [

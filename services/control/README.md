@@ -8,7 +8,7 @@ Serviço separado do aplicativo. Executa em Node.js 24, usa SQLite e não possui
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | `JR_ADMIN_CODE`       | Código exclusivo do administrador, entre 32 e 256 caracteres, sem espaços. Gere um valor aleatório seguro; não use senha comum. |
 | `JR_UPSTREAM_KEY`     | Chave real do provedor, disponível somente neste serviço.                                                                       |
-| `JR_UPSTREAM_URL`     | Endereço HTTPS do provedor terminando em `/v1`. Para JR: `https://bot.jrsantafe.com.br/mmx/v1`.                         |
+| `JR_UPSTREAM_URL`     | Endereço HTTPS do provedor terminando em `/v1`. Para JR: `https://jrsantafe.stratacerta.com.br/mmx/v1`.                         |
 | `JR_MODEL`            | Modelo permitido. Padrão da entrada executável: `MiniMax-M3.1-Flash`.                                                           |
 | `JR_CONTROL_DATA_DIR` | Diretório persistente privado. Padrão local: `./data`. No contêiner: `/data`.                                                   |
 | `JR_CONTROL_HOST`     | Padrão local: `127.0.0.1`. No contêiner: `0.0.0.0`, com publicação somente em `127.0.0.1`.                                      |
@@ -25,6 +25,8 @@ node services/control/index.mjs
 Para o contêiner, execute `docker compose -f deploy/compose.yml --env-file .env up -d --build` dentro desta pasta. O volume `control_data` preserva usuários, hashes de sessões e medições. O contêiner roda como usuário `node`, com raiz somente para leitura. Mantenha uma única instância do serviço para que a revogação também encerre os fluxos em curso.
 
 O proxy reverso deve oferecer HTTPS e remover o prefixo público `/bot` antes de encaminhar para `127.0.0.1:8787`. Desative o armazenamento de respostas, a retenção de corpos e o registro de cabeçalhos `Authorization`. Para respostas SSE, desative o armazenamento intermediário e permita até três minutos por requisição. A configuração do proxy e a publicação na VPS não são executadas por este código.
+
+O mesmo host publica o atualizador Windows em `https://jrsantafe.stratacerta.com.br/mmx/updates/latest.yml`. Os arquivos `latest.yml`, o instalador e o `.blockmap` ficam juntos em `/opt/mmx-gw/data/updates`. O overlay Traefik encaminha `/mmx/updates` para esse diretório.
 
 ## Contrato HTTP
 

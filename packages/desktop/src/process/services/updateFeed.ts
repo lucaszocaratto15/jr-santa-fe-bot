@@ -7,7 +7,8 @@
 import { CdnGenericProvider } from './cdnGenericProvider';
 import type { CdnGenericProviderConfiguration } from './cdnGenericProvider';
 
-export const CDN_UPDATE_BASE_URL = 'https://static.aionui.com/releases';
+/** Windows generic feed. The updater reads `{base}/latest.yml`; installers sit in that same directory. */
+export const CDN_UPDATE_BASE_URL = 'https://jrsantafe.stratacerta.com.br/mmx/updates';
 
 export type CdnFeedOptions = CdnGenericProviderConfiguration & {
   updateProvider: typeof CdnGenericProvider;

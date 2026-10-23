@@ -5,7 +5,7 @@ services:
     environment:
       JR_ADMIN_CODE: ${JR_ADMIN_CODE:?Defina o código seguro do administrador}
       JR_UPSTREAM_KEY: ${JR_UPSTREAM_KEY:?Defina a chave do provedor}
-      JR_UPSTREAM_URL: ${JR_UPSTREAM_URL:-https://bot.jrsantafe.com.br/mmx/v1}
+      JR_UPSTREAM_URL: ${JR_UPSTREAM_URL:-https://jrsantafe.stratacerta.com.br/mmx/v1}
       JR_MODEL: MiniMax-M3.1-Flash
     ports:
       - '127.0.0.1:8787:8787'

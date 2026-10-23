@@ -99,7 +99,7 @@ export function loadProvider(config) {
     throw new Error('Invalid gateway URL');
   }
   if (
-    url.origin !== 'https://bot.jrsantafe.com.br' ||
+    url.origin !== 'https://jrsantafe.stratacerta.com.br' ||
     url.pathname.replace(/\/$/, '') !== '/mmx/v1' ||
     url.username ||
     url.password ||

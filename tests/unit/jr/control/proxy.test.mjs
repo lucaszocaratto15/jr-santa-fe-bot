@@ -26,7 +26,7 @@ test('model proxy uses only configured credentials and records real non-stream u
   });
   assert.equal(response.status, 200);
   assert.equal((await response.json()).choices[0].message.content, 'Olá');
-  assert.equal(forwarded.url, 'https://bot.jrsantafe.com.br/mmx/v1/chat/completions');
+  assert.equal(forwarded.url, 'https://jrsantafe.stratacerta.com.br/mmx/v1/chat/completions');
   assert.equal(forwarded.options.headers.Authorization, `Bearer ${UPSTREAM_KEY}`);
   assert.equal(forwarded.body.model, MODEL);
   assert.equal(JSON.stringify(forwarded.body).includes(employee.token), false);
