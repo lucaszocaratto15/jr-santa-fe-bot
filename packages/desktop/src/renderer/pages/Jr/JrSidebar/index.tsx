@@ -24,6 +24,7 @@ import useSWR from 'swr';
 import ConversationSearchPopover from '@/renderer/pages/conversation/GroupedHistory/ConversationSearchPopover';
 import { listJrBots, type JrBot } from '../jrBots';
 import JrCharacter from '../JrCharacter';
+import { isJrAdmin } from '@/common/config/clientSettings';
 import { useJrAccess } from '../Access/context';
 import {
   applySidebarDrag,
@@ -321,10 +322,15 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
           droplist={
             <Menu
               onClickMenuItem={(key) => {
+                if (key === 'admin') {
+                  setSettingsTab(null);
+                  void navigate('/admin');
+                }
                 if (key === 'settings') setSettingsTab('general');
                 if (key === 'sign-out') void logout();
               }}
             >
+              {isJrAdmin(state.user) && <Menu.Item key='admin'>{t('common.jr.access.adminTitle')}</Menu.Item>}
               <Menu.Item key='settings'>{t('common.settings')}</Menu.Item>
               <Menu.Item key='sign-out'>{t('common.jr.access.signOut')}</Menu.Item>
             </Menu>

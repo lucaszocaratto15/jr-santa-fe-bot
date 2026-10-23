@@ -2,6 +2,7 @@ import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { isJrAdmin } from '@/common/config/clientSettings';
 import {
   applyJrProxyDenial,
   createJrSessionStore,
@@ -89,6 +90,37 @@ describe('company access state', () => {
     expect(second.request.mock.calls.some((call) => String(call[0]).endsWith('/auth/login'))).toBe(false);
     expect(second.configureCore).toHaveBeenCalledWith({ url: url + '/v1', token, model: 'MiniMax-M3.1-Flash' });
     expect(JSON.stringify(second.controller.state)).not.toContain(token);
+  });
+
+  it('keeps the administrator role when session.enc restores an admin', async () => {
+    const admin = { id: 'owner', name: 'Lucas', role: 'admin' as const };
+    const saved = { deviceId: 'device-1', issuer: url, ownerId: 'owner', token };
+    const { controller, request } = setup(saved);
+    request.mockImplementation(async (input: string | URL | Request) => {
+      const path = String(input);
+      if (path.endsWith('/auth/session')) return Response.json({ user: admin });
+      if (path.endsWith('/v1/models')) return Response.json({ data: [{ id: 'MiniMax-M3.1-Flash' }] });
+      return Response.json({});
+    });
+    await controller.initialize();
+    expect(controller.state).toEqual({ status: 'authenticated', user: admin });
+    expect(isJrAdmin(controller.state.user)).toBe(true);
+    expect(request.mock.calls.some((call) => String(call[0]).endsWith('/auth/login'))).toBe(false);
+  });
+
+  it('still treats the owner as an administrator when the restored role label drifted', async () => {
+    const saved = { deviceId: 'device-1', issuer: url, ownerId: 'owner', token };
+    const { controller, request } = setup(saved);
+    request.mockImplementation(async (input: string | URL | Request) => {
+      const path = String(input);
+      if (path.endsWith('/auth/session'))
+        return Response.json({ user: { id: 'owner', name: 'Lucas', role: 'Administrador' } });
+      if (path.endsWith('/v1/models')) return Response.json({ data: [{ id: 'MiniMax-M3.1-Flash' }] });
+      return Response.json({});
+    });
+    await controller.initialize();
+    expect(controller.state.user).toEqual({ id: 'owner', name: 'Lucas', role: 'admin' });
+    expect(isJrAdmin(controller.state.user)).toBe(true);
   });
 
   it('registers the gateway again when a restored session retries the connection', async () => {

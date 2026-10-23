@@ -101,8 +101,11 @@ export type JrUsageSnapshot = {
 export type JrAccessUser = { id: string; name: string; role: 'admin' | 'employee' };
 
 /** The seeded owner is the administrator even if a stored role label drifted. */
-export function isJrAdmin(user: { id: string; role: string } | null | undefined): boolean {
-  return user?.role === 'admin' || user?.id === 'owner';
+export function isJrAdmin(user: { id?: string; role?: string } | null | undefined): boolean {
+  if (!user) return false;
+  if (user.id === 'owner') return true;
+  const role = user.role?.trim().toLocaleLowerCase('pt-BR') ?? '';
+  return role === 'admin' || role === 'administrator' || role === 'administrador';
 }
 export type JrAccessState = {
   status:

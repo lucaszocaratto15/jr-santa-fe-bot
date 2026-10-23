@@ -96,18 +96,29 @@ function restrictionStatus(code: string): 'blocked' | 'outside-hours' | null {
   if (code === 'outside_access_hours') return 'outside-hours';
   return null;
 }
+function accessRole(value: unknown): JrAccessUser['role'] | null {
+  if (typeof value !== 'string') return null;
+  const role = value.trim().toLocaleLowerCase('pt-BR');
+  if (role === 'admin' || role === 'administrator' || role === 'administrador') return 'admin';
+  if (role === 'employee' || role === 'funcionario' || role === 'funcionário') return 'employee';
+  return null;
+}
+
 function parseUser(value: unknown): JrAccessUser {
   if (
     !record(value) ||
     !validId(value.id) ||
     typeof value.name !== 'string' ||
     !value.name.trim() ||
-    value.name.length > 120 ||
-    !['admin', 'employee'].includes(String(value.role))
+    value.name.length > 120
   ) {
     return fail('JR_ACCESS_INVALID_RESPONSE');
   }
-  return { id: value.id, name: value.name, role: value.role as JrAccessUser['role'] };
+  // The seeded owner stays an administrator after session.enc restore, even when
+  // a stored role label drifted away from the exact word "admin".
+  const role = value.id === 'owner' ? 'admin' : accessRole(value.role);
+  if (!role) return fail('JR_ACCESS_INVALID_RESPONSE');
+  return { id: value.id, name: value.name, role };
 }
 
 /** Resolve the explicitly configured control service; insecure HTTP is test-only. */

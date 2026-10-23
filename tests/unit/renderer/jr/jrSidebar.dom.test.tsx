@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -169,6 +169,25 @@ describe('JrSidebar rows', () => {
     render(<JrSidebar />);
     expect(screen.getByRole('button', { name: /Ana Costa/ })).toHaveTextContent('common.jr.access.roleEmployee');
     expect(screen.getByText('AC')).toBeInTheDocument();
+  });
+
+  it('hides the admin panel from an employee user menu', async () => {
+    render(<JrSidebar />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Funcionário JR/ }));
+    });
+    expect(await screen.findByText('common.settings')).toBeInTheDocument();
+    expect(screen.queryByText('common.jr.access.adminTitle')).not.toBeInTheDocument();
+  });
+
+  it('opens the admin panel from the user menu after a restored admin session', async () => {
+    mocks.accessUser = { id: 'owner', name: 'Lucas', role: 'admin' };
+    render(<JrSidebar />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Lucas/ }));
+    });
+    fireEvent.click(await screen.findByText('common.jr.access.adminTitle'));
+    expect(mocks.navigate).toHaveBeenCalledWith('/admin');
   });
 
   it('shows the owner profile when the session name is the role word', () => {

@@ -276,6 +276,8 @@ let conversation_idsState = new Set<string>();
 // tree). `null` = known conversation with no project (or project_id not yet
 // backfilled); a missing key = not loaded yet (caller placeholders).
 let projectIdByIdState = new Map<string, string | null>();
+// JR chats are sidebar + transcript. A backfilled project id must not open the files panel.
+let hidesWorkspaceByIdState = new Map<string, boolean>();
 let activeConversationIdState: string | null = null;
 let snapshotState: ConversationListSyncSnapshot = {
   conversations: conversationsState,
@@ -318,9 +320,14 @@ export const getSnapshotConversationProjectId = (conversation_id: string): strin
   return projectIdByIdState.get(conversation_id) ?? null;
 };
 
+/** True when this conversation must not mount the files / workspace panel. */
+export const snapshotHidesWorkspacePanel = (conversation_id: string): boolean =>
+  hidesWorkspaceByIdState.get(conversation_id) === true;
+
 /** Test hook: seed the id → project_id map so the sync lookup can be exercised. */
-export const setConversationProjectMapForTest = (entries: Array<[string, string | null]>): void => {
-  projectIdByIdState = new Map(entries);
+export const setConversationProjectMapForTest = (entries: Array<[string, string | null, boolean?]>): void => {
+  projectIdByIdState = new Map(entries.map(([id, projectId]) => [id, projectId]));
+  hidesWorkspaceByIdState = new Map(entries.filter((entry) => entry[2] === true).map(([id]) => [id, true]));
 };
 
 /**
@@ -356,6 +363,9 @@ const refreshConversations = () => {
         // Map ALL rows (unfiltered) so a team member conversation's project_id is
         // resolvable too — the team route looks up its leader conversation here.
         projectIdByIdState = new Map(items.map((conversation) => [conversation.id, conversation.project_id ?? null]));
+        hidesWorkspaceByIdState = new Map(
+          items.map((conversation) => [conversation.id, conversation.type === 'aionrs'])
+        );
         emitStoreChange();
         return;
       }
@@ -363,6 +373,7 @@ const refreshConversations = () => {
       conversationsState = [];
       conversation_idsState = new Set();
       projectIdByIdState = new Map();
+      hidesWorkspaceByIdState = new Map();
       emitStoreChange();
     })
     .catch((error) => {
@@ -370,6 +381,7 @@ const refreshConversations = () => {
       conversationsState = [];
       conversation_idsState = new Set();
       projectIdByIdState = new Map();
+      hidesWorkspaceByIdState = new Map();
       emitStoreChange();
     });
 };

@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
   report: vi.fn((error: unknown) => (error instanceof Error ? error.message : String(error))),
   search: vi.fn(),
   refresh: vi.fn(),
-  user: { name: 'Funcionário JR', role: 'admin' },
+  user: { id: 'owner', name: 'Lucas', role: 'admin' as const },
   bot: { id: 'bot-1', name: 'Compras', workspace: '/tmp/compras', appearance: { shape: 'cloud', color: 'red' } },
 }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
@@ -69,6 +69,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
   sessionStorage.clear();
+  mocks.user = { id: 'owner', name: 'Lucas', role: 'admin' };
   mocks.start.mockResolvedValue({ id: 'conversation-1' });
 });
 
@@ -117,7 +118,7 @@ it('keeps search and new bot controls first, with real search and creation actio
 
 async function openSettingsFromUserMenu(): Promise<void> {
   await act(async () => {
-    fireEvent.click(screen.getByRole('button', { name: /Funcionário JR/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Lucas/ }));
   });
   fireEvent.click(await screen.findByText('common.settings'));
 }
@@ -125,17 +126,17 @@ async function openSettingsFromUserMenu(): Promise<void> {
 it('opens a user menu with settings and sign out, and signs out from the account card', async () => {
   render(<JrSidebar />);
   expect(screen.queryByRole('dialog', { name: 'common.jr.look.settingsNav' })).not.toBeInTheDocument();
-  await act(async () => fireEvent.click(screen.getByRole('button', { name: /Funcionário JR/ })));
+  await act(async () => fireEvent.click(screen.getByRole('button', { name: /Lucas/ })));
   expect(await screen.findByText('common.settings')).toBeInTheDocument();
   fireEvent.click(screen.getByText('common.jr.access.signOut'));
   expect(mocks.logout).toHaveBeenCalledTimes(1);
   expect(screen.queryByRole('dialog', { name: 'common.jr.look.settingsNav' })).not.toBeInTheDocument();
 
   mocks.logout.mockClear();
-  await act(async () => fireEvent.click(screen.getByRole('button', { name: /Funcionário JR/ })));
+  await act(async () => fireEvent.click(screen.getByRole('button', { name: /Lucas/ })));
   fireEvent.click(screen.getByText('common.settings'));
   expect(await screen.findByRole('dialog', { name: 'common.jr.look.settingsNav' })).toBeInTheDocument();
-  expect(screen.getByText('common.jr.access.adminTitle')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'common.jr.access.adminTitle' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'common.jr.access.signOut' })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'common.jr.look.theme' }));
   fireEvent.click(await screen.findByText('common.jr.look.themeDark'));

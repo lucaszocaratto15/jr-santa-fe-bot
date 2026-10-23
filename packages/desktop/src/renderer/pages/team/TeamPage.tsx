@@ -43,7 +43,10 @@ import { usePreviewContext } from '@/renderer/pages/conversation/Preview';
 import { previewScopeKey } from '@/renderer/pages/conversation/Preview/context/previewScope';
 import { setCurrentProject } from '@/renderer/pages/conversation/explorer/currentProjectStore';
 import { setCurrentConversation } from '@/renderer/pages/conversation/explorer/currentConversationStore';
-import { getSnapshotConversationProjectId } from '@/renderer/pages/conversation/GroupedHistory/hooks/useConversationListSync';
+import {
+  getSnapshotConversationProjectId,
+  snapshotHidesWorkspacePanel,
+} from '@/renderer/pages/conversation/GroupedHistory/hooks/useConversationListSync';
 import { isBackendHttpError } from '@/common/adapter/httpBridge';
 
 type Props = {
@@ -597,17 +600,19 @@ const TeamPageContent: React.FC<TeamPageContentProps> = ({
   // Publish the team's project so the Layout-level Explorer host renders it —
   // mirrors conversation/index.tsx (project-scoped, persistent across agent-tab
   // switches; the Explorer host does not remount within the same team/project).
+  const jrFilesHidden =
+    dispatchConversation?.type === 'aionrs' || snapshotHidesWorkspacePanel(leaderConversationIdForProject ?? '');
   useEffect(() => {
-    setCurrentProject(teamProjectId);
-  }, [teamProjectId]);
+    setCurrentProject(jrFilesHidden ? null : teamProjectId);
+  }, [jrFilesHidden, teamProjectId]);
 
   // Publish the active member column's conversation id so the Explorer's "add to
   // chat" targets the focused column's send box (activeSlotId defaults to the
   // leader; every column is a real agent conversation). Only meaningful once the
   // team is project-bound (host visible).
   useEffect(() => {
-    setCurrentConversation(teamProjectId ? (activeAssistant?.conversation_id ?? null) : null);
-  }, [teamProjectId, activeAssistant?.conversation_id]);
+    setCurrentConversation(jrFilesHidden || !teamProjectId ? null : (activeAssistant?.conversation_id ?? null));
+  }, [jrFilesHidden, teamProjectId, activeAssistant?.conversation_id]);
 
   // Backfill catch-up: the leader conversation lazily backfills its project_id on
   // resume and the backend emits one `conversation.listChanged` when it lands;
@@ -631,7 +636,7 @@ const TeamPageContent: React.FC<TeamPageContentProps> = ({
   // For project teams the file panel is the Layout-level Explorer host (gated on
   // project_id), so ChatLayout's own workspace sider is disabled — mirrors
   // ChatConversation's `workspaceEnabled && !project_id`.
-  const workspaceEnabled = teamWorkspaceView.workspaceEnabled && !teamProjectId;
+  const workspaceEnabled = !jrFilesHidden && teamWorkspaceView.workspaceEnabled && !teamProjectId;
   // Team is "user-picked" only when team.workspace was explicitly set at team
   // creation. Falling back to a leader assistant's auto-temp workspace counts as
   // temporary, mirroring single-chat behavior.
