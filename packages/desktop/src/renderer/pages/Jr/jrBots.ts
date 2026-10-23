@@ -8,7 +8,7 @@ import { isPresentableBot } from './JrSidebar/groupBots';
 import { connectionPayload, createChromeDraft, isGmailServer, isJrChromeServer } from './Connections/connections';
 import { toSessionMcpServer } from '@/renderer/hooks/mcp/catalog';
 import { isBackendHttpError } from '@/common/adapter/httpBridge';
-import { getConversationOrNull, refreshConversationCache } from '@/renderer/pages/conversation/utils/conversationCache';
+import { getConversationOrNull } from '@/renderer/pages/conversation/utils/conversationCache';
 
 export const JR_MODEL = 'MiniMax-M3.1-Flash';
 export const JR_PROVIDER = 'JR MiniMax';
@@ -396,39 +396,13 @@ async function jrConversationServers() {
   return (await ipcBridge.mcpService.listServers.invoke()).filter((server) => server.enabled && !isGmailServer(server));
 }
 
-async function alignConversationPolicy(
-  conversation: TChatConversation,
-  skillIds: readonly string[]
-): Promise<TChatConversation> {
-  const servers = await jrConversationServers();
-  const extra = (conversation.extra ?? {}) as {
-    skills?: string[];
-    mcp_server_ids?: string[];
-    selected_mcp_server_ids?: string[];
-  };
-  const mcpIds = servers.map((server) => server.id);
-  const currentMcp = extra.mcp_server_ids ?? extra.selected_mcp_server_ids ?? [];
-  if (sameIdSet(extra.skills ?? [], skillIds) && sameIdSet(currentMcp, mcpIds)) return conversation;
-  const session = servers.map(toSessionMcpServer);
-  await ipcBridge.conversation.update.invoke({
-    id: conversation.id,
-    merge_extra: true,
-    updates: {
-      extra: {
-        skills: [...skillIds],
-        mcp_server_ids: mcpIds,
-        mcp_servers: servers.map((server) => server.name),
-        session_mcp_servers: session,
-        selected_mcp_server_ids: servers.filter((server) => !server.builtin).map((server) => server.id),
-        selected_session_mcp_servers: session,
-      },
-    } as Partial<TChatConversation>,
-  });
-  try {
-    await refreshConversationCache(conversation.id);
-  } catch {
-    // The stored snapshot is already updated. Opening the chat reads it again.
-  }
+/**
+ * Reuse a stored chat as it was created.
+ * `extra.skills` and the MCP snapshot are immutable after creation; patching them
+ * returns 400 BAD_REQUEST and must not block opening the bot.
+ * Full skills and Chrome are applied only when a new conversation is created.
+ */
+function reuseStoredConversation(conversation: TChatConversation): TChatConversation {
   return conversation;
 }
 
@@ -474,7 +448,7 @@ async function resolveJrConversation(bot: JrBot): Promise<TChatConversation> {
   const boundId = workspaces[bot.id]?.conversationId;
   if (boundId) {
     const bound = await getConversationOrNull(boundId);
-    if (bound && matchesBot(bound)) return alignConversationPolicy(bound, skillIds);
+    if (bound && matchesBot(bound)) return reuseStoredConversation(bound);
   }
   const bind = async (conversation: TChatConversation) => {
     const latest = (await getClientBusinessSetting('jr.botWorkspaces')) || {};
@@ -489,7 +463,7 @@ async function resolveJrConversation(bot: JrBot): Promise<TChatConversation> {
   const previous = history.items
     .filter(matchesBot)
     .toSorted((a, b) => b.modified_at - a.modified_at || b.created_at - a.created_at)[0];
-  if (previous) return alignConversationPolicy(await bind(previous), skillIds);
+  if (previous) return reuseStoredConversation(await bind(previous));
   if (history.has_more) throw new Error('Conversation history is incomplete');
   let gatewayError: unknown;
   try {

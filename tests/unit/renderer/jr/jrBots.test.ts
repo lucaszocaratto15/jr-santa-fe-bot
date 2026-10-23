@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { BackendHttpError } from '@/common/adapter/httpBridge';
 import type { Assistant } from '@/common/types/agent/assistantTypes';
 import type { IProvider } from '@/common/config/storage';
 
@@ -428,7 +429,7 @@ describe('one persistent conversation per JR bot', () => {
     expect(mocks.updateConversation).not.toHaveBeenCalled();
   });
 
-  it('patches a bound conversation that is missing skills or Chrome', async () => {
+  it('reuses a bound conversation that is missing skills or Chrome without patching it', async () => {
     const chrome = {
       id: 'chrome-jr-1',
       name: 'chrome-jr',
@@ -444,20 +445,38 @@ describe('one persistent conversation per JR bot', () => {
     };
     mocks.readSetting.mockResolvedValue({ [bot.id]: { workspace: bot.workspace, conversationId: existing.id } });
     mocks.getConversation.mockResolvedValue(existing);
-    await startJrConversation({ ...bot, skillIds: [], useChrome: false });
+    expect(await startJrConversation({ ...bot, skillIds: [], useChrome: false })).toEqual(existing);
     expect(mocks.conversation).not.toHaveBeenCalled();
-    expect(mocks.updateConversation).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: existing.id,
-        merge_extra: true,
-        updates: expect.objectContaining({
-          extra: expect.objectContaining({
-            skills: ['planilhas'],
-            mcp_server_ids: ['chrome-jr-1'],
-          }),
-        }),
+    expect(mocks.updateConversation).not.toHaveBeenCalled();
+  });
+
+  it('reuses the stored chat when a skills or MCP patch would be rejected', async () => {
+    const chrome = {
+      id: 'chrome-jr-1',
+      name: 'chrome-jr',
+      enabled: true,
+      builtin: false,
+      transport: { type: 'stdio', command: 'npx', args: [] },
+    };
+    const existing = {
+      ...conversation,
+      id: '57c3b73d',
+      extra: { workspace: input.workspace, skills: [] as string[], mcp_server_ids: [] as string[] },
+    };
+    mocks.skills.mockResolvedValue([{ name: 'planilhas' }]);
+    mocks.mcps.mockResolvedValue([chrome]);
+    mocks.updateConversation.mockRejectedValue(
+      new BackendHttpError({
+        method: 'PATCH',
+        path: '/api/conversations/57c3b73d',
+        status: 400,
+        body: { error: 'extra.skills and MCP snapshots are immutable post-creation', code: 'BAD_REQUEST' },
       })
     );
+    mocks.conversations.mockResolvedValue({ items: [existing], total: 1, has_more: false });
+    await expect(startJrConversation(bot)).resolves.toEqual(existing);
+    expect(mocks.conversation).not.toHaveBeenCalled();
+    expect(mocks.updateConversation).not.toHaveBeenCalled();
   });
 
   it('adopts the most recent matching history and preserves its messages', async () => {
