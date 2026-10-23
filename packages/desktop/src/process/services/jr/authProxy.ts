@@ -114,11 +114,15 @@ export async function startJrAuthProxy(
         if (revoked || restriction) onDenied({ status: response.status, code });
         return;
       }
+      const provider = response.headers.get('x-jr-provider');
       outgoing.writeHead(response.status, {
         'Content-Type': response.headers.get('Content-Type')?.startsWith('text/event-stream')
           ? 'text/event-stream'
           : 'application/json',
         'Cache-Control': 'no-store',
+        ...(provider === 'minimax' || provider === 'openrouter' || provider === 'gemini'
+          ? { 'X-JR-Provider': provider }
+          : {}),
       });
       if (response.body)
         await pipeline(Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]), outgoing);

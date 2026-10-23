@@ -115,7 +115,11 @@ export function createControlServer(options = {}) {
           }
         }
         if (request.method === 'GET' && path === '/usage')
-          return json(response, 200, { model: config.model, usage: store.usage(session.user.id) });
+          return json(response, 200, {
+            model: config.model,
+            usage: store.usage(session.user.id),
+            ...(proxy.usingFallback() ? { fallback: true } : {}),
+          });
         if (request.method === 'GET' && path === '/v1/models')
           return json(response, 200, { object: 'list', data: [{ id: config.model, object: 'model', owned_by: 'jr' }] });
         if (request.method === 'POST' && path === '/v1/chat/completions') {

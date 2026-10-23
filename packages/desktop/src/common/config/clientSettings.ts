@@ -144,4 +144,6 @@ export type JrConnectionStatus = {
   connected: boolean;
   model: string | null;
   usage: JrUsageSnapshot | null;
+  /** Set when the control service is answering through a free fallback provider. */
+  fallback?: boolean;
 };

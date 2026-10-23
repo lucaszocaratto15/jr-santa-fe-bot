@@ -109,6 +109,33 @@ it('notifies revocation on upstream 401 and never returns its response body', as
   expect(revoked).toHaveBeenCalledOnce();
 });
 
+it('forwards only a known provider name from the control service', async () => {
+  const request = vi
+    .fn()
+    .mockResolvedValueOnce(
+      new Response('{"ok":true}', {
+        headers: { 'Content-Type': 'application/json', 'x-jr-provider': 'gemini', 'x-api-key': secret },
+      })
+    )
+    .mockResolvedValueOnce(
+      new Response('{"ok":true}', { headers: { 'Content-Type': 'application/json', 'x-jr-provider': secret } })
+    );
+  const proxy = await startJrAuthProxy(
+    { url: 'https://company.example/bot/v1', token: secret, model: 'MiniMax-M3.1-Flash' },
+    () => {},
+    request
+  );
+  closers.push(proxy.close);
+  const headers = { Authorization: `Bearer ${proxy.connection.token}`, 'Content-Type': 'application/json' };
+  const body = JSON.stringify({ model: 'MiniMax-M3.1-Flash', messages: [{ role: 'user', content: 'Olá' }] });
+  const forwarded = await fetch(`${proxy.connection.url}/chat/completions`, { method: 'POST', headers, body });
+  expect(forwarded.headers.get('x-jr-provider')).toBe('gemini');
+  expect(forwarded.headers.get('x-api-key')).toBeNull();
+  const hidden = await fetch(`${proxy.connection.url}/chat/completions`, { method: 'POST', headers, body });
+  expect(hidden.headers.get('x-jr-provider')).toBeNull();
+  expect(await hidden.text()).not.toContain(secret);
+});
+
 it('streams successful model replies and strips upstream headers', async () => {
   const request = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
     expect(JSON.parse(String(init?.body))).toMatchObject({ model: 'MiniMax-M3.1-Flash' });

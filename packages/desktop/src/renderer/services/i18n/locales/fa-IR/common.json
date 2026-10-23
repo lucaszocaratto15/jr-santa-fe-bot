@@ -253,6 +253,7 @@
     "cacheTokens": "Includes {{count}} cached input tokens.",
     "usageSince": "Recorded since {{date}}.",
     "usageNote": "These are reported usage counters. They do not represent your subscription balance or billed cost.",
+    "fallbackNotice": "Temporarily using a free model.",
     "newBotTitle": "Criar novo Bot",
     "createAction": "Criar",
     "namePlaceholder": "Dê um nome ao seu Bot",

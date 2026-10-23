@@ -4,15 +4,20 @@ Serviço separado do aplicativo. Executa em Node.js 24, usa SQLite e não possui
 
 ## Configuração
 
-| Variável              | Uso                                                                                                                             |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `JR_ADMIN_CODE`       | Código exclusivo do administrador, entre 32 e 256 caracteres, sem espaços. Gere um valor aleatório seguro; não use senha comum. |
-| `JR_UPSTREAM_KEY`     | Chave real do provedor, disponível somente neste serviço.                                                                       |
-| `JR_UPSTREAM_URL`     | Endereço HTTPS do provedor terminando em `/v1`. Para JR: `https://jrsantafe.stratacerta.com.br/mmx/v1`.                         |
-| `JR_MODEL`            | Modelo permitido. Padrão da entrada executável: `MiniMax-M3.1-Flash`.                                                           |
-| `JR_CONTROL_DATA_DIR` | Diretório persistente privado. Padrão local: `./data`. No contêiner: `/data`.                                                   |
-| `JR_CONTROL_HOST`     | Padrão local: `127.0.0.1`. No contêiner: `0.0.0.0`, com publicação somente em `127.0.0.1`.                                      |
-| `JR_CONTROL_PORT`     | Porta do serviço. Padrão: `8787`.                                                                                               |
+| Variável                     | Uso                                                                                                                             |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `JR_ADMIN_CODE`              | Código exclusivo do administrador, entre 32 e 256 caracteres, sem espaços. Gere um valor aleatório seguro; não use senha comum. |
+| `JR_UPSTREAM_KEY`            | Chave real do provedor, disponível somente neste serviço.                                                                       |
+| `JR_UPSTREAM_URL`            | Endereço HTTPS do provedor terminando em `/v1`. Para JR: `https://jrsantafe.stratacerta.com.br/mmx/v1`.                         |
+| `JR_MODEL`                   | Modelo permitido. Padrão da entrada executável: `MiniMax-M3.1-Flash`.                                                           |
+| `JR_CONTROL_DATA_DIR`        | Diretório persistente privado. Padrão local: `./data`. No contêiner: `/data`.                                                   |
+| `JR_CONTROL_HOST`            | Padrão local: `127.0.0.1`. No contêiner: `0.0.0.0`, com publicação somente em `127.0.0.1`.                                      |
+| `JR_CONTROL_PORT`            | Porta do serviço. Padrão: `8787`.                                                                                               |
+| `OPENROUTER_API_KEY`         | Chave do OpenRouter. Sem ela, esse provedor não é chamado.                                                                      |
+| `OPENROUTER_FALLBACK_MODELS` | Modelos gratuitos separados por vírgula, cada um terminando em `:free`. O roteador `openrouter/free` vem sempre primeiro.       |
+| `GEMINI_API_KEY`             | Chave do AI Studio. Sem ela, o Gemini não é chamado.                                                                            |
+| `GEMINI_MODEL`               | Opcional. Padrão: `gemini-2.5-flash`.                                                                                           |
+| `FALLBACK_ENABLED`           | `true` ou `false`. Se omitida, o fallback fica ligado somente quando existe uma das chaves acima.                               |
 
 O processo encerra se faltarem credenciais válidas. Não existe código de administrador padrão. Não grave credenciais no código, no histórico de comandos ou em arquivo versionado. O serviço não lê configurações do OpenCode.
 
@@ -27,6 +32,25 @@ Para o contêiner, execute `docker compose -f deploy/compose.yml --env-file .env
 O proxy reverso deve oferecer HTTPS e remover o prefixo público `/bot` antes de encaminhar para `127.0.0.1:8787`. Desative o armazenamento de respostas, a retenção de corpos e o registro de cabeçalhos `Authorization`. Para respostas SSE, desative o armazenamento intermediário e permita até três minutos por requisição. A configuração do proxy e a publicação na VPS não são executadas por este código.
 
 O mesmo host publica o atualizador Windows em `https://jrsantafe.stratacerta.com.br/mmx/updates/latest.yml`. Os arquivos `latest.yml`, o instalador e o `.blockmap` ficam juntos em `/opt/mmx-gw/data/updates`. O overlay Traefik encaminha `/mmx/updates` para esse diretório.
+
+## Fallback gratuito
+
+Quando o MiniMax falha por rede, tempo esgotado, HTTP 5xx, 429, 401 ou 403, a mesma requisição é refeita antes de responder ao aplicativo. A ordem é `openrouter/free`, depois cada modelo de `OPENROUTER_FALLBACK_MODELS`, e por último o Gemini se `GEMINI_API_KEY` existir. O corpo original é preservado, inclusive ferramentas e fluxo SSE. O aplicativo continua pedindo o modelo MiniMax; este serviço troca somente o modelo enviado ao provedor de fallback.
+
+Depois de três falhas seguidas do MiniMax, as próximas requisições vão direto ao fallback por três minutos. Em seguida o MiniMax é tentado de novo. Uma resposta concluída pelo MiniMax zera a contagem. Cancelamento do usuário, sessão revogada e pedido inválido não acionam o fallback.
+
+Cada resposta concluída grava uma linha `Provedor: <nome> <modelo>`. A abertura do intervalo grava `Provedor: circuito aberto`. Essas linhas não incluem chaves. A resposta leva `X-JR-Provider` com `minimax`, `openrouter` ou `gemini`. `GET /usage` inclui `"fallback": true` enquanto o serviço estiver nesse modo, para o texto curto na tela de uso.
+
+Para ativar, coloque as variáveis no ambiente do processo, sem publicá-las no repositório. O exemplo comentado está em `deploy/.env.example`. No contêiner, o `deploy/compose.yml` só repassa a variável se ela existir no ambiente; valor vazio deixa o provedor desligado. Isto não altera a VPS: o fallback permanece desligado até alguém definir uma chave e reiniciar o processo.
+
+```sh
+OPENROUTER_API_KEY='cole-a-chave-no-ambiente' \
+OPENROUTER_FALLBACK_MODELS='deepseek/deepseek-chat:free,qwen/qwen3-coder:free' \
+GEMINI_API_KEY='cole-a-chave-no-ambiente' \
+node services/control/index.mjs
+```
+
+Para desligar mesmo com chave presente: `FALLBACK_ENABLED=false`.
 
 ## Contrato HTTP
 

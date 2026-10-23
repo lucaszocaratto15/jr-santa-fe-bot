@@ -253,6 +253,7 @@
     "cacheTokens": "Inclui {{count}} tokens de entrada em cache.",
     "usageSince": "Registro iniciado em {{date}}.",
     "usageNote": "Estes são contadores de uso informado. Eles não representam saldo da assinatura nem custo faturado.",
+    "fallbackNotice": "Usando temporariamente um modelo gratuito.",
     "newBotTitle": "Criar novo Bot",
     "createAction": "Criar",
     "namePlaceholder": "Dê um nome ao seu Bot",

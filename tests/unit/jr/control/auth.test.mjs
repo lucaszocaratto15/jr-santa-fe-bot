@@ -25,8 +25,19 @@ test('requires explicit strong owner and upstream configuration', () => {
     { upstreamUrl: 'https://example.test/v1?key=private' },
     { upstreamUrl: 'https://example.test/v1#private' },
     { model: 'foreign-model' },
+    { openRouterKey: 'short-key' },
+    { geminiKey: `bad\n${'k'.repeat(20)}` },
+    { openRouterKey: 'openrouter-test-key-not-real', openRouterModels: 'openai/gpt-4o' },
+    { fallbackEnabled: 'maybe', openRouterKey: 'openrouter-test-key-not-real' },
   ]) {
     assert.throws(() => createControlServer({ ...valid, ...overrides }), /invalid_configuration/);
+  }
+  const refused = { ...valid, openRouterKey: 'openrouter-test-key-not-real', openRouterModels: 'paid/model' };
+  try {
+    createControlServer(refused);
+    assert.fail('invalid fallback configuration was accepted');
+  } catch (error) {
+    assert.equal(error instanceof Error && error.message.includes(refused.openRouterKey), false);
   }
 });
 

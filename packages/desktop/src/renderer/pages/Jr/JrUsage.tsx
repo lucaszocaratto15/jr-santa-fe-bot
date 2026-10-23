@@ -26,6 +26,7 @@ const JrUsage: React.FC = () => {
         <p className={styles.intro}>
           {t(state.status === 'pilot' ? 'common.jr.usagePeriod' : 'common.jr.access.usagePeriod')}
         </p>
+        {data?.fallback ? <p className={styles.hint}>{t('common.jr.fallbackNotice')}</p> : null}
         {isLoading ? (
           <Spin />
         ) : error || !data?.connected ? (
