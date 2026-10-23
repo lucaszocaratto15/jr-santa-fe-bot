@@ -172,7 +172,9 @@ describe('JrSidebar rows', () => {
   it('shows the employee name and initials instead of a role title', () => {
     mocks.accessUser = { id: 'emp-1', name: 'Ana Costa', role: 'employee' };
     render(<JrSidebar />);
-    expect(screen.getByRole('button', { name: /Ana Costa/ })).toHaveTextContent('common.jr.access.roleEmployee');
+    const profile = screen.getByRole('button', { name: /Ana Costa/ });
+    expect(profile).not.toHaveTextContent('common.jr.access.roleEmployee');
+    expect(profile.querySelector('[class*="profileName"]')).toBeTruthy();
     expect(screen.getByText('AC')).toBeInTheDocument();
   });
 
@@ -199,7 +201,7 @@ describe('JrSidebar rows', () => {
     mocks.accessUser = { id: 'owner', name: 'Administrador', role: 'admin' };
     render(<JrSidebar />);
     const profile = screen.getByRole('button', { name: /Lucas Zocaratto/ });
-    expect(profile).toHaveTextContent('common.jr.access.roleAdmin');
+    expect(profile).not.toHaveTextContent('common.jr.access.roleAdmin');
     expect(profile).not.toHaveTextContent('Administrador');
     expect(screen.getByText('LZ')).toBeInTheDocument();
   });
