@@ -65,11 +65,9 @@ export class CdnGenericProvider extends GenericProvider {
   }
 
   override resolveFiles(updateInfo: UpdateInfo): ReturnType<GenericProvider['resolveFiles']> {
-    const resolved = resolveProviderFiles(
-      updateInfo,
-      this._cdnBaseUrl,
-      (filePath) => `${updateInfo.version}/${filePath}`
-    );
+    // electron-builder generic publishes latest.yml, the installer, and the blockmap
+    // side by side. Do not insert a version directory.
+    const resolved = resolveProviderFiles(updateInfo, this._cdnBaseUrl);
     log.info('[auto-update] Update download URL(s) resolved:', {
       version: updateInfo.version,
       files: resolved.map((file) => file.url.href),

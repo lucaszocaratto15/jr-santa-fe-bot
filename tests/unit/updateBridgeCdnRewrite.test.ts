@@ -66,39 +66,6 @@ vi.mock('electron-log', () => ({
   },
 }));
 
-const makeGitHubReleaseResponse = () => [
-  {
-    tag_name: 'v1.9.22',
-    name: 'v1.9.22',
-    body: 'release notes',
-    html_url: 'https://github.com/iOfficeAI/AionUi/releases/tag/v1.9.22',
-    published_at: '2026-04-29T00:00:00Z',
-    prerelease: false,
-    draft: false,
-    assets: [
-      {
-        name: 'AionUi-1.9.22-mac-arm64.dmg',
-        browser_download_url:
-          'https://github.com/iOfficeAI/AionUi/releases/download/v1.9.22/AionUi-1.9.22-mac-arm64.dmg',
-        size: 123,
-        content_type: 'application/x-apple-diskimage',
-      },
-      {
-        name: 'AionUi-1.9.22-win-x64.exe',
-        browser_download_url: 'https://github.com/iOfficeAI/AionUi/releases/download/v1.9.22/AionUi-1.9.22-win-x64.exe',
-        size: 456,
-        content_type: 'application/vnd.microsoft.portable-executable',
-      },
-      {
-        name: 'AionUi-1.9.22-linux-amd64.deb',
-        browser_download_url:
-          'https://github.com/iOfficeAI/AionUi/releases/download/v1.9.22/AionUi-1.9.22-linux-amd64.deb',
-        size: 789,
-      },
-    ],
-  },
-];
-
 const getCheckHandler = async () => {
   vi.resetModules();
   const { initUpdateBridge } = await import('@process/bridge/updateBridge');
@@ -134,9 +101,8 @@ const makeDeferred = () => {
   return { promise, resolve, reject };
 };
 
-// The check flow is CDN-first: the channel yml is the authoritative source of
-// version + assets, GitHub only enriches release notes. Serve both hosts.
-const CDN_CHANNEL_YML = `version: 1.9.22
+const FEED_MANIFEST_URL = 'https://jrsantafe.stratacerta.com.br/mmx/updates/latest.yml';
+const FEED_CHANNEL_YML = `version: 1.9.22
 files:
   - url: AionUi-1.9.22-mac-arm64.dmg
     size: 123
@@ -144,74 +110,71 @@ files:
     size: 456
   - url: AionUi-1.9.22-linux-amd64.deb
     size: 789
-path: AionUi-1.9.22-mac-arm64.dmg
+path: AionUi-1.9.22-win-x64.exe
 releaseDate: '2026-04-29T00:00:00Z'
 `;
 
-const stubCdnAndGitHubFetch = () => {
+const stubFeedFetch = () => {
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
-    if (url.startsWith('https://static.aionui.com/releases/latest')) {
-      return new Response(CDN_CHANNEL_YML, { status: 200 });
-    }
-    if (url.startsWith('https://api.github.com/')) {
-      return new Response(JSON.stringify(makeGitHubReleaseResponse()), { status: 200 });
-    }
+    if (url === FEED_MANIFEST_URL) return new Response(FEED_CHANNEL_YML, { status: 200 });
     throw new Error(`unexpected fetch: ${url}`);
   });
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock;
 };
 
-describe('updateBridge CDN URL rewriting', () => {
+describe('updateBridge company feed URLs', () => {
+  const originalPlatform = process.platform;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' });
   });
 
-  it('rewrites asset.url to the CDN path and keeps GitHub URL in fallbackUrl', async () => {
-    const fetchMock = stubCdnAndGitHubFetch();
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', { configurable: true, value: originalPlatform });
+  });
+
+  it('maps installer files onto the feed root and does not call another host', async () => {
+    const fetchMock = stubFeedFetch();
 
     try {
       const handler = await getCheckHandler();
-      const result = await handler({ repo: 'iOfficeAI/AionUi' });
+      const result = await handler({});
 
       expect(result.success).toBe(true);
       expect(result.data?.currentVersion).toBe('1.0.0');
       const assets = result.data?.latest?.assets ?? [];
       expect(assets.length).toBe(3);
 
-      const macAsset = assets.find((a: { name: string }) => a.name === 'AionUi-1.9.22-mac-arm64.dmg');
-      expect(macAsset).toBeDefined();
-      expect(macAsset?.url).toBe('https://static.aionui.com/releases/1.9.22/AionUi-1.9.22-mac-arm64.dmg');
-      expect(macAsset?.fallbackUrl).toBe(
-        'https://github.com/iOfficeAI/AionUi/releases/download/v1.9.22/AionUi-1.9.22-mac-arm64.dmg'
-      );
-
-      const linuxAsset = assets.find((a: { name: string }) => a.name === 'AionUi-1.9.22-linux-amd64.deb');
-      expect(linuxAsset?.url).toBe('https://static.aionui.com/releases/1.9.22/AionUi-1.9.22-linux-amd64.deb');
-      expect(fetchMock).toHaveBeenCalled();
+      const winAsset = assets.find((a: { name: string }) => a.name === 'AionUi-1.9.22-win-x64.exe');
+      expect(winAsset?.url).toBe('https://jrsantafe.stratacerta.com.br/mmx/updates/AionUi-1.9.22-win-x64.exe');
+      expect(winAsset?.fallbackUrl).toBeUndefined();
+      expect(fetchMock).toHaveBeenCalledWith(FEED_MANIFEST_URL, expect.any(Object));
+      expect(fetchMock.mock.calls.map((call) => String(call[0])).join('\n')).not.toMatch(/aionui|github/i);
     } finally {
       vi.unstubAllGlobals();
     }
   });
 
-  it('uses the normalized version (no v prefix) in the CDN path', async () => {
-    stubCdnAndGitHubFetch();
+  it('does not put the version in a path segment', async () => {
+    stubFeedFetch();
 
     try {
       const handler = await getCheckHandler();
-      const result = await handler({ repo: 'iOfficeAI/AionUi' });
+      const result = await handler({});
       const asset = result.data?.latest?.assets?.[0];
-      expect(asset?.url).toMatch(/^https:\/\/static\.aionui\.com\/releases\/1\.9\.22\//);
-      expect(asset?.url).not.toMatch(/\/v1\.9\.22\//);
+      expect(asset?.url).toBe('https://jrsantafe.stratacerta.com.br/mmx/updates/AionUi-1.9.22-mac-arm64.dmg');
+      expect(asset?.url).not.toMatch(/\/1\.9\.22\//);
     } finally {
       vi.unstubAllGlobals();
     }
   });
 });
 
-describe('updateBridge allowlist includes CDN host', () => {
-  it('accepts static.aionui.com URLs for download', async () => {
+describe('updateBridge allowlist includes the company feed host', () => {
+  it('accepts the company feed for download', async () => {
     vi.resetModules();
     vi.clearAllMocks();
 
@@ -239,8 +202,8 @@ describe('updateBridge allowlist includes CDN host', () => {
 
       const result = await handler({
         downloadId: 'manual-download-1',
-        url: 'https://static.aionui.com/releases/1.9.22/AionUi-1.9.22-mac-arm64.dmg',
-        file_name: 'AionUi-1.9.22-mac-arm64.dmg',
+        url: 'https://jrsantafe.stratacerta.com.br/mmx/updates/JR-Santa-Fe-Bot-Setup-1.9.22.exe',
+        file_name: 'JR-Santa-Fe-Bot-Setup-1.9.22.exe',
       });
 
       expect(result.success).toBe(true);
@@ -248,6 +211,28 @@ describe('updateBridge allowlist includes CDN host', () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+
+  it('rejects the upstream AionUi feed', async () => {
+    vi.resetModules();
+    vi.clearAllMocks();
+
+    const { initUpdateBridge } = await import('@process/bridge/updateBridge');
+    const { ipcBridge } = await import('@/common');
+
+    initUpdateBridge();
+
+    const provider = vi.mocked(ipcBridge.update.download.provider);
+    const lastCall = provider.mock.calls.at(-1);
+    if (!lastCall) throw new Error('update.download handler not registered');
+    const handler = lastCall[0];
+
+    const result = await handler({
+      url: 'https://static.aionui.com/releases/latest.yml',
+      file_name: 'latest.yml',
+    });
+
+    expect(result.success).toBe(false);
   });
 
   it('rejects non-allowlisted hosts', async () => {

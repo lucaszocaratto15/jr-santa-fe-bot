@@ -118,6 +118,9 @@ win:
     #    - msi
   icon: resources/app.ico # Use the checked-in Windows icon resource for executable metadata/icon patching
   artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+  publish:
+    provider: generic
+    url: https://jrsantafe.stratacerta.com.br/mmx/updates
 
 nsis:
   oneClick: false

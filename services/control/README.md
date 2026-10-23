@@ -26,6 +26,8 @@ Para o contêiner, execute `docker compose -f deploy/compose.yml --env-file .env
 
 O proxy reverso deve oferecer HTTPS e remover o prefixo público `/bot` antes de encaminhar para `127.0.0.1:8787`. Desative o armazenamento de respostas, a retenção de corpos e o registro de cabeçalhos `Authorization`. Para respostas SSE, desative o armazenamento intermediário e permita até três minutos por requisição. A configuração do proxy e a publicação na VPS não são executadas por este código.
 
+O mesmo host publica o atualizador Windows em `https://jrsantafe.stratacerta.com.br/mmx/updates/latest.yml`. Os arquivos `latest.yml`, o instalador e o `.blockmap` ficam juntos em `/opt/mmx-gw/data/updates`. O overlay Traefik encaminha `/mmx/updates` para esse diretório.
+
 ## Contrato HTTP
 
 Somente `GET /health` e `POST /auth/login` são públicos. Os demais caminhos exigem `Authorization: Bearer <token>`. As funções administrativas exigem o papel `admin`, consultado no banco a cada requisição.

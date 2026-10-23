@@ -437,7 +437,7 @@
       "usagePeriod": "Consumo registrado para seu acesso na empresa. Sem limite inicial de tokens.",
       "profileUnbound": "Este perfil contém dados de uma versão anterior. Use uma instalação separada e peça ajuda ao administrador.",
       "deviceBound": "Este computador está vinculado a outro funcionário. Peça ajuda ao administrador.",
-      "storageUnavailable": "Não foi possível proteger o acesso neste sistema. Peça ajuda ao administrador para configurar o armazenamento seguro.",
+      "storageUnavailable": "Não foi possível acessar o armazenamento seguro do computador. Tente novamente.",
       "blocked": "Seu acesso está bloqueado temporariamente. Fale com o administrador.",
       "outsideHours": "Acesso fora do horário permitido. Volte durante o período liberado.",
       "blockedStatus": "Bloqueado",

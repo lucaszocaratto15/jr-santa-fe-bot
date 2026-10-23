@@ -79,7 +79,7 @@ describe('AutoUpdaterService', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
-    setPlatform(originalPlatform);
+    setPlatform('win32');
     autoUpdaterMock.logger = null;
     autoUpdaterMock.autoDownload = true;
     autoUpdaterMock.autoInstallOnAppQuit = false;
@@ -106,26 +106,31 @@ describe('AutoUpdaterService', () => {
     setPlatform(originalPlatform);
   });
 
-  it('does not use the stable CDN updater when prerelease manual mode is enabled', async () => {
-    autoUpdaterMock.checkForUpdates.mockResolvedValue({
-      isUpdateAvailable: true,
-      updateInfo: {
-        version: '2.1.14',
-        files: [{ url: 'AionUi-2.1.14-mac-arm64.dmg', sha512: 'sha512-value' }],
-        path: 'AionUi-2.1.14-mac-arm64.dmg',
-        sha512: 'sha512-value',
-        releaseDate: '2026-06-08T00:00:00.000Z',
-      },
-    });
+  it('keeps checking the company feed when prerelease preference is on', async () => {
+    const updateInfo = {
+      version: '2.2.4',
+      files: [{ url: 'JR-Santa-Fe-Bot-Setup-2.2.4.exe', sha512: 'sha512-value' }],
+      path: 'JR-Santa-Fe-Bot-Setup-2.2.4.exe',
+      sha512: 'sha512-value',
+      releaseDate: '2026-10-23T00:00:00.000Z',
+    };
+    autoUpdaterMock.checkForUpdates.mockResolvedValue({ isUpdateAvailable: true, updateInfo });
 
     const { autoUpdaterService } = await import('@/process/services/autoUpdaterService');
 
     autoUpdaterService.initialize();
     autoUpdaterService.setAllowPrerelease(true);
 
-    const result = await autoUpdaterService.checkForUpdates();
+    await expect(autoUpdaterService.checkForUpdates()).resolves.toEqual({ success: true, updateInfo });
+    expect(autoUpdaterMock.checkForUpdates).toHaveBeenCalledTimes(1);
+  });
 
-    expect(result).toEqual({ success: true });
+  it('does not contact the updater off Windows', async () => {
+    setPlatform('darwin');
+    const { autoUpdaterService } = await import('@/process/services/autoUpdaterService');
+    autoUpdaterService.initialize();
+
+    await expect(autoUpdaterService.checkForUpdates()).resolves.toEqual({ success: true });
     expect(autoUpdaterMock.checkForUpdates).not.toHaveBeenCalled();
   });
 
@@ -178,7 +183,7 @@ describe('AutoUpdaterService', () => {
 
     expect(autoUpdaterMock.setFeedURL).toHaveBeenCalledWith({
       provider: 'custom',
-      url: 'https://static.aionui.com/releases',
+      url: 'https://jrsantafe.stratacerta.com.br/mmx/updates',
       updateProvider: CdnGenericProvider,
     });
   });
@@ -342,7 +347,7 @@ describe('AutoUpdaterService', () => {
       releaseDate: '2026-06-08T00:00:00.000Z',
     };
     const fileInfo = {
-      url: new URL('https://static.aionui.com/releases/2.1.14/AionUi-2.1.14-mac.zip'),
+      url: new URL('https://jrsantafe.stratacerta.com.br/mmx/updates/AionUi-2.1.14-mac.zip'),
       info: { url: 'AionUi-2.1.14-mac.zip', sha512: 'sha512-value' },
     };
     const cachedUpdatePath = path.join('/cache/pending', 'AionUi-2.1.14-mac.zip');
@@ -386,7 +391,7 @@ describe('AutoUpdaterService', () => {
       releaseDate: '2026-06-08T00:00:00.000Z',
     };
     const fileInfo = {
-      url: new URL('https://static.aionui.com/releases/2.1.14/AionUi-2.1.14-mac.zip'),
+      url: new URL('https://jrsantafe.stratacerta.com.br/mmx/updates/AionUi-2.1.14-mac.zip'),
       info: { url: 'AionUi-2.1.14-mac.zip', sha512: 'sha512-value' },
     };
     const validateDownloadedPath = vi.fn().mockResolvedValue(null);

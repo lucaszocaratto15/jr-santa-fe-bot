@@ -108,6 +108,19 @@ it('keeps the workspace closed when access is outside the allowed hours', async 
   expect(screen.queryByText('private content')).not.toBeInTheDocument();
   expect(await screen.findByText('common.jr.access.outsideHours')).toBeInTheDocument();
 });
+it('shows a storage failure instead of a missing company service and retries initialization', async () => {
+  mocks.status.mockResolvedValue({ status: 'signed-out', user: null, notice: 'storage' });
+  render(
+    <JrAccessGate>
+      <div>private content</div>
+    </JrAccessGate>
+  );
+  expect(await screen.findByText('common.jr.access.storageUnavailable')).toBeInTheDocument();
+  expect(screen.queryByText('common.jr.access.unconfigured')).not.toBeInTheDocument();
+  expect(screen.queryByText('private content')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'common.jr.retry' }));
+  await waitFor(() => expect(mocks.status).toHaveBeenCalledTimes(2));
+});
 it('keeps offline contents blocked and allows a new connection check', async () => {
   mocks.status.mockResolvedValue({ status: 'offline', user: null });
   render(
