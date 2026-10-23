@@ -19,6 +19,8 @@ export type ClientBusinessSettingMap = {
           conversationId?: string;
           instructions?: string;
           learning?: string;
+          /** A section the person named. Absent bots stay in the main list. */
+          section?: string;
           skillIds?: string[];
           /** Always true. A stored false is rewritten the next time the bot is loaded. */
           useChrome?: boolean;

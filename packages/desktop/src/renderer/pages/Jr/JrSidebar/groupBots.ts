@@ -2,6 +2,8 @@ export type GroupableBot = {
   id: string;
   name: string;
   workspace: string;
+  /** A section the user named. A workspace directory is never a section. */
+  section?: string;
 };
 
 export type BotSection<T extends GroupableBot> = {
@@ -36,6 +38,13 @@ export function isRawIdentifier(value: string): boolean {
 export function isPresentableBot(bot: { id: string; name: string }): boolean {
   const name = bot.name.trim();
   return name.length > 0 && name !== bot.id && !isRawIdentifier(name);
+}
+
+/** The section name a person chose. Blank, missing, and raw ids stay out of the sidebar. */
+export function userSectionId(bot: { section?: string }): string | null {
+  const section = bot.section?.trim() ?? '';
+  if (!section || isRawIdentifier(section)) return null;
+  return section;
 }
 
 /** Last directory of a workspace path. Windows and POSIX separators are both accepted. */
@@ -106,14 +115,15 @@ function orderedBots<T extends { id: string }>(bots: readonly T[], order: readon
 }
 
 /**
- * Pinned bots stay above folder sections. Nothing is pinned unless `pinnedIds`
- * says so. Section membership follows the workspace folder; order inside and
- * across sections follows `layout.order`.
+ * Pinned bots stay above the list. Nothing is pinned unless `pinnedIds` says so.
+ * A section exists only when the bot carries a user-chosen `section`. Workspace
+ * folder names, including `jr-workspaces`, are not sections. Bots without a
+ * section stay in `loose` so their name and avatar render directly.
  */
 export function groupBots<T extends GroupableBot>(
   bots: readonly T[],
   layout: SidebarLayout = EMPTY_SIDEBAR_LAYOUT
-): { pinned: T[]; sections: BotSection<T>[] } {
+): { pinned: T[]; loose: T[]; sections: BotSection<T>[] } {
   const visible = bots.filter((bot) => isPresentableBot(bot));
   const byId = new Map(visible.map((bot) => [bot.id, bot]));
   const pinned: T[] = [];
@@ -124,16 +134,22 @@ export function groupBots<T extends GroupableBot>(
     pinnedIds.add(id);
     pinned.push(bot);
   }
+  const loose: T[] = [];
   const groups = new Map<string, T[]>();
   for (const bot of orderedBots(visible, layout.order)) {
     if (pinnedIds.has(bot.id)) continue;
-    const label = workspaceFolderLabel(bot.workspace);
+    const label = userSectionId(bot);
+    if (!label) {
+      loose.push(bot);
+      continue;
+    }
     const list = groups.get(label);
     if (list) list.push(bot);
     else groups.set(label, [bot]);
   }
   return {
     pinned,
+    loose,
     sections: [...groups.entries()].map(([label, items]) => ({ id: label, label, bots: items })),
   };
 }
@@ -205,9 +221,7 @@ export function applySidebarDrag(
     nextOrder = moveIndex(order, order.indexOf(activeId), order.indexOf(overId));
   } else if (sectionId) {
     const anchor = bots
-      .filter(
-        (bot) => bot.id !== activeId && !nextPins.includes(bot.id) && workspaceFolderLabel(bot.workspace) === sectionId
-      )
+      .filter((bot) => bot.id !== activeId && !nextPins.includes(bot.id) && userSectionId(bot) === sectionId)
       .map((bot) => bot.id)
       .toSorted((left, right) => order.indexOf(left) - order.indexOf(right))[0];
     if (anchor) nextOrder = insertBefore(order, activeId, anchor);

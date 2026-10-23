@@ -238,6 +238,7 @@
     "startTask": "Iniciar tarefa",
     "localExecution": "As tarefas executam neste computador.",
     "connectionError": "A conexão da empresa está indisponível. Tente novamente ou fale com o administrador.",
+    "errorDetail": "Detalhe do erro",
     "navigation": "Navegação JR",
     "noBots": "Seus bots aparecerão aqui.",
     "recentChats": "Conversas recentes",

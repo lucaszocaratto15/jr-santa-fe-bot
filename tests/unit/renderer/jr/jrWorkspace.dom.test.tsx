@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   start: vi.fn(),
   theme: vi.fn(),
   logout: vi.fn(),
+  report: vi.fn((error: unknown) => (error instanceof Error ? error.message : String(error))),
   search: vi.fn(),
   refresh: vi.fn(),
   user: { name: 'Funcionário JR', role: 'admin' },
@@ -33,6 +34,7 @@ vi.mock('@/renderer/pages/Jr/jrBots', () => ({
   getJrBot: vi.fn(),
   deleteJrBot: vi.fn(),
   startJrConversation: mocks.start,
+  reportJrOpenError: (error: unknown) => mocks.report(error),
 }));
 vi.mock('@/renderer/pages/Jr/JrBotDialog', () => ({ default: () => null }));
 vi.mock('@/renderer/pages/Jr/Connections', () => ({
@@ -87,10 +89,13 @@ it('loads bot details before opening its conversation from a summary in the side
   expect(screen.queryByLabelText('common.jr.recentChats')).not.toBeInTheDocument();
 });
 
-it('shows a localized retry when the bot conversation cannot be opened', async () => {
-  mocks.start.mockRejectedValueOnce(new Error('offline'));
+it('shows a localized retry and the underlying error when the bot conversation cannot be opened', async () => {
+  mocks.start.mockRejectedValueOnce(new Error('TEAM_ASSISTANT_NOT_FOUND'));
   render(<JrWorkspace />);
   expect(await screen.findByText('common.jr.connectionError')).toBeInTheDocument();
+  expect(screen.queryByText('TEAM_ASSISTANT_NOT_FOUND')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'common.jr.errorDetail' }));
+  expect(screen.getByText('TEAM_ASSISTANT_NOT_FOUND')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'common.jr.retry' }));
   await waitFor(() =>
     expect(mocks.navigate).toHaveBeenCalledWith('/conversation/conversation-1?bot=bot-1', { replace: true })

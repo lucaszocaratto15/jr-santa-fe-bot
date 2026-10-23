@@ -22,6 +22,8 @@ const mocks = vi.hoisted(() => ({
   createMcp: vi.fn(),
   toggleMcp: vi.fn(),
   ensure: vi.fn(),
+  readProviders: vi.fn(),
+  report: vi.fn(),
 }));
 vi.mock('@/common', () => ({
   ipcBridge: {
@@ -37,7 +39,11 @@ vi.mock('@/common', () => ({
       listAvailableSkills: { invoke: mocks.skills },
     },
     mode: { listProviders: { invoke: mocks.providers } },
-    jr: { ensureGateway: { invoke: mocks.ensure } },
+    jr: {
+      ensureGateway: { invoke: mocks.ensure },
+      readProviders: { invoke: mocks.readProviders },
+      reportOpenError: { invoke: mocks.report },
+    },
     conversation: {
       create: { invoke: mocks.conversation },
       get: { invoke: mocks.getConversation },
@@ -60,6 +66,7 @@ vi.mock('@/renderer/services/clientBusinessSettings', () => ({
 import {
   JR_DEFAULT_INSTRUCTIONS,
   listJrBots,
+  reportJrOpenError,
   saveJrBot,
   selectJrModel,
   startJrConversation,
@@ -93,12 +100,25 @@ beforeEach(() => {
   mocks.updateConversation.mockResolvedValue(true);
   mocks.providers.mockResolvedValue([provider]);
   mocks.ensure.mockResolvedValue(undefined);
+  mocks.get.mockResolvedValue({ source: 'user', engine: { agent: { type: 'aionrs' } } });
+  mocks.readProviders.mockResolvedValue([]);
+  mocks.report.mockResolvedValue(undefined);
   mocks.mcps.mockResolvedValue([]);
   mocks.systemInfo.mockResolvedValue({ cacheDir: '/tmp/jr-cache' });
   mocks.createMcp.mockRejectedValue(new Error('chrome-unavailable'));
   mocks.conversations.mockResolvedValue({ items: [], total: 0, has_more: false });
   mocks.getConversation.mockResolvedValue(null);
   mocks.conversation.mockResolvedValue({ id: 'real-conversation' });
+});
+
+it('records the open failure without a bearer token', () => {
+  const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  const secret = 'b'.repeat(64);
+  const message = reportJrOpenError(new Error(`upstream Bearer ${secret}`));
+  expect(message).toBe('upstream Bearer [redacted]');
+  expect(message).not.toContain(secret);
+  expect(mocks.report).toHaveBeenCalledWith(expect.objectContaining({ message: 'upstream Bearer [redacted]' }));
+  errorSpy.mockRestore();
 });
 
 describe('JR bot persistence', () => {
@@ -195,6 +215,46 @@ describe('JR bot persistence', () => {
     expect(
       selectJrModel([{ ...provider, models: [{ id: 'MiniMax-M3.1-Flash' }] as unknown as string[] }])?.use_model
     ).toBe('MiniMax-M3.1-Flash');
+    expect(selectJrModel([{ ...provider, models: '["MiniMax-M3.1-Flash"]' as unknown as string[] }])?.use_model).toBe(
+      'MiniMax-M3.1-Flash'
+    );
+    expect(selectJrModel([{ ...provider, enabled: 0 as unknown as boolean }])).toBeNull();
+  });
+
+  it('opens the conversation when gateway registration fails but the provider is already listed', async () => {
+    mocks.ensure.mockRejectedValue(new Error('gateway down'));
+    const result = await startJrConversation({ id: 'jr-bot', ...input });
+    expect(result.id).toBe('real-conversation');
+    expect(mocks.readProviders).not.toHaveBeenCalled();
+  });
+
+  it('reads the loopback provider list when the session list omits JR MiniMax', async () => {
+    mocks.providers.mockResolvedValue([]);
+    mocks.readProviders.mockResolvedValue([provider]);
+    await startJrConversation({ id: 'jr-bot', ...input });
+    expect(mocks.conversation).toHaveBeenCalledWith(expect.objectContaining({ name: input.name }));
+  });
+
+  it('retries conversation creation once when the assistant row is missing', async () => {
+    mocks.conversation
+      .mockRejectedValueOnce(new Error('TEAM_ASSISTANT_NOT_FOUND'))
+      .mockResolvedValueOnce({ id: 'real-conversation' });
+    await startJrConversation({ id: 'jr-bot', ...input });
+    expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ id: 'jr-bot' }));
+    expect(mocks.conversation).toHaveBeenCalledTimes(2);
+  });
+
+  it('recreates a missing assistant and then opens the conversation', async () => {
+    mocks.get.mockRejectedValue(new Error('ASSISTANT_NOT_FOUND'));
+    await startJrConversation({ id: 'jr-bot', ...input });
+    expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ id: 'jr-bot', name: input.name }));
+    expect(mocks.conversation).toHaveBeenCalled();
+  });
+
+  it('reports a missing embedded agent instead of the company-connection banner text', async () => {
+    mocks.get.mockRejectedValue(new Error('missing'));
+    mocks.list.mockResolvedValue([]);
+    await expect(startJrConversation({ id: 'jr-bot', ...input })).rejects.toThrow('Embedded agent is unavailable');
   });
 
   it('registers the company gateway before reading providers for a new conversation', async () => {

@@ -17,8 +17,9 @@ import { initApplicationBridgeCore } from './applicationBridgeCore';
 import type { IStartOnBootStatus } from '@/common/adapter/ipcBridge';
 import { restartApplication } from './restartApplication';
 import { getJrConnectionStatus } from '@process/services/jr/usage';
-import { createJrWorkspace } from '@process/services/jr/bootstrap';
+import { createJrWorkspace, readLoopbackProviders } from '@process/services/jr/bootstrap';
 import { getJrAccessController } from '@process/services/jr/auth';
+import { appendJrOpenLog } from '@process/services/jr/openLog';
 
 let mainWindowRef: BrowserWindow | null = null;
 
@@ -118,6 +119,15 @@ export function initApplicationBridge(): void {
   ipcBridge.jr.login.provider((input) => getJrAccessController().login(input));
   ipcBridge.jr.logout.provider(() => getJrAccessController().logout());
   ipcBridge.jr.ensureGateway.provider(() => getJrAccessController().ensureGateway());
+  ipcBridge.jr.readProviders.provider(() => {
+    const port = (globalThis as { __backendPort?: number }).__backendPort ?? 0;
+    return readLoopbackProviders(port);
+  });
+  ipcBridge.jr.reportOpenError.provider((input) => {
+    const message = typeof input?.message === 'string' ? input.message : 'Unknown error';
+    const stack = typeof input?.stack === 'string' ? input.stack : undefined;
+    return appendJrOpenLog(app.getPath('userData'), { message, ...(stack ? { stack } : {}) });
+  });
   ipcBridge.jr.personalUsage.provider(() => getJrAccessController().personalUsage());
   ipcBridge.jr.admin.list.provider(() => getJrAccessController().listEmployees());
   ipcBridge.jr.admin.createInvite.provider((input) => getJrAccessController().createInvite(input));

@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import useSWR, { mutate } from 'swr';
-import { getJrBot, listJrBots, startJrConversation, type JrBot } from './jrBots';
+import { getJrBot, listJrBots, reportJrOpenError, startJrConversation, type JrBot } from './jrBots';
 import JrBotDialog from './JrBotDialog';
 import styles from './JrWorkspace.module.css';
 
@@ -24,20 +24,22 @@ const JrWorkspace: React.FC = () => {
   const creating = params.get('create') === '1';
   const editing = params.get('edit') === '1';
   const dialogVisible = creating || editing;
-  const [openError, setOpenError] = useState(false);
+  const [openError, setOpenError] = useState<string | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
   const [retry, setRetry] = useState(0);
 
   useEffect(() => {
     if (!bot || dialogVisible) return;
     let cancelled = false;
-    setOpenError(false);
+    setOpenError(null);
+    setDetailOpen(false);
     void startJrConversation(bot).then(
       (conversation) => {
         if (!cancelled)
           void navigate(`/conversation/${conversation.id}?bot=${encodeURIComponent(bot.id)}`, { replace: true });
       },
-      () => {
-        if (!cancelled) setOpenError(true);
+      (error: unknown) => {
+        if (!cancelled) setOpenError(reportJrOpenError(error));
       }
     );
     return () => {
@@ -77,6 +79,10 @@ const JrWorkspace: React.FC = () => {
       ) : openError ? (
         <div className={styles.empty} role='alert'>
           <Alert type='error' content={t('common.jr.connectionError')} />
+          <Button type='text' aria-expanded={detailOpen} onClick={() => setDetailOpen((open) => !open)}>
+            {t('common.jr.errorDetail')}
+          </Button>
+          {detailOpen ? <p className={styles.errorDetail}>{openError}</p> : null}
           <Button onClick={() => setRetry((value) => value + 1)}>{t('common.jr.retry')}</Button>
         </div>
       ) : !dialogVisible ? (

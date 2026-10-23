@@ -7,6 +7,8 @@ import {
   getJrRelayConfig,
   createJrWorkspace,
   configureJrProvider,
+  providersFromList,
+  readLoopbackProviders,
 } from '@/process/services/jr/bootstrap';
 import { getJrConnectionStatus } from '@/process/services/jr/usage';
 
@@ -55,6 +57,46 @@ it('reenables an existing JR provider instead of leaving it disabled', async () 
   expect(request.mock.calls[1][0]).toBe('http://127.0.0.1:8000/api/providers/provider-1');
   expect(request.mock.calls[1][1].method).toBe('PUT');
   expect(JSON.parse(request.mock.calls[1][1].body).enabled).toBe(true);
+});
+
+it('reads a provider row without copying its key into the renderer list', async () => {
+  const secret = 'c'.repeat(64);
+  expect(
+    providersFromList({
+      success: true,
+      data: [
+        {
+          id: 'provider-1',
+          name: 'JR MiniMax',
+          platform: 'openai',
+          base_url: 'http://127.0.0.1:61210/v1',
+          api_key: secret,
+          enabled: 1,
+          models: '["MiniMax-M3.1-Flash"]',
+          user_id: 'system_default_user',
+        },
+      ],
+    })
+  ).toEqual([
+    {
+      id: 'provider-1',
+      name: 'JR MiniMax',
+      platform: 'openai',
+      base_url: 'http://127.0.0.1:61210/v1',
+      api_key: '',
+      enabled: true,
+      models: ['MiniMax-M3.1-Flash'],
+    },
+  ]);
+  const request = vi.fn().mockResolvedValue(
+    Response.json({
+      data: [{ id: 'provider-1', name: 'JR MiniMax', models: ['MiniMax-M3.1-Flash'], api_key: secret }],
+    })
+  );
+  const listed = await readLoopbackProviders(61215, request);
+  expect(listed[0]?.api_key).toBe('');
+  expect(JSON.stringify(listed)).not.toContain(secret);
+  expect(request.mock.calls[0][0]).toBe('http://127.0.0.1:61215/api/providers');
 });
 
 it('reports unavailable usage as null and keeps source tokens out of the renderer status', async () => {

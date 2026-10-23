@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
     id: string;
     name: string;
     workspace: string;
+    section?: string;
     conversationId?: string;
     appearance: { shape: string; color: string };
   }>,
@@ -85,14 +86,20 @@ beforeEach(() => {
 });
 
 describe('JrSidebar rows', () => {
-  it('shows an unpinned bot as a large row with its latest message, and collapses other sections', async () => {
+  it('shows each bot with its name and avatar instead of a workspace folder', async () => {
+    mocks.bots[0] = {
+      ...mocks.bots[0],
+      workspace: '/Users/owner/Library/Application Support/JR Bot/jr-workspaces/aa67fc9c-923b-48d2-8c7a-7ec88aecdb11',
+    };
     render(<JrSidebar />);
     expect(await screen.findByText('Sent 1 archive')).toBeInTheDocument();
     const compras = screen.getByRole('button', { name: 'Compras' });
     expect(compras.querySelector('img')).toHaveAttribute('width', '48');
+    expect(screen.getByRole('button', { name: 'Vendas' })).toBeInTheDocument();
     expect(within(screen.getByLabelText('common.jr.look.pinnedBots')).queryByRole('button')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Vendas' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'vendas 1' })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('button', { name: 'jr-workspaces 1' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'compras 1' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'vendas 1' })).not.toBeInTheDocument();
   });
 
   it('keeps saved pins above sections, in the saved order', () => {
@@ -109,14 +116,16 @@ describe('JrSidebar rows', () => {
     expect(screen.queryByRole('button', { name: 'vendas 1' })).not.toBeInTheDocument();
   });
 
-  it('persists an expanded section and shows the bots inside it', () => {
+  it('persists an expanded user section and shows the bots inside it', () => {
+    mocks.bots = mocks.bots.map((bot) => (bot.id === 'bot-2' ? { ...bot, section: 'vendas' } : bot));
     render(<JrSidebar />);
     fireEvent.click(screen.getByRole('button', { name: 'vendas 1' }));
     expect(screen.getByRole('button', { name: 'Vendas' })).toBeInTheDocument();
     expect(JSON.parse(localStorage.getItem('jr.sidebarLayout') ?? '{}').collapsed.vendas).toBe(false);
   });
 
-  it('hides bots in a section the user collapsed', () => {
+  it('hides bots in a user section that was collapsed', () => {
+    mocks.bots = mocks.bots.map((bot) => (bot.id === 'bot-1' ? { ...bot, section: 'compras' } : bot));
     localStorage.setItem(
       'jr.sidebarLayout',
       JSON.stringify({ pinnedIds: [], order: [], collapsed: { compras: true } })

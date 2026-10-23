@@ -186,6 +186,7 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
 
   const sortableIds = [
     ...grouped.pinned.map((bot) => bot.id),
+    ...grouped.loose.map((bot) => bot.id),
     ...grouped.sections.flatMap((section) =>
       isSectionExpanded(
         layout,
@@ -242,6 +243,15 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
           <div className={styles.list}>
             {error && <span className={styles.hint}>{t('common.jr.loadError')}</span>}
             {!error && botList.length === 0 && <span className={styles.hint}>{t('common.jr.noBots')}</span>}
+            {grouped.loose.map((bot) => (
+              <BotRow
+                key={bot.id}
+                bot={bot}
+                preview={previews[bot.id] ?? ''}
+                active={activeBot === bot.id}
+                onOpen={() => openBot(bot)}
+              />
+            ))}
             {grouped.sections.map((section) => {
               const expanded = isSectionExpanded(
                 layout,

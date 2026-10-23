@@ -397,6 +397,7 @@ export type I18nKey =
   | 'common.jr.deleteBotHint'
   | 'common.jr.editBot'
   | 'common.jr.emptyHint'
+  | 'common.jr.errorDetail'
   | 'common.jr.executing'
   | 'common.jr.firstBot'
   | 'common.jr.folderError'

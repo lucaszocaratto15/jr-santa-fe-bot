@@ -240,6 +240,7 @@
     "startTask": "Start task",
     "localExecution": "Tasks run on this computer.",
     "connectionError": "The company connection is unavailable. Try again or contact your administrator.",
+    "errorDetail": "Подробности ошибки",
     "navigation": "JR navigation",
     "noBots": "Your bots will appear here.",
     "recentChats": "Recent chats",

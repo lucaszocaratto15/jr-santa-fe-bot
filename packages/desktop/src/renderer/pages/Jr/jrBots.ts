@@ -7,6 +7,7 @@ import { normalizeAppearance } from './botAppearance';
 import { isPresentableBot } from './JrSidebar/groupBots';
 import { connectionPayload, createChromeDraft, isGmailServer, isJrChromeServer } from './Connections/connections';
 import { toSessionMcpServer } from '@/renderer/hooks/mcp/catalog';
+import { isBackendHttpError } from '@/common/adapter/httpBridge';
 import { getConversationOrNull, refreshConversationCache } from '@/renderer/pages/conversation/utils/conversationCache';
 
 export const JR_MODEL = 'MiniMax-M3.1-Flash';
@@ -27,7 +28,13 @@ export type JrBotInput = {
    */
   useChrome?: boolean;
 };
-export type JrBot = JrBotInput & { id: string; teamSelectable?: boolean; conversationId?: string };
+export type JrBot = JrBotInput & {
+  id: string;
+  teamSelectable?: boolean;
+  conversationId?: string;
+  /** A section the person named. Workspace folder names are not sections. */
+  section?: string;
+};
 
 function instructionWithLearning(instructions: string, learning: string): string {
   return learning ? `${instructions.trim()}\n\n## Aprendizados deste bot\n${learning}` : instructions;
@@ -115,6 +122,7 @@ function jrBotFromRecord(
     useChrome: true,
     teamSelectable: profile.teamSelectable,
     conversationId: record.conversationId,
+    section: record.section,
   };
 }
 
@@ -242,19 +250,126 @@ function listedModelId(model: unknown): string {
   return '';
 }
 
+/** Accept an array, `{ id }` entries, or a JSON string stored in the providers table. */
+function listedModelIds(models: unknown): string[] {
+  if (typeof models === 'string') {
+    const trimmed = models.trim();
+    if (trimmed.startsWith('[')) {
+      try {
+        const parsed: unknown = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) return parsed.map(listedModelId).filter((id) => id.length > 0);
+      } catch {
+        return [];
+      }
+    }
+    return trimmed ? [trimmed] : [];
+  }
+  return (Array.isArray(models) ? models : []).map(listedModelId).filter((id) => id.length > 0);
+}
+
+function providerEnabled(enabled: unknown): boolean {
+  return enabled !== false && enabled !== 0;
+}
+
 export function selectJrModel(providers: IProvider[] | null | undefined): TProviderWithModel | null {
   const provider = (providers ?? []).find(
     (item) =>
-      item.name === JR_PROVIDER &&
-      item.enabled !== false &&
-      (Array.isArray(item.models) ? item.models : []).some((model) => listedModelId(model) === JR_MODEL)
+      item.name === JR_PROVIDER && providerEnabled(item.enabled) && listedModelIds(item.models).includes(JR_MODEL)
   );
   return provider ? { ...provider, api_key: '', use_model: JR_MODEL } : null;
 }
 
-/** Ask the main process to register the local gateway. Safe to call on every open. */
+/** The message shown under the banner and written to `logs/jr.log`. Secrets are stripped. */
+export function openErrorMessage(error: unknown): string {
+  const raw = isBackendHttpError(error)
+    ? [error.backendMessage || error.message, error.code].filter((part) => part.length > 0).join(' ')
+    : error instanceof Error
+      ? error.message
+      : typeof error === 'string'
+        ? error
+        : 'Unknown error';
+  return raw
+    .replace(/Bearer\s+\S+/gi, 'Bearer [redacted]')
+    .replace(/\b[a-f0-9]{32,}\b/gi, '[redacted]')
+    .slice(0, 4000);
+}
+
+export function isMissingAssistantError(error: unknown): boolean {
+  const code = isBackendHttpError(error) ? error.code : '';
+  const message = `${code} ${openErrorMessage(error)}`;
+  return /ASSISTANT_NOT_FOUND|assistant was not found|assistant not found/i.test(message);
+}
+
+/** Show the failure in the renderer console and ask the main process to append `userData/logs/jr.log`. */
+export function reportJrOpenError(error: unknown): string {
+  const message = openErrorMessage(error);
+  console.error('[JR] Failed to open bot:', message);
+  const stack = error instanceof Error ? error.stack : undefined;
+  void ipcBridge.jr.reportOpenError.invoke({ message, ...(stack ? { stack } : {}) }).catch((logError: unknown) => {
+    console.error('[JR] Could not write logs/jr.log:', logError);
+  });
+  return message;
+}
+
+/** Ask the main process to register the local gateway. A failure is kept so the banner can show it. */
 async function ensureJrGateway(): Promise<void> {
   await ipcBridge.jr.ensureGateway.invoke();
+}
+
+/**
+ * The renderer catalog can miss a provider owned by `system_default_user`.
+ * The main process reads the same loopback list the gateway writer uses.
+ */
+async function providersForNewConversation(): Promise<{
+  providers: IProvider[] | null | undefined;
+  listError: unknown;
+}> {
+  let providers: IProvider[] | null | undefined;
+  let listError: unknown;
+  try {
+    providers = await ipcBridge.mode.listProviders.invoke();
+  } catch (error) {
+    providers = [];
+    listError = error;
+  }
+  if (selectJrModel(providers)) return { providers, listError };
+  try {
+    const local = await ipcBridge.jr.readProviders.invoke();
+    if (selectJrModel(local)) return { providers: local, listError };
+  } catch (error) {
+    listError = listError ?? error;
+  }
+  return { providers, listError };
+}
+
+async function recreateBotAssistant(bot: JrBot, skillIds: readonly string[]): Promise<void> {
+  const assistants = await ipcBridge.assistants.list.invoke();
+  const runtime = assistants.find((assistant) => isAionrsAssistant(assistant));
+  if (!runtime) throw new Error('Embedded agent is unavailable');
+  await ipcBridge.assistants.create.invoke({
+    id: bot.id,
+    name: bot.name,
+    agent_id: runtime.agent_id,
+    avatar: '🤖',
+    defaults: { skills: { mode: 'fixed', value: [...skillIds] } },
+  });
+  const written = await ipcBridge.fs.writeAssistantRule.invoke({
+    assistant_id: bot.id,
+    locale: 'pt-BR',
+    content: instructionWithLearning(bot.instructions, bot.learning ?? ''),
+  });
+  if (!written) throw new Error('Bot instructions were not saved');
+}
+
+/** Recreate the assistant row when the workspace record survived and the assistant did not. */
+async function ensureBotAssistant(bot: JrBot, skillIds: readonly string[]): Promise<void> {
+  try {
+    const detail = await ipcBridge.assistants.get.invoke({ id: bot.id, locale: 'pt-BR' });
+    if (detail.source === 'user' && detail.engine?.agent?.type === 'aionrs') return;
+  } catch {
+    // The row is missing. Create it again with the same id.
+  }
+  await recreateBotAssistant(bot, skillIds);
 }
 
 /** Create or enable the app Chrome connector so a new bot can use it immediately. */
@@ -336,6 +451,7 @@ export function startJrConversation(bot: JrBot): Promise<TChatConversation> {
 }
 
 async function resolveJrConversation(bot: JrBot): Promise<TChatConversation> {
+  if (validateJrBot(bot) === 'instructions') bot = { ...bot, instructions: JR_DEFAULT_INSTRUCTIONS };
   if (validateJrBot(bot)) throw new Error('Bot configuration is incomplete');
   const matchesBot = (conversation: TChatConversation) => {
     const extra = conversation.extra as
@@ -375,16 +491,28 @@ async function resolveJrConversation(bot: JrBot): Promise<TChatConversation> {
     .toSorted((a, b) => b.modified_at - a.modified_at || b.created_at - a.created_at)[0];
   if (previous) return alignConversationPolicy(await bind(previous), skillIds);
   if (history.has_more) throw new Error('Conversation history is incomplete');
-  await ensureJrGateway();
-  const model = selectJrModel(await ipcBridge.mode.listProviders.invoke());
-  if (!model) throw new Error('JR MiniMax connection is unavailable');
+  let gatewayError: unknown;
+  try {
+    await ensureJrGateway();
+  } catch (error) {
+    // The provider row may already be enabled. Keep going and surface this only if selection fails.
+    gatewayError = error;
+  }
+  const { providers, listError } = await providersForNewConversation();
+  const model = selectJrModel(providers);
+  if (!model) {
+    if (gatewayError instanceof Error) throw gatewayError;
+    if (listError instanceof Error) throw listError;
+    throw new Error('JR MiniMax connection is unavailable');
+  }
   const servers = await jrConversationServers();
-  const conversation = await ipcBridge.conversation.create.invoke({
+  await ensureBotAssistant(bot, skillIds);
+  const payload = {
     name: bot.name,
     model,
     assistant: {
       id: bot.id,
-      locale: 'pt-BR',
+      locale: 'pt-BR' as const,
       conversation_overrides: { skill_ids: skillIds, mcp_ids: servers.map((server) => server.id) },
     },
     extra: {
@@ -393,7 +521,15 @@ async function resolveJrConversation(bot: JrBot): Promise<TChatConversation> {
       selected_mcp_server_ids: servers.filter((server) => !server.builtin).map((server) => server.id),
       selected_session_mcp_servers: servers.map(toSessionMcpServer),
     },
-  });
+  };
+  let conversation: TChatConversation;
+  try {
+    conversation = await ipcBridge.conversation.create.invoke(payload);
+  } catch (error) {
+    if (!isMissingAssistantError(error)) throw error;
+    await recreateBotAssistant(bot, skillIds);
+    conversation = await ipcBridge.conversation.create.invoke(payload);
+  }
   if (!conversation?.id) throw new Error('Conversation was not created');
   try {
     localStorage.setItem(`workspace-preference-${conversation.id}`, 'collapsed');
