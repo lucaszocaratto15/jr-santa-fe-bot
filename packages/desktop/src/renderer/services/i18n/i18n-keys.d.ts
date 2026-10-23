@@ -351,6 +351,8 @@ export type I18nKey =
   | 'common.jr.access.revokeTitle'
   | 'common.jr.access.revoked'
   | 'common.jr.access.revokedStatus'
+  | 'common.jr.access.roleAdmin'
+  | 'common.jr.access.roleEmployee'
   | 'common.jr.access.savePolicy'
   | 'common.jr.access.startTime'
   | 'common.jr.access.storageUnavailable'

@@ -38,6 +38,7 @@ import {
   type SidebarLayout,
 } from './groupBots';
 import JrSettingsModal, { type SettingsTab } from './SettingsModal';
+import { initialsFromName, sidebarProfile } from './sidebarProfile';
 import { readSidebarLayout, writeSidebarLayout } from './preferences';
 import styles from './JrSidebar.module.css';
 
@@ -128,14 +129,15 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
     return teamChatsForBots(rows, new Set(botList.map((bot) => bot.id)));
   }, [teams, botList]);
   const activeBot = new URLSearchParams(location.search).get('bot');
-  const profileName = state.user?.name || t('common.jr.companyShortName');
-  const initials = profileName
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0] ?? '')
-    .join('')
-    .toUpperCase();
+  const profile = sidebarProfile(state.user);
+  const profileName = profile.name || t('common.jr.companyShortName');
+  const initials = profile.name ? profile.initial : initialsFromName(profileName);
+  const roleLabel =
+    profile.role === 'admin'
+      ? t('common.jr.access.roleAdmin')
+      : profile.role === 'employee'
+        ? t('common.jr.access.roleEmployee')
+        : null;
 
   useEffect(() => {
     if (!ipcBridge.database?.getConversationMessages) return undefined;
@@ -292,10 +294,15 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
       </DndContext>
       <div className={styles.bottom}>
         <Button type='text' className={styles.profile} onClick={() => setSettingsTab('general')}>
-          <span className={styles.initials} aria-hidden='true'>
-            {initials}
+          <span className={styles.profileIdentity}>
+            <span className={styles.initials} aria-hidden='true'>
+              {initials}
+            </span>
+            <span className={styles.profileText}>
+              <span className={styles.profileName}>{profileName}</span>
+              {roleLabel ? <span className={styles.profileRole}>{roleLabel}</span> : null}
+            </span>
           </span>
-          <span className={styles.profileName}>{profileName}</span>
         </Button>
         <Button
           type='text'

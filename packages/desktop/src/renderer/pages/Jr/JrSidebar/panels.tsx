@@ -24,6 +24,7 @@ import {
   writeSpellcheck,
   type ExecutionPreference,
 } from './preferences';
+import { sidebarProfile } from './sidebarProfile';
 import { usageBarsFromSnapshot, usageMeterFromSnapshot } from './usageMeter';
 import styles from './JrSidebar.module.css';
 
@@ -52,7 +53,7 @@ export const GeneralPanel: React.FC = () => {
       : themeValue === DARK_THEME_ID
         ? t('common.jr.look.themeDark')
         : t('common.jr.look.themeLight');
-  const profileName = state.user?.name || t('common.jr.companyShortName');
+  const profileName = sidebarProfile(state.user).name || t('common.jr.companyShortName');
   const chooseTheme = (key: string) => {
     if (key === LIGHT_THEME_ID || key === DARK_THEME_ID) {
       void setTheme(key);

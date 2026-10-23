@@ -150,7 +150,7 @@ it('recognizes the owner as an administrator and creates an employee with an opt
   const owner = client();
   await owner.controller.initialize();
   const signedIn = await owner.controller.login({ code: adminCode });
-  expect(signedIn.user).toMatchObject({ id: 'owner', name: 'Administrador', role: 'admin' });
+  expect(signedIn.user).toMatchObject({ id: 'owner', name: 'Lucas Zocaratto', role: 'admin' });
   const invitation = await owner.controller.createInvite({ name: 'Ana', email: 'ana@empresa.com' });
   const listed = await owner.controller.listEmployees();
   expect(listed).toHaveLength(1);

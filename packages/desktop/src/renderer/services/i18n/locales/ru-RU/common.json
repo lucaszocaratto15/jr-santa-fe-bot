@@ -400,6 +400,8 @@
       "pilot": "Edição de desenvolvimento",
       "exit": "Sair",
       "adminTitle": "Administrativo",
+      "roleAdmin": "Administrador",
+      "roleEmployee": "Funcionário",
       "adminOnly": "Esta área é exclusiva do administrador.",
       "employeeName": "Nome do funcionário",
       "generateCode": "Gerar código",

@@ -70,6 +70,9 @@ function isWithinAccessHours(start, end, timestamp) {
  */
 export const TOKEN_LIMITS_ENFORCED = false;
 
+/** Shown for the owner. A role word such as "Administrador" is not a person's name. */
+const OWNER_PROFILE_NAME = 'Lucas Zocaratto';
+
 const FIVE_HOURS_MS = 5 * 60 * 60 * 1000;
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -119,10 +122,14 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
   ]) {
     if (!userColumns.has(name)) db.exec(`ALTER TABLE users ADD COLUMN ${name} ${type}`);
   }
-  db.prepare("INSERT OR IGNORE INTO users (id,name,role,created_at) VALUES ('owner','Administrador','admin',?)").run(
+  db.prepare("INSERT OR IGNORE INTO users (id,name,role,created_at) VALUES ('owner',?,'admin',?)").run(
+    OWNER_PROFILE_NAME,
     now()
   );
   db.prepare("UPDATE users SET role = 'admin' WHERE id = 'owner'").run();
+  db.prepare(
+    "UPDATE users SET name = ? WHERE id = 'owner' AND lower(trim(name)) IN ('administrador', 'administrator', 'admin')"
+  ).run(OWNER_PROFILE_NAME);
   const ownerHash = hash(adminCode);
   const transaction = (action) => {
     db.exec('BEGIN IMMEDIATE');

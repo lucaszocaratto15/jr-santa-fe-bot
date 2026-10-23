@@ -211,22 +211,39 @@
   align-items: center;
   gap: 8px;
   margin-top: auto;
-  padding-top: 12px;
+  padding: 8px 0;
   border-top: 1px solid var(--jr-hairline);
 }
 
 .profile:global(.arco-btn) {
   display: flex;
+  align-items: center;
   flex: 1;
   min-width: 0;
-  height: 48px;
+  height: auto;
+  min-height: 48px;
   justify-content: flex-start;
-  gap: 10px;
-  padding: 0 8px;
+  padding: 8px;
   border-radius: 12px;
   color: var(--color-text-1);
   font-weight: 500;
+  line-height: 20px;
   transition: background-color 160ms ease-out;
+}
+
+.profileIdentity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.profileText {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
 }
 
 .profile:global(.arco-btn):hover {
@@ -250,6 +267,36 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 20px;
+}
+
+.profileRole {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 16px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--color-text-3);
+}
+
+.bottom .iconButton:global(.arco-btn) {
+  align-self: center;
+}
+
+.bottom .iconButton:global(.arco-btn) :global(.arco-btn-icon),
+.bottom .iconButton:global(.arco-btn) :global(.i-icon) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+  vertical-align: middle;
+}
+
+.bottom .iconButton:global(.arco-btn) :global(.arco-icon),
+.bottom .iconButton:global(.arco-btn) :global(svg) {
+  display: block;
+  vertical-align: middle;
 }
 
 .overlay {

@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
     conversationId?: string;
     appearance: { shape: string; color: string };
   }>,
+  accessUser: { id: 'employee-1', name: 'Funcionário JR', role: 'employee' as 'admin' | 'employee' },
 }));
 
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
@@ -35,7 +36,7 @@ vi.mock('@/common', () => ({
 }));
 vi.mock('@/renderer/pages/Jr/jrBots', () => ({ listJrBots: vi.fn() }));
 vi.mock('@/renderer/pages/Jr/Access/context', () => ({
-  useJrAccess: () => ({ state: { status: 'active', user: { name: 'Funcionário JR' } }, logout: vi.fn() }),
+  useJrAccess: () => ({ state: { status: 'active', user: mocks.accessUser }, logout: vi.fn() }),
 }));
 vi.mock('@renderer/hooks/context/AuthContext', () => ({
   useAuth: () => ({ user: { id: 'employee-1' } }),
@@ -53,6 +54,7 @@ import JrSidebar from '@/renderer/pages/Jr/JrSidebar';
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
+  mocks.accessUser = { id: 'employee-1', name: 'Funcionário JR', role: 'employee' };
   mocks.search = '?bot=bot-1';
   mocks.bots = [
     {
@@ -151,6 +153,22 @@ describe('JrSidebar rows', () => {
     expect(
       within(screen.getByRole('navigation')).getByRole('button', { name: 'common.jr.search' })
     ).toBeInTheDocument();
+  });
+
+  it('shows the employee name and initials instead of a role title', () => {
+    mocks.accessUser = { id: 'emp-1', name: 'Ana Costa', role: 'employee' };
+    render(<JrSidebar />);
+    expect(screen.getByRole('button', { name: /Ana Costa/ })).toHaveTextContent('common.jr.access.roleEmployee');
+    expect(screen.getByText('AC')).toBeInTheDocument();
+  });
+
+  it('shows the owner profile when the session name is the role word', () => {
+    mocks.accessUser = { id: 'owner', name: 'Administrador', role: 'admin' };
+    render(<JrSidebar />);
+    const profile = screen.getByRole('button', { name: /Lucas Zocaratto/ });
+    expect(profile).toHaveTextContent('common.jr.access.roleAdmin');
+    expect(profile).not.toHaveTextContent('Administrador');
+    expect(screen.getByText('LZ')).toBeInTheDocument();
   });
 
   it('still lists the bot when the saved layout is corrupt', () => {

@@ -42,13 +42,47 @@ test('owner authenticates with an opaque session and cannot impersonate an emplo
   const app = await startControl(t);
   const owner = await app.login();
   assert.equal(owner.response.status, 200);
-  assert.deepEqual(owner.user, { id: 'owner', name: 'Administrador', role: 'admin' });
+  assert.deepEqual(owner.user, { id: 'owner', name: 'Lucas Zocaratto', role: 'admin' });
   assert.match(owner.token, /^[a-zA-Z0-9_-]{43}$/);
   const session = await app.request('/auth/session', { token: owner.token });
   assert.deepEqual(await session.json(), { user: owner.user });
   const invalid = await app.login('invalid-code-with-sufficient-length-to-check', 'wrong');
   assert.equal(invalid.response.status, 401);
   assert.equal(JSON.stringify(invalid).includes(ADMIN_CODE), false);
+});
+
+test('replaces a stored role-word owner name and leaves an employee with that same word', async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), 'jr-owner-name-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const databasePath = join(directory, 'control.sqlite');
+  const db = new DatabaseSync(databasePath);
+  db.exec(`CREATE TABLE users (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, role TEXT NOT NULL, created_at INTEGER NOT NULL
+  )`);
+  db.prepare("INSERT INTO users (id,name,role,created_at) VALUES ('owner','Administrador','admin',1)").run();
+  db.prepare("INSERT INTO users (id,name,role,created_at) VALUES ('emp-1','Administrador','employee',2)").run();
+  db.close();
+  const store = createStore({ databasePath, adminCode: ADMIN_CODE, model: MODEL, now: () => 1_700_000_000_000 });
+  t.after(() => store.close());
+  const owner = store.login({ code: ADMIN_CODE, deviceId: 'device-1', deviceName: 'Desk' });
+  assert.equal(owner.user.name, 'Lucas Zocaratto');
+  assert.equal(store.employees().find((person) => person.id === 'emp-1').name, 'Administrador');
+});
+
+test('keeps a real owner name already stored on the account', async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), 'jr-owner-kept-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const databasePath = join(directory, 'control.sqlite');
+  const db = new DatabaseSync(databasePath);
+  db.exec(
+    'CREATE TABLE users (id TEXT PRIMARY KEY, name TEXT NOT NULL, role TEXT NOT NULL, created_at INTEGER NOT NULL)'
+  );
+  db.prepare("INSERT INTO users (id,name,role,created_at) VALUES ('owner','Maria Souza','admin',1)").run();
+  db.close();
+  const store = createStore({ databasePath, adminCode: ADMIN_CODE, model: MODEL, now: () => 1_700_000_000_000 });
+  t.after(() => store.close());
+  const owner = store.login({ code: ADMIN_CODE, deviceId: 'device-1', deviceName: 'Desk' });
+  assert.equal(owner.user.name, 'Maria Souza');
 });
 
 test('stores an optional employee email and rejects a malformed address', async (t) => {
