@@ -117,6 +117,11 @@ describe('Layout sider brand Home button', () => {
     expect(screen.queryByText('common.jr.companyName')).toBeNull();
     const logo = screen.getByRole('img', { name: 'common.jr.companyName' });
     expect(logo).toHaveClass('jr-brand-logo');
+    expect(logo).toHaveAttribute('height', '36');
+    expect(logo).toHaveAttribute('width', '52');
+    const src = logo.getAttribute('src') ?? '';
+    expect(src).toMatch(/jr-mark\.png|data:image\/png/);
+    expect(src).not.toMatch(/svg\+xml|jr-logo/);
     fireEvent.click(logo);
     expect(navigate).not.toHaveBeenCalled();
   });

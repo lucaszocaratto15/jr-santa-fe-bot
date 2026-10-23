@@ -228,19 +228,21 @@ body[arco-theme='dark'] {
   align-items: center;
   justify-content: flex-start;
   gap: 12px;
-  min-height: 40px;
-  padding: 0 12px;
+  min-height: 48px;
+  padding: 4px 12px 8px;
 }
 .app-shell .jr-sider-brandline .jr-brand-symbol {
-  justify-content: flex-start;
-  height: 28px;
-  max-width: 140px;
+  justify-content: center;
+  align-items: center;
+  width: 60px;
+  height: 44px;
+  max-width: none;
 }
 .app-shell .jr-sider-brandline .jr-brand-logo {
-  height: 20px !important;
-  width: auto !important;
-  max-width: 120px !important;
-  max-height: 20px !important;
+  height: 36px !important;
+  width: 52px !important;
+  max-width: none !important;
+  max-height: none !important;
 }
 .app-shell .jr-sider-actions-slot {
   display: flex;
@@ -328,17 +330,16 @@ body[arco-theme='dark'] {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: auto;
-  max-width: 120px;
-  height: 28px;
+  width: 60px;
+  height: 44px;
   overflow: visible;
   flex-shrink: 0;
 }
 .jr-brand-logo {
   display: block;
-  height: 20px;
-  width: auto;
-  max-width: 112px;
+  height: 36px;
+  width: 52px;
+  max-width: none;
   object-fit: contain;
   object-position: center;
   background: none;

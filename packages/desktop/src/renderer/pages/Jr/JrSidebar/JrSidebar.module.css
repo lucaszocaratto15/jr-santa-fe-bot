@@ -156,6 +156,37 @@
   background: var(--jr-tab-active);
 }
 
+.contextPopup :global(.arco-dropdown) {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.contextMenu:global(.arco-menu) {
+  min-width: 180px;
+  padding: 6px;
+  border: 1px solid var(--jr-hairline);
+  border-radius: 12px;
+  background: var(--jr-surface);
+  box-shadow: 0 16px 40px var(--jr-shadow);
+}
+
+.contextMenu :global(.arco-menu-item) {
+  height: 32px;
+  line-height: 32px;
+  border-radius: 8px;
+  color: var(--color-text-1);
+}
+
+.contextMenu :global(.arco-menu-item:hover) {
+  background: var(--jr-tab-active);
+}
+
+.contextDelete:global(.arco-menu-item) {
+  color: var(--jr-accent);
+}
+
 .botCopy {
   min-width: 0;
   flex: 1;

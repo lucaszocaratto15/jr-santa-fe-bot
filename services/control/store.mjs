@@ -26,6 +26,21 @@ function optionalEmail(value) {
   return email;
 }
 
+/** Optional job title shown on the admin list. Blank values are stored as null. */
+function optionalTitle(value) {
+  if (value == null) return null;
+  if (typeof value !== 'string') throw httpError(400, 'invalid_request');
+  const title = value.trim();
+  if (!title) return null;
+  if (
+    title.length > 80 ||
+    [...title].some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)
+  ) {
+    throw httpError(400, 'invalid_request');
+  }
+  return title;
+}
+
 function clockMinutes(value) {
   if (typeof value !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/u.test(value)) return null;
   const [hour, minute] = value.split(':').map(Number);
@@ -119,6 +134,7 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
     ['access_start', 'TEXT'],
     ['access_end', 'TEXT'],
     ['email', 'TEXT'],
+    ['title', 'TEXT'],
   ]) {
     if (!userColumns.has(name)) db.exec(`ALTER TABLE users ADD COLUMN ${name} ${type}`);
   }
@@ -238,17 +254,19 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
     invite(name, input = {}) {
       const policy = validatePolicy(input);
       const email = optionalEmail(input.email);
+      const title = optionalTitle(input.title);
       return transaction(() => {
         const id = randomUUID();
-        db.prepare(`INSERT INTO users (id,name,role,created_at,token_limit,access_start,access_end,email)
-          VALUES (?,?,'employee',?,?,?,?,?)`).run(
+        db.prepare(`INSERT INTO users (id,name,role,created_at,token_limit,access_start,access_end,email,title)
+          VALUES (?,?,'employee',?,?,?,?,?,?)`).run(
           id,
           name,
           now(),
           policy.tokenLimit,
           policy.accessStart,
           policy.accessEnd,
-          email
+          email,
+          title
         );
         return issueInvite(id);
       });
@@ -322,6 +340,7 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
           blocked: row.blocked_at !== null,
           blockedAt: iso(row.blocked_at),
           email: row.email ?? null,
+          title: row.title ?? null,
           tokenLimit: row.token_limit,
           accessStart: row.access_start,
           accessEnd: row.access_end,

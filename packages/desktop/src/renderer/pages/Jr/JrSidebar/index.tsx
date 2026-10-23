@@ -1,6 +1,6 @@
 import { ipcBridge } from '@/common';
 import type { TTeam } from '@/common/types/team/teamTypes';
-import { Button, Dropdown, Menu, Spin } from '@arco-design/web-react';
+import { Alert, Button, Dropdown, Menu, Modal, Spin } from '@arco-design/web-react';
 import {
   DndContext,
   PointerSensor,
@@ -22,7 +22,7 @@ import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
 import ConversationSearchPopover from '@/renderer/pages/conversation/GroupedHistory/ConversationSearchPopover';
-import { listJrBots, type JrBot } from '../jrBots';
+import { deleteJrBot, listJrBots, type JrBot } from '../jrBots';
 import JrCharacter from '../JrCharacter';
 import { isJrAdmin } from '@/common/config/clientSettings';
 import { useJrAccess } from '../Access/context';
@@ -52,37 +52,60 @@ const BotRow: React.FC<{
   preview: string;
   active: boolean;
   onOpen: () => void;
-}> = ({ bot, preview, active, onOpen }) => {
+  onEdit: () => void;
+  onDelete: () => void;
+}> = ({ bot, preview, active, onOpen, onEdit, onDelete }) => {
+  const { t } = useTranslation();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: bot.id });
   return (
-    <Button
-      ref={setNodeRef}
-      type='text'
-      long
-      {...attributes}
-      {...listeners}
-      style={{
-        transform: CSS.Transform.toString(transform),
-        transition,
-        opacity: isDragging ? 0.72 : undefined,
-        touchAction: 'none',
-      }}
-      className={`${styles.botRow} ${styles.botCard} ${active ? styles.botActive : ''}`}
-      aria-label={bot.name}
-      onClick={onOpen}
+    <Dropdown
+      trigger='contextMenu'
+      position='bl'
+      triggerProps={{ className: styles.contextPopup }}
+      droplist={
+        <Menu
+          className={styles.contextMenu}
+          onClickMenuItem={(key) => {
+            if (key === 'edit') onEdit();
+            if (key === 'delete') onDelete();
+          }}
+        >
+          <Menu.Item key='edit'>{t('common.jr.contextEdit')}</Menu.Item>
+          <Menu.Item key='delete' className={styles.contextDelete}>
+            {t('common.jr.contextDelete')}
+          </Menu.Item>
+        </Menu>
+      }
     >
-      <span className={styles.avatar}>
-        <JrCharacter appearance={bot.appearance} size={48} />
-      </span>
-      <span className={styles.botCopy}>
-        <span className={styles.botName}>{bot.name}</span>
-        {preview ? (
-          <span className={styles.preview} title={preview}>
-            {preview}
-          </span>
-        ) : null}
-      </span>
-    </Button>
+      <Button
+        ref={setNodeRef}
+        type='text'
+        long
+        {...attributes}
+        {...listeners}
+        style={{
+          transform: CSS.Transform.toString(transform),
+          transition,
+          opacity: isDragging ? 0.72 : undefined,
+          touchAction: 'none',
+        }}
+        className={`${styles.botRow} ${styles.botCard} ${active ? styles.botActive : ''}`}
+        aria-label={bot.name}
+        onClick={onOpen}
+      >
+        <span className={styles.avatar}>
+          <JrCharacter appearance={bot.appearance} size={48} />
+        </span>
+        <span className={styles.botCopy}>
+          <span className={styles.botName}>{bot.name}</span>
+          {preview ? (
+            <span className={styles.preview} title={preview}>
+              {preview}
+            </span>
+          ) : null}
+        </span>
+      </Button>
+    </Dropdown>
   );
 };
 
@@ -112,6 +135,9 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
   const [connectionsOpen, setConnectionsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
   const [teamDialogOpen, setTeamDialogOpen] = useState(false);
+  const [botToDelete, setBotToDelete] = useState<JrBot | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteFailed, setDeleteFailed] = useState(false);
   const [layout, setLayout] = useState<SidebarLayout>(readSidebarLayout);
   const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
   useLayoutEffect(() => {
@@ -119,7 +145,7 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
   }, []);
   const [previews, setPreviews] = useState<Record<string, string>>({});
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
-  const { data: bots, error } = useSWR<JrBot[]>('jr.bots', listJrBots);
+  const { data: bots, error, mutate: refreshBots } = useSWR<JrBot[]>('jr.bots', listJrBots);
   const teamUserId = user?.id ?? 'system_default_user';
   const { data: teams, mutate: refreshTeams } = useSWR<TTeam[]>(['jr.teams', teamUserId], () =>
     ipcBridge.team.list.invoke({ user_id: teamUserId })
@@ -172,6 +198,31 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
   };
 
   const openBot = (bot: JrBot) => open(`/guid?bot=${encodeURIComponent(bot.id)}`);
+
+  const editBot = (bot: JrBot) => open(`/guid?bot=${encodeURIComponent(bot.id)}&edit=1`);
+
+  const confirmDeleteBot = (bot: JrBot) => {
+    if (deleting) return;
+    setDeleteFailed(false);
+    setBotToDelete(bot);
+  };
+
+  const removeBot = async () => {
+    if (!botToDelete || deleting) return;
+    setDeleting(true);
+    setDeleteFailed(false);
+    try {
+      await deleteJrBot(botToDelete.id);
+      await refreshBots();
+      const removedId = botToDelete.id;
+      setBotToDelete(null);
+      if (activeBot === removedId) open('/guid');
+    } catch {
+      setDeleteFailed(true);
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const sectionLabel = (label: string) => (label === UNSECTIONED_ID ? t('common.jr.look.unsectioned') : label);
 
@@ -237,6 +288,8 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
                   preview={previews[bot.id] ?? ''}
                   active={activeBot === bot.id}
                   onOpen={() => openBot(bot)}
+                  onEdit={() => editBot(bot)}
+                  onDelete={() => confirmDeleteBot(bot)}
                 />
               ))}
             </PinZone>
@@ -251,6 +304,8 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
                 preview={previews[bot.id] ?? ''}
                 active={activeBot === bot.id}
                 onOpen={() => openBot(bot)}
+                onEdit={() => editBot(bot)}
+                onDelete={() => confirmDeleteBot(bot)}
               />
             ))}
             {grouped.sections.map((section) => {
@@ -284,6 +339,8 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
                           preview={previews[bot.id] ?? ''}
                           active={activeBot === bot.id}
                           onOpen={() => openBot(bot)}
+                          onEdit={() => editBot(bot)}
+                          onDelete={() => confirmDeleteBot(bot)}
                         />
                       ))
                     : null}
@@ -356,6 +413,26 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
           onClick={() => setConnectionsOpen(true)}
         />
       </div>
+      <Modal
+        visible={Boolean(botToDelete)}
+        title={t('common.jr.deleteBot')}
+        closable={!deleting}
+        maskClosable={!deleting}
+        onCancel={() => {
+          if (!deleting) setBotToDelete(null);
+        }}
+        footer={[
+          <Button key='cancel' disabled={deleting} onClick={() => setBotToDelete(null)}>
+            {t('common.cancel')}
+          </Button>,
+          <Button key='delete' type='primary' status='danger' loading={deleting} onClick={() => void removeBot()}>
+            {t('common.jr.contextDelete')}
+          </Button>,
+        ]}
+      >
+        <p>{t('common.jr.deleteBotHint')}</p>
+        {deleteFailed && <Alert type='error' content={t('common.jr.saveError')} />}
+      </Modal>
       {settingsTab && <JrSettingsModal tab={settingsTab} onTab={setSettingsTab} onClose={() => setSettingsTab(null)} />}
       {connectionsOpen && (
         <Suspense fallback={<Spin size={16} aria-label={t('common.loading')} />}>

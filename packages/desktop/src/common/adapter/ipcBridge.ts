@@ -181,6 +181,7 @@ export const jr = {
       {
         name: string;
         email?: string | null;
+        title?: string | null;
         tokenLimit?: number | null;
         accessStart?: string | null;
         accessEnd?: string | null;

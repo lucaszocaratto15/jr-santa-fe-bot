@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   reissue: vi.fn(),
   revoke: vi.fn(),
   updatePolicy: vi.fn(),
+  setBlocked: vi.fn(),
 }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'pt-BR' } }) }));
 vi.mock('@/common', () => ({
@@ -20,6 +21,7 @@ vi.mock('@/common', () => ({
         reissue: { invoke: mocks.reissue },
         revoke: { invoke: mocks.revoke },
         updatePolicy: { invoke: mocks.updatePolicy },
+        setBlocked: { invoke: mocks.setBlocked },
       },
     },
   },
@@ -48,7 +50,7 @@ it('does not request administrative records for an employee', async () => {
   expect(await screen.findByText('common.jr.access.adminOnly')).toBeInTheDocument();
   expect(mocks.list).not.toHaveBeenCalled();
 });
-it('creates an employee from Novo funcionário and lists the invite with copy, revoke and block', async () => {
+it('creates an employee from Novo funcionário and shows a large code without an access date', async () => {
   let created = false;
   mocks.list.mockImplementation(async () =>
     created
@@ -56,7 +58,7 @@ it('creates an employee from Novo funcionário and lists the invite with copy, r
           {
             id: 'person',
             name: 'Equipe teste',
-            email: 'ana@empresa.com',
+            title: 'Compras',
             role: 'employee',
             revoked: false,
             blocked: false,
@@ -74,25 +76,29 @@ it('creates an employee from Novo funcionário and lists the invite with copy, r
   fireEvent.change(await screen.findByLabelText('common.jr.access.employeeName'), {
     target: { value: 'Equipe teste' },
   });
-  fireEvent.change(screen.getByLabelText('common.jr.access.employeeEmail'), { target: { value: 'ana@empresa.com' } });
+  fireEvent.change(screen.getByLabelText('common.jr.access.employeeTitle'), { target: { value: 'Compras' } });
+  expect(screen.queryByLabelText('common.jr.access.employeeEmail')).not.toBeInTheDocument();
   expect(screen.queryByLabelText('common.jr.access.tokenLimit')).not.toBeInTheDocument();
   expect(screen.queryByLabelText('common.jr.access.startTime')).not.toBeInTheDocument();
   expect(screen.queryByLabelText('common.jr.access.endTime')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'common.jr.access.createEmployee' }));
   expect(await screen.findByText('test-code-not-a-real-credential')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'common.jr.access.copyCode' })).toBeInTheDocument();
-  expect(await screen.findByText('ana@empresa.com')).toBeInTheDocument();
+  expect(screen.queryByText('common.jr.access.inviteHint')).not.toBeInTheDocument();
+  expect(screen.queryByText('2026-10-29T15:00:00Z')).not.toBeInTheDocument();
+  expect(await screen.findByText('Compras')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'common.jr.access.revokeAction' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'common.jr.access.blockAction' })).toBeInTheDocument();
   expect(mocks.invite).toHaveBeenCalledWith({
     name: 'Equipe teste',
-    email: 'ana@empresa.com',
+    email: null,
+    title: 'Compras',
     tokenLimit: null,
     accessStart: null,
     accessEnd: null,
   });
 });
-it('creates an invite without an email, token limit, or access window', async () => {
+it('creates an invite without a job title, token limit, or access window', async () => {
   mocks.invite.mockResolvedValue({ id: 'person', code: 'policy-code', expiresAt: '2026-10-29T15:00:00Z' });
   show('admin', 'owner');
   fireEvent.click(screen.getByRole('button', { name: 'common.jr.access.newEmployee' }));
@@ -102,19 +108,21 @@ it('creates an invite without an email, token limit, or access window', async ()
   expect(mocks.invite).toHaveBeenCalledWith({
     name: 'Turno',
     email: null,
+    title: null,
     tokenLimit: null,
     accessStart: null,
     accessEnd: null,
   });
 });
-it('keeps a malformed email in the form and does not create an employee', async () => {
+it('keeps the sheet open and does not list a new employee when creation fails', async () => {
+  mocks.invite.mockRejectedValue(new Error('offline'));
   show('admin', 'owner');
   fireEvent.click(screen.getByRole('button', { name: 'common.jr.access.newEmployee' }));
   fireEvent.change(await screen.findByLabelText('common.jr.access.employeeName'), { target: { value: 'Turno' } });
-  fireEvent.change(screen.getByLabelText('common.jr.access.employeeEmail'), { target: { value: 'not-an-email' } });
   fireEvent.click(screen.getByRole('button', { name: 'common.jr.access.createEmployee' }));
-  expect(await screen.findByText('common.jr.access.invalidEmail')).toBeInTheDocument();
-  expect(mocks.invite).not.toHaveBeenCalled();
+  expect(await screen.findByText('common.jr.access.actionError')).toBeInTheDocument();
+  expect(screen.getByLabelText('common.jr.access.employeeName')).toBeInTheDocument();
+  expect(screen.queryByText('Turno')).not.toBeInTheDocument();
 });
 it('treats the owner account as an administrator when the role label is not admin', async () => {
   show('employee', 'owner');
@@ -159,8 +167,19 @@ it('shows consumed usage and does not offer a token limit to save', async () => 
   ]);
   show('admin', 'owner');
   expect(await screen.findByText('Ana')).toBeInTheDocument();
+  expect(screen.getByText('common.jr.access.activeStatus')).toBeInTheDocument();
   expect(screen.queryByLabelText('common.jr.access.tokenLimit')).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'common.jr.access.savePolicy' })).not.toBeInTheDocument();
-  expect(screen.getByText('common.jr.access.tokensUsed')).toBeInTheDocument();
+  expect(screen.queryByText('common.jr.access.tokensUsed')).not.toBeInTheDocument();
+  expect(screen.queryByText('common.jr.access.personUsage')).not.toBeInTheDocument();
   expect(mocks.updatePolicy).not.toHaveBeenCalled();
+});
+it('reports a block failure and keeps the employee on the list', async () => {
+  mocks.list.mockResolvedValue([{ id: 'person-1', name: 'Ana', role: 'employee', revoked: false, blocked: false }]);
+  mocks.setBlocked.mockRejectedValue(new Error('offline'));
+  show('admin', 'owner');
+  fireEvent.click(await screen.findByRole('button', { name: 'common.jr.access.blockAction' }));
+  expect(await screen.findByText('common.jr.access.actionError')).toBeInTheDocument();
+  expect(mocks.setBlocked).toHaveBeenCalledWith({ employeeId: 'person-1', blocked: true });
+  expect(screen.getByText('Ana')).toBeInTheDocument();
 });
