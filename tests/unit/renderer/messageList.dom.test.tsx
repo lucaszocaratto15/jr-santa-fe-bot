@@ -381,6 +381,49 @@ describe('MessageList', () => {
     expect(messageRow.className).not.toContain('md:w-[calc(100%-clamp(80px,10vw,240px))]');
   });
 
+  it('drops the in-progress thinking row on a JR conversation and keeps the finished one', () => {
+    const { unmount } = render(
+      <Wrapper
+        messages={
+          [
+            {
+              id: 'think-live',
+              type: 'thinking',
+              position: 'left',
+              content: { content: 'x', status: 'thinking' },
+              created_at: 1,
+            },
+          ] as unknown as IMessageText[]
+        }
+      >
+        <MessageList />
+      </Wrapper>
+    );
+
+    expect(screen.queryByText('thinking')).not.toBeInTheDocument();
+    unmount();
+
+    render(
+      <Wrapper
+        messages={
+          [
+            {
+              id: 'think-done',
+              type: 'thinking',
+              position: 'left',
+              content: { content: '', status: 'done', duration: 1000 },
+              created_at: 1,
+            },
+          ] as unknown as IMessageText[]
+        }
+      >
+        <MessageList />
+      </Wrapper>
+    );
+
+    expect(screen.getByText('thinking')).toBeInTheDocument();
+  });
+
   it('shows the copy row only on the last AI text of each turn', () => {
     // Turn 1: thinking + text(a) + tool + text(b) -> row only on text(b).
     // A user message ends the turn. Turn 2: text(c) -> row on text(c).

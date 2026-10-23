@@ -7,12 +7,14 @@
 import type { IMessageThinking } from '@/common/chat/chatLib';
 import { Spin } from '@arco-design/web-react';
 import { Brain } from '@icon-park/react';
+import { useConversationContextSafe } from '@/renderer/hooks/context/ConversationContext';
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import styles from './MessageThinking.module.css';
 
 const MessageThinking: React.FC<{ message: IMessageThinking }> = ({ message }) => {
   const { t } = useTranslation();
+  const conversation = useConversationContextSafe();
 
   const formatDuration = (ms: number): string => {
     const seconds = Math.floor(ms / 1000);
@@ -59,6 +61,12 @@ const MessageThinking: React.FC<{ message: IMessageThinking }> = ({ message }) =
   const summaryText = isDone
     ? `${t('conversation.thinking.complete')} · ${formatDuration(duration || 0)}`
     : `${t('conversation.thinking.label')} · ${formatElapsedTime(elapsedTime)}`;
+
+  // JR already shows one running line on the composer. A second live timer in
+  // the transcript is the duplicate spinner. The finished summary stays.
+  if (conversation?.type === 'aionrs' && !isDone) {
+    return null;
+  }
 
   return (
     <div className={styles.container}>

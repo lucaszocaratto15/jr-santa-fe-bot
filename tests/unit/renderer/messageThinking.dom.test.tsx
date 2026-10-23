@@ -8,6 +8,7 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IMessageThinking } from '@/common/chat/chatLib';
+import { ConversationProvider } from '@/renderer/hooks/context/ConversationContext';
 import MessageThinking from '@/renderer/pages/conversation/Messages/components/MessageThinking';
 
 vi.mock('react-i18next', () => ({
@@ -83,5 +84,36 @@ describe('employee progress presentation', () => {
     render(<MessageThinking message={message} />);
 
     expect(screen.getByText('Resposta preparada · 1s')).toBeInTheDocument();
+  });
+
+  it('hides the live timer on a JR turn and keeps the finished summary', () => {
+    const live = createThinkingMessage(Date.now());
+    const { container, rerender } = render(
+      <ConversationProvider value={{ conversation_id: 'conversation-1', type: 'aionrs' }}>
+        <MessageThinking message={live} />
+      </ConversationProvider>
+    );
+
+    expect(container).toBeEmptyDOMElement();
+
+    const done = createThinkingMessage(Date.now());
+    done.content = { content: '', status: 'done', duration: 2_000 };
+    rerender(
+      <ConversationProvider value={{ conversation_id: 'conversation-1', type: 'aionrs' }}>
+        <MessageThinking message={done} />
+      </ConversationProvider>
+    );
+
+    expect(screen.getByText('Resposta preparada · 2s')).toBeInTheDocument();
+  });
+
+  it('keeps the live timer when the composer is not the JR status line', () => {
+    render(
+      <ConversationProvider value={{ conversation_id: 'conversation-1', type: 'acp' }}>
+        <MessageThinking message={createThinkingMessage(Date.now())} />
+      </ConversationProvider>
+    );
+
+    expect(screen.getByText(/Preparando a resposta/)).toBeInTheDocument();
   });
 });

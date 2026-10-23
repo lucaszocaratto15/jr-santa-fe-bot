@@ -5,7 +5,13 @@
  */
 
 import type { IConversationArtifact } from '@/common/adapter/ipcBridge';
-import type { IMessageAcpToolCall, IMessageToolCall, IMessageToolGroup, TMessage } from '@/common/chat/chatLib';
+import type {
+  IMessageAcpToolCall,
+  IMessageThinking,
+  IMessageToolCall,
+  IMessageToolGroup,
+  TMessage,
+} from '@/common/chat/chatLib';
 import { useConversationContextSafe } from '@/renderer/hooks/context/ConversationContext';
 import { useConversationRuntimeView } from '@/renderer/pages/conversation/runtime/useConversationRuntimeView';
 import { getChatSurfaceWidthClass } from '@/renderer/pages/conversation/utils/chatSurfaceWidth';
@@ -702,6 +708,12 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
 
   const renderItem = (_index: number, item: (typeof processedList)[0]) => {
     const highlighted = matchesTargetMessage(item, highlightedMessageId);
+    // The composer already shows the live JR status line. Skip the transcript
+    // row so it does not leave an empty gap while that turn is running.
+    if (conversationContext?.type === 'aionrs' && 'type' in item && item.type === 'thinking') {
+      const thinking = item as IMessageThinking;
+      if (thinking.content?.status !== 'done') return null;
+    }
     if ('type' in item && item.type === 'artifact') {
       return (
         <div

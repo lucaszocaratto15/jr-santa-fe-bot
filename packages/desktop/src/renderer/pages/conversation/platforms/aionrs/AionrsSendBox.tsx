@@ -38,7 +38,6 @@ import type { SessionRef } from '@/common/adapter/ipcBridge';
 import CrossSessionDisabledBanner from '@/renderer/components/chat/CrossSessionDisabledBanner';
 import { useCrossSessionMessageEnabled } from '@/renderer/hooks/chat/useCrossSessionMessageEnabled';
 import { emitter, useAddEventListener } from '@/renderer/utils/emitter';
-import JrCharacter from '@/renderer/pages/Jr/JrCharacter';
 import { getJrBot } from '@/renderer/pages/Jr/jrBots';
 import useSWR from 'swr';
 import { type ChatFileRef, isChatFileRef, uploadFileRef } from '@/common/types/chatFile';
@@ -531,13 +530,6 @@ const AionrsSendBox: React.FC<{
       />
       <ThoughtDisplay
         running={(teamRuntime?.loading ?? running) && !awaitingConfirmation}
-        leading={
-          composerBot ? (
-            <span className='jr-working-avatar'>
-              <JrCharacter appearance={composerBot.appearance} size={22} />
-            </span>
-          ) : undefined
-        }
         statusText={awaitingConfirmation ? t('conversation.chat.awaitingConfirmation') : teamRuntime?.statusText}
         externalElapsedSource={Boolean(teamRuntime) || turnStartedAtMs != null}
         startedAtMs={teamRuntime ? (teamRuntime.startedAtMs ?? null) : turnStartedAtMs}

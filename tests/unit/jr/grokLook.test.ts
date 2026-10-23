@@ -217,6 +217,31 @@ describe('settings modal frame', () => {
     expect(main).not.toContain('trafficLightPosition: { x: 10, y: 13 }');
   });
 
+  it('uses one JR status line and a red composer focus ring', () => {
+    const jrCss = readFileSync('packages/desktop/src/renderer/styles/jr.css', 'utf8');
+    const ring = readFileSync('packages/desktop/src/renderer/hooks/chat/useInputFocusRing.ts', 'utf8');
+    const thought = readFileSync('packages/desktop/src/renderer/components/chat/ThoughtDisplay.tsx', 'utf8');
+    expect(jrCss).toContain('.jr-working-mark');
+    expect(jrCss).not.toContain('.jr-working-dots');
+    expect(jrCss).toContain('--jr-composer-idle: #e4e4e4');
+    expect(jrCss).toContain('--jr-composer-idle-icon: #1c1c1c');
+    expect(jrCss).toContain('--jr-composer-muted-icon: #5c5c5c');
+    expect(jrCss).toContain('--jr-composer-idle: #3a3a3a');
+    expect(jrCss).toContain('--jr-composer-idle-icon: #f4f4f4');
+    expect(jrCss).toContain('--jr-composer-muted-icon: #a3a3a3');
+    expect(jrCss).toContain('stroke: var(--jr-on-accent)');
+    expect(jrCss).toContain('stroke: var(--jr-composer-idle-icon)');
+    expect(jrCss).toContain('stroke: var(--jr-composer-muted-icon)');
+    expect(jrCss).toContain('animation: none !important');
+    expect(jrCss).not.toContain('--aou-6-brand');
+    expect(jrCss).not.toContain('#1e86fc');
+    expect(ring).toContain('var(--jr-accent)');
+    expect(ring).not.toContain('#4D4B87');
+    expect(ring).not.toContain('#E1E0FF');
+    expect(thought).toContain("data-testid='jr-working-mark'");
+    expect(thought).not.toContain('jr-working-dots');
+  });
+
   it('keeps the chat title in flow and the sidebar header on a two-row grid', () => {
     const chrome = readFileSync('packages/desktop/src/renderer/styles/jr.css', 'utf8');
     const layout = readFileSync('packages/desktop/src/renderer/components/layout/Layout.tsx', 'utf8');

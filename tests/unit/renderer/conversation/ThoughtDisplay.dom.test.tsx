@@ -33,11 +33,15 @@ import ThoughtDisplay from '@/renderer/components/chat/ThoughtDisplay';
 const FIXED_NOW = 1_700_000_000_000;
 
 describe('ThoughtDisplay status text', () => {
-  it('renders custom status text with a spinner while running', () => {
-    render(<ThoughtDisplay running statusText='Processing… 2 queued' />);
+  it('renders one status mark and no spinner while running', () => {
+    render(
+      <ThoughtDisplay running statusText='Processing… 2 queued' leading={<span data-testid='bot-avatar'>A</span>} />
+    );
 
     expect(screen.getByText('Processing… 2 queued')).toBeInTheDocument();
-    expect(screen.getByTestId('spinner')).toBeInTheDocument();
+    expect(screen.getByTestId('jr-working-mark')).toBeInTheDocument();
+    expect(screen.queryByTestId('spinner')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('bot-avatar')).not.toBeInTheDocument();
   });
 
   it('renders custom status text without a spinner while waiting', () => {
@@ -132,7 +136,8 @@ describe('ThoughtDisplay elapsed timer', () => {
     render(<ThoughtDisplay running externalElapsedSource startedAtMs={null} statusText='Processing… 2 queued' />);
 
     expect(screen.getByText('Processing… 2 queued')).toBeInTheDocument();
-    expect(screen.getByTestId('spinner')).toBeInTheDocument();
+    expect(screen.getByTestId('jr-working-mark')).toBeInTheDocument();
+    expect(screen.queryByTestId('spinner')).not.toBeInTheDocument();
     // No elapsed number is shown while the timestamp is invalid.
     expect(screen.queryByText(/\ds\)/)).not.toBeInTheDocument();
     expect(screen.queryByText(/\d+s/)).not.toBeInTheDocument();
