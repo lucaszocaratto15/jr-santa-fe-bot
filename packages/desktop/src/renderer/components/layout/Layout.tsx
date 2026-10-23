@@ -460,7 +460,7 @@ const Layout: React.FC<{
                 )}
                 <div className='jr-sider-brandline'>
                   <div className='jr-brand-symbol' onClick={onClick}>
-                    <JrLogo height={20} className='jr-brand-logo' />
+                    <JrLogo mark height={34} className='jr-brand-logo' />
                   </div>
                   <div id='jr-sider-actions-slot' className='jr-sider-actions-slot' />
                   {isMobile && !collapsed && (
