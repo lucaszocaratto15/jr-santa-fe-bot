@@ -234,13 +234,13 @@ body[arco-theme='dark'] {
 .app-shell .jr-sider-brandline .jr-brand-symbol {
   justify-content: center;
   align-items: center;
-  width: 56px;
-  height: 40px;
+  width: 60px;
+  height: 44px;
   max-width: none;
 }
 .app-shell .jr-sider-brandline .jr-brand-logo {
-  height: 34px !important;
-  width: 50px !important;
+  height: 36px !important;
+  width: 52px !important;
   max-width: none !important;
   max-height: none !important;
 }
@@ -330,15 +330,15 @@ body[arco-theme='dark'] {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 56px;
-  height: 40px;
+  width: 60px;
+  height: 44px;
   overflow: visible;
   flex-shrink: 0;
 }
 .jr-brand-logo {
   display: block;
-  height: 34px;
-  width: 50px;
+  height: 36px;
+  width: 52px;
   max-width: none;
   object-fit: contain;
   object-position: center;

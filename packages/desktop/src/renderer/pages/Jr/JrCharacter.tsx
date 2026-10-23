@@ -1,13 +1,14 @@
 import type { JrAppearance } from '@/common/config/clientSettings';
 import jrLogo from '@/renderer/assets/logos/jr-logo.png';
-import jrMark from '@/renderer/assets/logos/jr-mark.svg';
+import jrMark from '@/renderer/assets/logos/jr-mark.png';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { characterImage, normalizeAppearance } from './botAppearance';
 import styles from './JrWorkspace.module.css';
 
 const LOGO_RATIO = 240 / 68;
-const MARK_RATIO = 100 / 68;
+/** Cropped official symbol, 260×180. */
+const MARK_RATIO = 260 / 180;
 
 const JrCharacter: React.FC<{ appearance?: JrAppearance; size?: number; still?: boolean }> = ({
   appearance,
@@ -24,7 +25,7 @@ const JrCharacter: React.FC<{ appearance?: JrAppearance; size?: number; still?: 
   />
 );
 
-/** Wordmark, or the JR road symbol alone. The header uses the symbol so the name is not shrunk. */
+/** Wordmark, or the official JR symbol. The header uses the symbol so the name is not shrunk. */
 export const JrLogo: React.FC<{ height?: number; className?: string; mark?: boolean }> = ({
   height = 28,
   className,
