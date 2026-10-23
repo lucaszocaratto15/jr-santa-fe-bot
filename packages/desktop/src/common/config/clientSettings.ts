@@ -119,6 +119,8 @@ export type JrAccessState = {
     | 'unconfigured'
     | 'pilot';
   user: JrAccessUser | null;
+  /** Set when sign-in is waiting on OS encryption rather than a missing service URL. */
+  notice?: 'storage';
 };
 export type JrAdminEmployee = JrAccessUser & {
   email?: string | null;

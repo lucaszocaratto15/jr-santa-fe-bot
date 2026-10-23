@@ -298,6 +298,97 @@ describe('encrypted session store', () => {
     }
   });
 
+  it('stays signed out when encryption is missing at startup and signs in after it becomes available', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'jr-access-'));
+    roots.push(root);
+    let available = false;
+    const diagnostics: string[] = [];
+    const request = vi.fn(async (input: string | URL | Request) => {
+      const path = String(input);
+      if (path.endsWith('/auth/login')) return Response.json({ token, user });
+      if (path.endsWith('/v1/models')) return Response.json({ data: [{ id: 'MiniMax-M3.1-Flash' }] });
+      return Response.json({});
+    });
+    const configureCore = vi.fn(async () => {});
+    const controller = new JrAccessController({
+      url,
+      request,
+      configureCore,
+      stopCore: async () => {},
+      onChange: () => {},
+      onDiagnostic: (cause) => diagnostics.push(cause),
+      store: createJrSessionStore(root, {
+        isEncryptionAvailable: () => available,
+        encryptString: (text: string) => Buffer.from(text),
+        decryptString: (buffer: Buffer) => buffer.toString(),
+      }),
+    });
+    await controller.initialize();
+    expect(controller.state).toEqual({ status: 'signed-out', user: null, notice: 'storage' });
+    expect(diagnostics).toEqual(['JR_ACCESS_STORAGE_UNAVAILABLE']);
+    await expect(controller.login({ code: 'a-company-invite' })).rejects.toThrow('JR_ACCESS_STORAGE_UNAVAILABLE');
+    expect(request).not.toHaveBeenCalled();
+    expect(controller.state.status).toBe('signed-out');
+    available = true;
+    await controller.login({ code: 'a-company-invite' });
+    expect(controller.state).toEqual({ status: 'authenticated', user });
+    expect(String(request.mock.calls[0]?.[0])).toContain('/auth/login');
+    expect(diagnostics.join('\n')).not.toContain(token);
+    expect(diagnostics.join('\n')).not.toContain('a-company-invite');
+  });
+
+  it('retries storage from the status check and keeps a missing service address unconfigured', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'jr-access-'));
+    roots.push(root);
+    let available = false;
+    const diagnostics: string[] = [];
+    const controller = new JrAccessController({
+      url,
+      request: vi.fn(),
+      configureCore: vi.fn(),
+      stopCore: async () => {},
+      onChange: () => {},
+      onDiagnostic: (cause) => diagnostics.push(cause),
+      store: createJrSessionStore(root, {
+        isEncryptionAvailable: () => available,
+        encryptString: (text: string) => Buffer.from(text),
+        decryptString: (buffer: Buffer) => buffer.toString(),
+      }),
+    });
+    await controller.initialize();
+    available = true;
+    expect(await controller.accessStatus()).toEqual({ status: 'signed-out', user: null });
+    const missing = new JrAccessController({
+      url: null,
+      request: vi.fn(),
+      configureCore: vi.fn(),
+      stopCore: async () => {},
+      onChange: () => {},
+      onDiagnostic: (cause) => diagnostics.push(cause),
+      store: { read: async () => null, write: vi.fn() },
+    });
+    await missing.initialize();
+    expect(missing.state.status).toBe('unconfigured');
+    await expect(missing.login({ code: 'a-company-invite' })).rejects.toThrow('JR_ACCESS_UNCONFIGURED');
+    expect(diagnostics).toContain('JR_ACCESS_UNCONFIGURED url');
+    expect(diagnostics).not.toContain('JR_ACCESS_UNCONFIGURED issuer');
+    const foreign = 'https://other.example/bot';
+    const mismatched = new JrAccessController({
+      url,
+      request: vi.fn(),
+      configureCore: vi.fn(),
+      stopCore: async () => {},
+      onChange: () => {},
+      onDiagnostic: (cause) => diagnostics.push(cause),
+      store: { read: async () => ({ ...stored, issuer: foreign }), write: vi.fn() },
+    });
+    await mismatched.initialize();
+    expect(mismatched.state.status).toBe('unconfigured');
+    await expect(mismatched.login({ code: 'a-company-invite' })).rejects.toThrow('JR_ACCESS_UNCONFIGURED');
+    expect(diagnostics).toContain('JR_ACCESS_UNCONFIGURED issuer');
+    expect(diagnostics.join('\n')).not.toContain(foreign);
+  });
+
   it('fails closed when operating system encryption is unavailable or Linux uses the plaintext backend', async () => {
     const root = await mkdtemp(join(tmpdir(), 'jr-access-'));
     roots.push(root);

@@ -64,17 +64,19 @@ const JrAccessGate: React.FC<React.PropsWithChildren> = ({ children }) => {
   const permitted = state.status === 'authenticated' || state.status === 'pilot';
   if (permitted) return <JrAccessContext.Provider value={{ state, logout }}>{children}</JrAccessContext.Provider>;
   const message =
-    state.status === 'revoked'
-      ? 'common.jr.access.revoked'
-      : state.status === 'blocked'
-        ? 'common.jr.access.blocked'
-        : state.status === 'outside-hours'
-          ? 'common.jr.access.outsideHours'
-          : state.status === 'offline'
-            ? 'common.jr.access.offline'
-            : state.status === 'unconfigured'
-              ? 'common.jr.access.unconfigured'
-              : null;
+    state.notice === 'storage'
+      ? 'common.jr.access.storageUnavailable'
+      : state.status === 'revoked'
+        ? 'common.jr.access.revoked'
+        : state.status === 'blocked'
+          ? 'common.jr.access.blocked'
+          : state.status === 'outside-hours'
+            ? 'common.jr.access.outsideHours'
+            : state.status === 'offline'
+              ? 'common.jr.access.offline'
+              : state.status === 'unconfigured'
+                ? 'common.jr.access.unconfigured'
+                : null;
   return (
     <main className={styles.page}>
       <section className={styles.login} aria-labelledby='jr-access-title'>

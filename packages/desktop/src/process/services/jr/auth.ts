@@ -37,6 +37,8 @@ type ControllerOptions = {
   ensurePilot?: () => Promise<void>;
   stopCore: () => Promise<void>;
   onChange: (state: JrAccessState) => void;
+  /** Record a stable access failure code. The callback must not receive secrets. */
+  onDiagnostic?: (cause: string) => void;
   request?: typeof fetch;
   pilot?: boolean;
   beforeFirstLogin?: () => Promise<void>;
@@ -245,22 +247,41 @@ export class JrAccessController {
   private persistence: Promise<void> = Promise.resolve();
   private authenticating = false;
   private blockingTransitions = 0;
+  private reported: string | null = null;
   constructor(private readonly options: ControllerOptions) {
     this.request = options.request || fetch;
   }
   get state(): JrAccessState {
-    return { status: this.current.status, user: this.current.user ? { ...this.current.user } : null };
+    return {
+      status: this.current.status,
+      user: this.current.user ? { ...this.current.user } : null,
+      ...(this.current.notice ? { notice: this.current.notice } : {}),
+    };
   }
   /** Retry connectivity on demand while preserving explicit logout and revocation notices. */
   accessStatus(): Promise<JrAccessState> {
+    if (this.current.notice === 'storage' || this.current.status === 'unconfigured') return this.initialize();
     return ['offline', 'blocked', 'outside-hours'].includes(this.current.status)
       ? this.refresh()
       : Promise.resolve(this.state);
   }
-  private publish(status: JrAccessState['status'], user: JrAccessUser | null = null): JrAccessState {
-    this.current = { status, user };
+  private publish(
+    status: JrAccessState['status'],
+    user: JrAccessUser | null = null,
+    notice: JrAccessState['notice'] | null = null
+  ): JrAccessState {
+    this.current = notice ? { status, user, notice } : { status, user };
     this.options.onChange(this.state);
     return this.state;
+  }
+  private report(cause: string): void {
+    if (this.reported === cause) return;
+    this.reported = cause;
+    try {
+      this.options.onDiagnostic?.(cause);
+    } catch {
+      // Diagnostics must not decide whether the person can sign in.
+    }
   }
   private async remote(path: string, init: RequestInit = {}, token = this.saved?.token): Promise<Response> {
     if (!this.options.url) return fail('JR_ACCESS_UNCONFIGURED');
@@ -309,7 +330,8 @@ export class JrAccessController {
       try {
         if (this.saved?.token === token) await this.clearToken();
       } catch {
-        return this.publish('unconfigured');
+        this.report('JR_ACCESS_STORAGE_UNAVAILABLE');
+        return this.publish('signed-out', null, 'storage');
       }
       return this.state;
     });
@@ -329,13 +351,27 @@ export class JrAccessController {
   }
   async initialize(): Promise<JrAccessState> {
     if (this.options.pilot) return this.publish('pilot');
-    if (!this.options.url) return this.publish('unconfigured');
-    try {
-      this.saved = await this.options.store.read();
-      if (this.saved && this.saved.issuer !== this.options.url) return this.publish('unconfigured');
-    } catch {
+    if (!this.options.url) {
+      this.report('JR_ACCESS_UNCONFIGURED url');
       return this.publish('unconfigured');
     }
+    try {
+      this.saved = await this.options.store.read();
+    } catch (error) {
+      const code = error instanceof Error ? error.message : '';
+      this.report(
+        code === 'JR_ACCESS_STORAGE_UNAVAILABLE' || code === 'JR_ACCESS_STORAGE_INVALID'
+          ? code
+          : 'JR_ACCESS_STORAGE_UNAVAILABLE'
+      );
+      return this.publish('signed-out', null, 'storage');
+    }
+    if (this.saved && this.saved.issuer !== this.options.url) {
+      this.report('JR_ACCESS_UNCONFIGURED issuer');
+      return this.publish('unconfigured');
+    }
+    this.reported = null;
+    if (this.current.notice) this.current = { status: this.current.status, user: this.current.user };
     if (!this.saved?.token) return this.publish('signed-out');
     return this.refresh();
   }
@@ -376,6 +412,7 @@ export class JrAccessController {
   }
   async refresh(): Promise<JrAccessState> {
     if (this.refreshing) return this.refreshing;
+    if (this.current.notice === 'storage') return this.initialize();
     if (
       !this.saved?.token ||
       !this.options.url ||
@@ -432,8 +469,14 @@ export class JrAccessController {
       this.current.status === 'checking'
     )
       return fail('JR_ACCESS_BUSY');
-    if (!this.options.url || this.options.pilot || this.current.status === 'unconfigured')
+    if (this.current.notice === 'storage' || this.current.status === 'unconfigured') await this.initialize();
+    if (this.state.status === 'authenticated') return this.state;
+    if (!this.options.url || this.options.pilot) {
+      this.report('JR_ACCESS_UNCONFIGURED url');
       return fail('JR_ACCESS_UNCONFIGURED');
+    }
+    if (this.current.notice === 'storage') return fail('JR_ACCESS_STORAGE_UNAVAILABLE');
+    if (this.current.status === 'unconfigured') return fail('JR_ACCESS_UNCONFIGURED');
     if (typeof input?.code !== 'string' || !input.code.trim() || input.code.length > 512)
       return fail('JR_ACCESS_INVALID_CODE');
     const epoch = ++this.generation;
@@ -504,22 +547,22 @@ export class JrAccessController {
         : error instanceof Error && publicCodes.has(error.message)
           ? error.message
           : 'JR_ACCESS_UNAVAILABLE';
-      if (epoch === this.generation)
+      if (epoch === this.generation) {
+        if (publicError === 'JR_ACCESS_STORAGE_UNAVAILABLE') this.report('JR_ACCESS_STORAGE_UNAVAILABLE');
         this.publish(
           publicError === 'JR_ACCESS_BLOCKED'
             ? 'blocked'
             : publicError === 'JR_ACCESS_OUTSIDE_HOURS'
               ? 'outside-hours'
-              : [
-                    'JR_ACCESS_STORAGE_UNAVAILABLE',
-                    'JR_ACCESS_PROFILE_UNBOUND',
-                    'JR_ACCESS_RUNTIME_UNAVAILABLE',
-                  ].includes(publicError)
+              : publicError === 'JR_ACCESS_PROFILE_UNBOUND' || publicError === 'JR_ACCESS_RUNTIME_UNAVAILABLE'
                 ? 'unconfigured'
                 : publicError === 'JR_ACCESS_UNAVAILABLE'
                   ? 'offline'
-                  : 'signed-out'
+                  : 'signed-out',
+          null,
+          publicError === 'JR_ACCESS_STORAGE_UNAVAILABLE' ? 'storage' : null
         );
+      }
       if (publicError !== 'JR_ACCESS_UNAVAILABLE') throw new Error(publicError);
       return fail('JR_ACCESS_UNAVAILABLE');
     } finally {
@@ -554,7 +597,8 @@ export class JrAccessController {
       try {
         if (this.saved?.token === token) await this.clearToken();
       } catch {
-        this.publish('unconfigured');
+        this.report('JR_ACCESS_STORAGE_UNAVAILABLE');
+        this.publish('signed-out', null, 'storage');
         persisted = false;
       }
       if (token) await this.remote('/auth/logout', { method: 'POST' }, token).catch(() => {});
