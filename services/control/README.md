@@ -4,20 +4,23 @@ Serviço separado do aplicativo. Executa em Node.js 24, usa SQLite e não possui
 
 ## Configuração
 
-| Variável                     | Uso                                                                                                                             |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `JR_ADMIN_CODE`              | Código exclusivo do administrador, entre 32 e 256 caracteres, sem espaços. Gere um valor aleatório seguro; não use senha comum. |
-| `JR_UPSTREAM_KEY`            | Chave real do provedor, disponível somente neste serviço.                                                                       |
-| `JR_UPSTREAM_URL`            | Endereço HTTPS do provedor terminando em `/v1`. Para JR: `https://jrsantafe.stratacerta.com.br/mmx/v1`.                         |
-| `JR_MODEL`                   | Modelo permitido. Padrão da entrada executável: `MiniMax-M3.1-Flash`.                                                           |
-| `JR_CONTROL_DATA_DIR`        | Diretório persistente privado. Padrão local: `./data`. No contêiner: `/data`.                                                   |
-| `JR_CONTROL_HOST`            | Padrão local: `127.0.0.1`. No contêiner: `0.0.0.0`, com publicação somente em `127.0.0.1`.                                      |
-| `JR_CONTROL_PORT`            | Porta do serviço. Padrão: `8787`.                                                                                               |
-| `OPENROUTER_API_KEY`         | Chave do OpenRouter. Sem ela, esse provedor não é chamado.                                                                      |
-| `OPENROUTER_FALLBACK_MODELS` | Modelos gratuitos separados por vírgula, cada um terminando em `:free`. O roteador `openrouter/free` vem sempre primeiro.       |
-| `GEMINI_API_KEY`             | Chave do AI Studio. Sem ela, o Gemini não é chamado.                                                                            |
-| `GEMINI_MODEL`               | Opcional. Padrão: `gemini-2.5-flash`.                                                                                           |
-| `FALLBACK_ENABLED`           | `true` ou `false`. Se omitida, o fallback fica ligado somente quando existe uma das chaves acima.                               |
+| Variável                     | Uso                                                                                                                                |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `JR_ADMIN_CODE`              | Código exclusivo do administrador, entre 32 e 256 caracteres, sem espaços. Gere um valor aleatório seguro; não use senha comum.    |
+| `JR_UPSTREAM_KEY`            | Chave real do provedor, disponível somente neste serviço.                                                                          |
+| `JR_UPSTREAM_URL`            | Endereço HTTPS do provedor terminando em `/v1`. Para JR: `https://jrsantafe.stratacerta.com.br/mmx/v1`.                            |
+| `JR_MODEL`                   | Modelo permitido. Padrão da entrada executável: `MiniMax-M3.1-Flash`.                                                              |
+| `JR_CONTROL_DATA_DIR`        | Diretório persistente privado. Padrão local: `./data`. No contêiner: `/data`.                                                      |
+| `JR_CONTROL_HOST`            | Padrão local: `127.0.0.1`. No contêiner: `0.0.0.0`, com publicação somente em `127.0.0.1`.                                         |
+| `JR_CONTROL_PORT`            | Porta do serviço. Padrão: `8787`.                                                                                                  |
+| `OPENROUTER_API_KEY`         | Chave do OpenRouter. Sem ela, esse provedor não é chamado.                                                                         |
+| `OPENROUTER_FALLBACK_MODELS` | Modelos gratuitos separados por vírgula, cada um terminando em `:free`. O roteador `openrouter/free` vem sempre primeiro.          |
+| `GEMINI_API_KEY`             | Chave do AI Studio. Sem ela, o Gemini não entra no fallback nem resume histórico.                                                  |
+| `GEMINI_MODEL`               | Opcional. Padrão: `gemini-3.8-flash`. Vale para o fallback e para o resumo.                                                        |
+| `FALLBACK_ENABLED`           | `true` ou `false`. Se omitida, o fallback fica ligado somente quando existe uma das chaves acima.                                  |
+| `ATTEMPT_MS`                 | Tempo máximo até os headers de cada provedor, em milissegundos. Padrão: `90000`. Não corta um stream já iniciado.                  |
+| `COMPACTION_BUDGET_MS`       | Teto somado das tentativas de resumo. Padrão: `60000`. Cada bloco usa no máximo `ATTEMPT_MS`. Estourou, o resto não vai ao Gemini. |
+| `COMPACTION_ENABLED`         | `true` ou `false`. Se omitida, a compactação fica ligada. `false` desliga só o resumo; 400/413 e o fallback continuam.             |
 
 O processo encerra se faltarem credenciais válidas. Não existe código de administrador padrão. Não grave credenciais no código, no histórico de comandos ou em arquivo versionado. O serviço não lê configurações do OpenCode.
 
@@ -27,15 +30,49 @@ Com as variáveis disponíveis no ambiente seguro do processo:
 node services/control/index.mjs
 ```
 
-Para o contêiner, execute `docker compose -f deploy/compose.yml --env-file .env up -d --build` dentro desta pasta. O volume `control_data` preserva usuários, hashes de sessões e medições. O contêiner roda como usuário `node`, com raiz somente para leitura. Mantenha uma única instância do serviço para que a revogação também encerre os fluxos em curso.
+Na VPS o diretório `/srv/z0c/jr-bot-control` não é um repositório git. O deploy usa o Compose já existente, com o projeto `jr-bot-control` e o overlay Traefik:
 
-O proxy reverso deve oferecer HTTPS e remover o prefixo público `/bot` antes de encaminhar para `127.0.0.1:8787`. Desative o armazenamento de respostas, a retenção de corpos e o registro de cabeçalhos `Authorization`. Para respostas SSE, desative o armazenamento intermediário e permita até três minutos por requisição. A configuração do proxy e a publicação na VPS não são executadas por este código.
+```sh
+cd /srv/z0c/jr-bot-control/deploy && docker compose -p jr-bot-control --env-file ../.env -f compose.yml -f traefik.yml up -d --build
+```
+
+Antes desse comando, guarde uma cópia da árvore e a imagem que está no ar. O arquivo `.tgz` fica ao lado do diretório, não dentro dele. A imagem de rollback é a imagem do contêiner atual, etiquetada antes do `--build`:
+
+```sh
+cd /srv/z0c/jr-bot-control/deploy
+stamp=$(date -u +%Y%m%dT%H%M%SZ)
+tar -C /srv/z0c -czf "/srv/z0c/jr-bot-control-${stamp}.tgz" jr-bot-control
+cid=$(docker compose -p jr-bot-control --env-file ../.env -f compose.yml -f traefik.yml ps -q control)
+image=$(docker inspect --format '{{.Image}}' "$cid")
+docker tag "$image" "jr-bot-control-control:rollback-${stamp}"
+docker tag "$image" jr-bot-control-control:rollback
+```
+
+Para voltar a imagem etiquetada, sem rebuild:
+
+```sh
+cd /srv/z0c/jr-bot-control/deploy
+docker tag jr-bot-control-control:rollback jr-bot-control-control:latest
+docker compose -p jr-bot-control --env-file ../.env -f compose.yml -f traefik.yml up -d --no-build --force-recreate
+```
+
+Se um build posterior precisar dos arquivos antigos, restaure o pacote com `tar -C /srv/z0c -xzf /srv/z0c/jr-bot-control-STAMP.tgz`. O volume `control_data` não entra nesse pacote e não é apagado pelo rollback da imagem.
+
+No `../.env` da VPS, as variáveis novas são `ATTEMPT_MS` (padrão `90000`), `COMPACTION_BUDGET_MS` (padrão `60000`), `COMPACTION_ENABLED` (omitida ou vazia liga a compactação; `false` desliga) e `GEMINI_MODEL=gemini-3.8-flash`. Sem `GEMINI_MODEL`, o padrão também é `gemini-3.8-flash`.
+
+O volume `control_data` preserva usuários, hashes de sessões e medições. O contêiner roda como usuário `node`, com raiz somente para leitura. Mantenha uma única instância do serviço para que a revogação também encerre os fluxos em curso.
+
+O proxy reverso deve oferecer HTTPS e remover o prefixo público `/bot` antes de encaminhar para `127.0.0.1:8787`. Desative o armazenamento de respostas, a retenção de corpos e o registro de cabeçalhos `Authorization`. Para respostas SSE, desative o armazenamento intermediário. Este processo espera os headers por no máximo `ATTEMPT_MS` e não corta o corpo SSE depois disso; um timeout de leitura no proxy reverso, se existir, é independente. A configuração do proxy e a publicação na VPS não são executadas por este código.
 
 O mesmo host publica o atualizador Windows em `https://jrsantafe.stratacerta.com.br/mmx/updates/latest.yml`. Os arquivos `latest.yml`, o instalador e o `.blockmap` ficam juntos em `/opt/mmx-gw/data/updates`. O overlay Traefik encaminha `/mmx/updates` para esse diretório.
 
 ## Fallback gratuito
 
 Quando o MiniMax falha por rede, tempo esgotado, HTTP 5xx, 429, 401 ou 403, a mesma requisição é refeita antes de responder ao aplicativo. A ordem é `openrouter/free`, depois cada modelo de `OPENROUTER_FALLBACK_MODELS`, e por último o Gemini se `GEMINI_API_KEY` existir. O corpo original é preservado, inclusive ferramentas e fluxo SSE. O aplicativo continua pedindo o modelo MiniMax; este serviço troca somente o modelo enviado ao provedor de fallback.
+
+HTTP 400 e 413 do MiniMax não entram nessa cadeia. O status e o corpo do MiniMax voltam ao aplicativo, com segredos removidos, e não abrem o circuito. A linha de log traz status, modelo, tamanho estimado em tokens e o motivo, nunca a chave. No OpenRouter `:free` e no Gemini, 400 e 413 seguem para o próximo provedor. Se o provedor for o último da cadeia, a resposta é o status e o corpo dele, sem converter em 502.
+
+`ATTEMPT_MS` vale só até a chegada dos headers. Um stream SSE que já começou segue até o cliente encerrar, a sessão ser revogada ou o upstream fechar. Com `stream: true`, os frames saem conforme chegam, com o `content-type` do upstream. A resposta não é acumulada nem reescrita como JSON.
 
 Depois de três falhas seguidas do MiniMax, as próximas requisições vão direto ao fallback por três minutos. Em seguida o MiniMax é tentado de novo. Uma resposta concluída pelo MiniMax zera a contagem. Cancelamento do usuário, sessão revogada e pedido inválido não acionam o fallback.
 
@@ -51,6 +88,16 @@ node services/control/index.mjs
 ```
 
 Para desligar mesmo com chave presente: `FALLBACK_ENABLED=false`.
+
+## Contexto longo
+
+O MiniMax recusa contexto perto de 200 mil tokens. Antes de chamar o provedor, o serviço estima o JSON do pedido com 3 caracteres por token (mais seguro para português e código do que 4). Acima de 130 mil tokens, os trechos antigos viram blocos. O system prompt permanece. As últimas mensagens ficam inteiras, inclusive um par recente de `tool_call`/`tool_result`. Um par antigo entra no mesmo bloco, sem separar a chamada do resultado.
+
+Cada bloco antigo é resumido pelo Gemini (`GEMINI_MODEL`, padrão `gemini-3.8-flash`) se `GEMINI_API_KEY` existir. Sem essa chave, se o Gemini responder 400 ou 413, se a chamada falhar ou estourar `ATTEMPT_MS`, o bloco vira um excerto (início e fim do texto). O pedido original segue. Resumos e excertos entram no único system do começo, junto do prompt original. O resultado não leva um segundo system nem duas mensagens seguidas com o mesmo papel; um par `tool_call`/`tool_result` permanece junto. O teto `COMPACTION_BUDGET_MS` (padrão `60000`) soma os blocos em série; o que passar dele não chama mais o Gemini.
+
+Se só o system prompt ainda estourar o teto, ele é truncado no meio, preservando começo e fim. Se nem isso couber, a resposta é 413 `{error:{code:"context_too_large"}}`, sem ficar em loop.
+
+`COMPACTION_ENABLED=false` envia o histórico como chegou. Use isso para voltar atrás da compactação sem desfazer o repasse de 400/413.
 
 ## Contrato HTTP
 
@@ -91,7 +138,7 @@ Os contadores vêm exclusivamente de `usage` informado pelo provedor. Ausência 
 
 A latência mede o tempo do envio ao provedor até o fim da resposta. `averageFirstByteMs` mede a chegada do primeiro trecho do corpo. Essas médias não incluem aprovação humana de ferramentas e não comprovam velocidade no computador do funcionário.
 
-Não existe teto inicial de tokens. Existem proteções de transporte: corpo máximo de 16 MiB, quatro requisições simultâneas por pessoa, dezesseis no serviço e duração máxima de três minutos. A reserva de concorrência ocorre antes da leitura de corpos. Login permite sessenta tentativas por minuto por endereço de conexão; com proxy local, esse limite é compartilhado.
+O teto de contexto enviado ao provedor é 130 mil tokens estimados. Existem proteções de transporte: corpo máximo de 16 MiB, quatro requisições simultâneas por pessoa e dezesseis no serviço. Cada tentativa de provedor espera no máximo `ATTEMPT_MS` pelos headers (padrão 90 segundos) e há um teto de três minutos para obter esses headers. Esse tempo não corta o corpo SSE depois que os headers chegaram. A reserva de concorrência ocorre antes da leitura de corpos. Login permite sessenta tentativas por minuto por endereço de conexão; com proxy local, esse limite é compartilhado.
 
 ## Dados e limites reais
 

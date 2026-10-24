@@ -472,7 +472,7 @@ test('OpenRouter rate limits walk the free list and then Gemini', async (t) => {
       'openrouter/free',
       'deepseek/deepseek-chat:free',
       'qwen/qwen3-coder:free',
-      'gemini-2.5-flash',
+      'gemini-3.8-flash',
     ]
   );
   assert.equal(calls.at(-1).url, GEMINI_URL);
@@ -594,13 +594,19 @@ test('a MiniMax timeout is retried on OpenRouter before the client deadline', as
   assert.deepEqual(calls, [MINIMAX_URL, OPENROUTER_URL]);
 });
 
-test('provider 400 and a missing fallback key stay on the public MiniMax error', async (t) => {
+test('provider 400 is forwarded as 400 and does not fall through to another provider', async (t) => {
   let calls = 0;
+  const logs = [];
   const app = await startControl(t, {
+    log: (line) => logs.push(line),
+    openRouterKey: OPENROUTER_KEY,
     openRouterModels: 'deepseek/deepseek-chat:free',
     upstreamFetch: async () => {
       calls += 1;
-      return new Response('bad request', { status: 400 });
+      return new Response(`bad request ${UPSTREAM_KEY}`, {
+        status: 400,
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+      });
     },
   });
   const owner = await app.login();
@@ -609,8 +615,14 @@ test('provider 400 and a missing fallback key stay on the public MiniMax error',
     token: owner.token,
     body: { messages: [{ role: 'user', content: 'Olá' }] },
   });
-  assert.equal(response.status, 502);
+  const text = await response.text();
+  assert.equal(response.status, 400);
+  assert.equal(response.headers.get('content-type'), 'text/plain; charset=utf-8');
+  assert.match(text, /bad request/);
+  assert.equal(text.includes(UPSTREAM_KEY), false);
   assert.equal(calls, 1);
+  assert.match(logs.join('\n'), /Erro upstream: status=400 modelo=MiniMax-M3.1-Flash tokens~\d+ motivo=/);
+  assert.equal(logs.join('\n').includes(UPSTREAM_KEY), false);
   const leaked = await startControl(t, {
     log: () => {},
     openRouterKey: OPENROUTER_KEY,
@@ -630,4 +642,496 @@ test('provider 400 and a missing fallback key stay on the public MiniMax error',
   assert.equal(recovered.status, 200);
   assert.equal((await recovered.text()).includes(OPENROUTER_KEY), false);
   assert.equal(recovered.headers.get('x-jr-provider'), 'gemini');
+});
+
+test('provider 413 is forwarded as 413 with the upstream reason and does not open the fallback chain', async (t) => {
+  const logs = [];
+  const calls = [];
+  const app = await startControl(t, {
+    log: (line) => logs.push(line),
+    openRouterKey: OPENROUTER_KEY,
+    geminiKey: GEMINI_KEY,
+    upstreamFetch: async (url) => {
+      calls.push(url);
+      return new Response(JSON.stringify({ error: { code: 'context_length', message: `too large ${UPSTREAM_KEY}` } }), {
+        status: 413,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    },
+  });
+  const owner = await app.login();
+  const response = await app.request('/v1/chat/completions', {
+    method: 'POST',
+    token: owner.token,
+    body: { messages: [{ role: 'user', content: 'Olá' }] },
+  });
+  const payload = await response.json();
+  assert.equal(response.status, 413);
+  assert.equal(payload.error.code, 'context_length');
+  assert.equal(JSON.stringify(payload).includes(UPSTREAM_KEY), false);
+  assert.deepEqual(calls, [MINIMAX_URL]);
+  assert.match(logs.join('\n'), /Erro upstream: status=413 modelo=MiniMax-M3.1-Flash tokens~\d+ motivo=/);
+  assert.match(logs.join('\n'), /context_length/);
+  assert.equal(logs.join('\n').includes(UPSTREAM_KEY), false);
+});
+
+test('OpenRouter and Gemini 400 or 413 continue until the next provider', async (t) => {
+  const logs = [];
+  const calls = [];
+  const recovered = await startControl(t, {
+    log: (line) => logs.push(line),
+    openRouterKey: OPENROUTER_KEY,
+    geminiKey: GEMINI_KEY,
+    upstreamFetch: async (url) => {
+      calls.push(url);
+      if (url === MINIMAX_URL) return new Response('down', { status: 503 });
+      if (url === OPENROUTER_URL) {
+        return new Response(JSON.stringify({ error: { message: 'bad tools' } }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return Response.json({ choices: [{ message: { content: 'gemini-ok' } }] });
+    },
+  });
+  const owner = await recovered.login();
+  const response = await recovered.request('/v1/chat/completions', {
+    method: 'POST',
+    token: owner.token,
+    body: { messages: [{ role: 'user', content: 'Olá' }] },
+  });
+  assert.equal(response.status, 200);
+  assert.match(await response.text(), /gemini-ok/);
+  assert.equal(response.headers.get('x-jr-provider'), 'gemini');
+  assert.deepEqual(calls, [MINIMAX_URL, OPENROUTER_URL, GEMINI_URL]);
+  assert.match(logs.join('\n'), /Erro upstream: status=400 modelo=openrouter\/free tokens~\d+ motivo=.*seguinte/);
+
+  for (const status of [400, 413]) {
+    const chain = [];
+    const app = await startControl(t, {
+      log: () => {},
+      openRouterKey: OPENROUTER_KEY,
+      openRouterModels: 'deepseek/deepseek-chat:free',
+      geminiKey: GEMINI_KEY,
+      upstreamFetch: async (url, options) => {
+        const model = JSON.parse(options.body).model;
+        chain.push({ url, model });
+        if (url === MINIMAX_URL) return new Response('down', { status: 503 });
+        if (url === OPENROUTER_URL) {
+          return new Response(JSON.stringify({ error: { message: `openrouter-${status}` } }), {
+            status,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        return Response.json({ choices: [{ message: { content: `depois-${status}` } }] });
+      },
+    });
+    const session = await app.login();
+    const next = await app.request('/v1/chat/completions', {
+      method: 'POST',
+      token: session.token,
+      body: { messages: [{ role: 'user', content: 'Olá' }] },
+    });
+    assert.equal(next.status, 200);
+    assert.match(await next.text(), new RegExp(`depois-${status}`));
+    assert.deepEqual(
+      chain.map((call) => call.url),
+      [MINIMAX_URL, OPENROUTER_URL, OPENROUTER_URL, GEMINI_URL]
+    );
+    assert.deepEqual(
+      chain.map((call) => call.model),
+      [MODEL, 'openrouter/free', 'deepseek/deepseek-chat:free', 'gemini-3.8-flash']
+    );
+  }
+});
+
+test('the last fallback provider returns its own 400 or 413', async (t) => {
+  const calls = [];
+  const app = await startControl(t, {
+    log: () => {},
+    openRouterKey: OPENROUTER_KEY,
+    geminiKey: GEMINI_KEY,
+    upstreamFetch: async (url) => {
+      calls.push(url);
+      if (url === MINIMAX_URL) return new Response('down', { status: 503 });
+      if (url === OPENROUTER_URL) {
+        return new Response(JSON.stringify({ error: { message: 'bad tools' } }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({ error: { message: `gemini recusou ${GEMINI_KEY}` } }), {
+        status: 413,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    },
+  });
+  const owner = await app.login();
+  const response = await app.request('/v1/chat/completions', {
+    method: 'POST',
+    token: owner.token,
+    body: { messages: [{ role: 'user', content: 'Olá' }] },
+  });
+  const text = await response.text();
+  assert.equal(response.status, 413);
+  assert.match(text, /gemini recusou/);
+  assert.equal(text.includes(GEMINI_KEY), false);
+  assert.equal(response.headers.get('x-jr-provider'), 'gemini');
+  assert.deepEqual(calls, [MINIMAX_URL, OPENROUTER_URL, GEMINI_URL]);
+
+  const onlyRouter = [];
+  const router = await startControl(t, {
+    log: () => {},
+    openRouterKey: OPENROUTER_KEY,
+    upstreamFetch: async (url) => {
+      onlyRouter.push(url);
+      if (url === MINIMAX_URL) return new Response('down', { status: 503 });
+      return new Response(JSON.stringify({ error: { message: 'ultimo-free' } }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    },
+  });
+  const second = await router.login();
+  const last = await router.request('/v1/chat/completions', {
+    method: 'POST',
+    token: second.token,
+    body: { messages: [{ role: 'user', content: 'Olá' }] },
+  });
+  assert.equal(last.status, 400);
+  assert.match(await last.text(), /ultimo-free/);
+  assert.equal(last.headers.get('x-jr-provider'), 'openrouter');
+  assert.deepEqual(onlyRouter, [MINIMAX_URL, OPENROUTER_URL]);
+});
+
+test('repeated MiniMax 400 responses stay on MiniMax', async (t) => {
+  const calls = [];
+  const app = await startControl(t, {
+    log: () => {},
+    openRouterKey: OPENROUTER_KEY,
+    upstreamFetch: async (url) => {
+      calls.push(url);
+      return new Response('no', { status: 400 });
+    },
+  });
+  const owner = await app.login();
+  const body = { messages: [{ role: 'user', content: 'Olá' }] };
+  for (let index = 0; index < 3; index += 1) {
+    assert.equal((await app.request('/v1/chat/completions', { method: 'POST', token: owner.token, body })).status, 400);
+  }
+  assert.deepEqual(calls, [MINIMAX_URL, MINIMAX_URL, MINIMAX_URL]);
+});
+
+test('GEMINI_MODEL overrides the fallback model', async (t) => {
+  const models = [];
+  const app = await startControl(t, {
+    log: () => {},
+    geminiKey: GEMINI_KEY,
+    geminiModel: 'gemini-3.8-pro',
+    upstreamFetch: async (url, options) => {
+      models.push(JSON.parse(options.body).model);
+      if (url === MINIMAX_URL) return new Response('denied', { status: 401 });
+      return Response.json({ choices: [{ message: { content: 'ok' } }] });
+    },
+  });
+  const owner = await app.login();
+  const response = await app.request('/v1/chat/completions', {
+    method: 'POST',
+    token: owner.token,
+    body: { messages: [{ role: 'user', content: 'Olá' }] },
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(models, [MODEL, 'gemini-3.8-pro']);
+});
+
+test('stream SSE headers and the first frame arrive before the upstream body ends', { timeout: 5_000 }, async (t) => {
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  t.after(() => release());
+  const encoder = new TextEncoder();
+  const app = await startControl(t, {
+    upstreamFetch: async () =>
+      new Response(
+        new ReadableStream({
+          async start(controller) {
+            controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"A"}}]}\n\n'));
+            await gate;
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+            controller.close();
+          },
+        }),
+        { headers: { 'Content-Type': 'text/event-stream; charset=utf-8', 'X-Upstream-Trace': 'trace-1' } }
+      ),
+  });
+  const owner = await app.login();
+  const response = await Promise.race([
+    app.request('/v1/chat/completions', {
+      method: 'POST',
+      token: owner.token,
+      body: { stream: true, messages: [{ role: 'user', content: 'Olá' }] },
+    }),
+    new Promise((_resolve, reject) => setTimeout(() => reject(new Error('headers late')), 1_000)),
+  ]);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('content-type'), 'text/event-stream; charset=utf-8');
+  assert.equal(response.headers.get('x-upstream-trace'), 'trace-1');
+  assert.equal(response.headers.get('content-type').includes('application/json'), false);
+  const reader = response.body.getReader();
+  const first = await reader.read();
+  assert.match(Buffer.from(first.value).toString('utf8'), /"A"/);
+  release();
+  let rest = '';
+  while (true) {
+    const next = await reader.read();
+    if (next.done) break;
+    rest += Buffer.from(next.value).toString('utf8');
+  }
+  assert.match(rest, /\[DONE\]/);
+});
+
+test('the attempt timeout stops at the headers and does not cut an open stream', { timeout: 5_000 }, async (t) => {
+  const calls = [];
+  const encoder = new TextEncoder();
+  const app = await startControl(t, {
+    log: () => {},
+    fallbackAttemptMs: 80,
+    openRouterKey: OPENROUTER_KEY,
+    upstreamFetch: async (url, options) => {
+      calls.push(url);
+      if (url !== MINIMAX_URL) throw new Error(`provedor inesperado ${url}`);
+      return new Response(
+        new ReadableStream({
+          async start(controller) {
+            controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"um"}}]}\n\n'));
+            await new Promise((resolve) => setTimeout(resolve, 250));
+            if (options.signal?.aborted) {
+              controller.error(options.signal.reason ?? new Error('aborted'));
+              return;
+            }
+            controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"dois"}}]}\n\n'));
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+            controller.close();
+          },
+        }),
+        { headers: { 'Content-Type': 'text/event-stream' } }
+      );
+    },
+  });
+  const owner = await app.login();
+  const response = await app.request('/v1/chat/completions', {
+    method: 'POST',
+    token: owner.token,
+    body: { stream: true, messages: [{ role: 'user', content: 'Olá' }] },
+  });
+  const text = await response.text();
+  assert.equal(response.status, 200);
+  assert.match(text, /um/);
+  assert.match(text, /dois/);
+  assert.equal(response.headers.get('x-jr-provider'), 'minimax');
+  assert.deepEqual(calls, [MINIMAX_URL]);
+});
+
+function assertCompactShape(messages) {
+  const systems = messages.filter((message) => message.role === 'system');
+  assert.ok(systems.length <= 1);
+  if (systems.length === 1) assert.equal(messages[0].role, 'system');
+  for (let index = 1; index < messages.length; index += 1) {
+    assert.notEqual(messages[index].role, messages[index - 1].role);
+  }
+}
+
+function longContext() {
+  const messages = [{ role: 'system', content: 'Regras fixas.' }];
+  for (let index = 0; index < 8; index += 1) {
+    messages.push({
+      role: 'user',
+      content: `INICIO-${index}-${'x'.repeat(35_000)}MEIO-UNICO-${index}${'y'.repeat(35_000)}-FIM-${index}`,
+    });
+  }
+  messages.push({
+    role: 'assistant',
+    content: null,
+    tool_calls: [{ id: 'call_new', type: 'function', function: { name: 'save', arguments: '{"path":"a.txt"}' } }],
+  });
+  messages.push({ role: 'tool', tool_call_id: 'call_new', content: 'ok-salvo' });
+  messages.push({ role: 'user', content: 'ULTIMA-MENSAGEM' });
+  return messages;
+}
+
+test('context over 140k tokens is excerpted without Gemini when no key is configured', async (t) => {
+  const calls = [];
+  let forwarded;
+  const app = await startControl(t, {
+    upstreamFetch: async (url, options) => {
+      calls.push(url);
+      forwarded = JSON.parse(options.body);
+      return Response.json({ choices: [{ message: { content: 'ok' } }] });
+    },
+  });
+  const owner = await app.login();
+  const messages = longContext();
+  assert.ok(Math.ceil(JSON.stringify(messages).length / 3) > 140_000);
+  const response = await app.request('/v1/chat/completions', {
+    method: 'POST',
+    token: owner.token,
+    body: { messages },
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(calls, [MINIMAX_URL]);
+  const sent = JSON.stringify(forwarded.messages);
+  assert.ok(Math.ceil(sent.length / 3) <= 130_000);
+  assert.match(sent, /ULTIMA-MENSAGEM/);
+  assert.match(sent, /ok-salvo/);
+  assert.match(sent, /call_new/);
+  assert.match(sent, /Regras fixas/);
+  assert.match(sent, /português do Brasil/);
+  assert.equal(sent.includes('MEIO-UNICO-0'), false);
+  assert.match(sent, /contexto compactado/);
+  assertCompactShape(forwarded.messages);
+});
+
+test('a long context uses Gemini summaries and still sends the recent tool pair', async (t) => {
+  const summaryCalls = [];
+  let forwarded;
+  const app = await startControl(t, {
+    log: () => {},
+    geminiKey: GEMINI_KEY,
+    upstreamFetch: async (url, options) => {
+      const body = JSON.parse(options.body);
+      if (url === GEMINI_URL) {
+        summaryCalls.push(body);
+        assert.equal(body.stream, false);
+        return Response.json({ choices: [{ message: { content: 'Resumo fiel dos arquivos.' } }] });
+      }
+      forwarded = body;
+      return Response.json({ choices: [{ message: { content: 'ok' } }] });
+    },
+  });
+  const owner = await app.login();
+  const response = await app.request('/v1/chat/completions', {
+    method: 'POST',
+    token: owner.token,
+    body: { messages: longContext() },
+  });
+  assert.equal(response.status, 200);
+  assert.ok(summaryCalls.length > 0);
+  assert.equal(summaryCalls[0].model, 'gemini-3.8-flash');
+  assert.match(summaryCalls[0].messages.at(-1).content, /MEIO-UNICO-0/);
+  const sent = JSON.stringify(forwarded.messages);
+  assert.match(sent, /Resumo fiel dos arquivos/);
+  assert.match(sent, /ULTIMA-MENSAGEM/);
+  assert.match(sent, /ok-salvo/);
+  assert.equal(sent.includes('MEIO-UNICO-0'), false);
+  assert.ok(Math.ceil(sent.length / 3) <= 130_000);
+  assert.equal(JSON.stringify(forwarded).includes(GEMINI_KEY), false);
+  assertCompactShape(forwarded.messages);
+});
+
+test('Gemini 400 and 413 while summarizing still deliver the original request', async (t) => {
+  for (const status of [400, 413]) {
+    let forwarded;
+    const app = await startControl(t, {
+      log: () => {},
+      geminiKey: GEMINI_KEY,
+      upstreamFetch: async (url, options) => {
+        if (url === GEMINI_URL) return new Response(JSON.stringify({ error: { message: 'resumo recusado' } }), { status });
+        forwarded = JSON.parse(options.body);
+        return Response.json({ choices: [{ message: { content: 'seguiu' } }] });
+      },
+    });
+    const owner = await app.login();
+    const response = await app.request('/v1/chat/completions', {
+      method: 'POST',
+      token: owner.token,
+      body: { messages: longContext() },
+    });
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).choices[0].message.content, 'seguiu');
+    const sent = JSON.stringify(forwarded.messages);
+    assert.match(sent, /contexto compactado/);
+    assert.match(sent, /ULTIMA-MENSAGEM/);
+    assert.equal(sent.includes('MEIO-UNICO-0'), false);
+    assertCompactShape(forwarded.messages);
+  }
+});
+
+test('a hung Gemini summary falls back to an excerpt and the user request succeeds', { timeout: 5_000 }, async (t) => {
+  let forwarded;
+  const app = await startControl(t, {
+    log: () => {},
+    fallbackAttemptMs: 40,
+    geminiKey: GEMINI_KEY,
+    upstreamFetch: async (url, options) => {
+      if (url === GEMINI_URL) {
+        return new Promise((_resolve, reject) => {
+          options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true });
+        });
+      }
+      forwarded = JSON.parse(options.body);
+      return Response.json({ choices: [{ message: { content: 'depois do resumo' } }] });
+    },
+  });
+  const owner = await app.login();
+  const response = await app.request('/v1/chat/completions', {
+    method: 'POST',
+    token: owner.token,
+    body: { messages: longContext() },
+  });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).choices[0].message.content, 'depois do resumo');
+  assert.match(JSON.stringify(forwarded.messages), /contexto compactado/);
+  assert.match(JSON.stringify(forwarded.messages), /ULTIMA-MENSAGEM/);
+  assertCompactShape(forwarded.messages);
+});
+
+test('a system prompt over the ceiling is truncated and the latest user turn is kept', async (t) => {
+  let forwarded;
+  const app = await startControl(t, {
+    upstreamFetch: async (_url, options) => {
+      forwarded = JSON.parse(options.body);
+      return Response.json({ choices: [{ message: { content: 'ok' } }] });
+    },
+  });
+  const owner = await app.login();
+  const response = await app.request('/v1/chat/completions', {
+    method: 'POST',
+    token: owner.token,
+    body: {
+      messages: [{ role: 'system', content: `INICIO-${'S'.repeat(450_000)}-FIM` }, { role: 'user', content: 'ping' }],
+    },
+  });
+  assert.equal(response.status, 200);
+  const system = forwarded.messages.find((message) => message.role === 'system');
+  assert.match(system.content, /INICIO-/);
+  assert.match(system.content, /FIM/);
+  assert.equal(forwarded.messages.at(-1).content, 'ping');
+  assert.ok(Math.ceil(JSON.stringify(forwarded.messages).length / 3) <= 130_000);
+  assert.equal(system.content.includes('S'.repeat(450_000)), false);
+});
+
+test('COMPACTION_ENABLED false sends the long history unchanged', async (t) => {
+  let forwarded;
+  const calls = [];
+  const app = await startControl(t, {
+    compactionEnabled: false,
+    geminiKey: GEMINI_KEY,
+    upstreamFetch: async (url, options) => {
+      calls.push(url);
+      forwarded = JSON.parse(options.body);
+      return Response.json({ choices: [{ message: { content: 'ok' } }] });
+    },
+  });
+  const owner = await app.login();
+  const messages = longContext();
+  const response = await app.request('/v1/chat/completions', {
+    method: 'POST',
+    token: owner.token,
+    body: { messages },
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(calls, [MINIMAX_URL]);
+  assert.match(JSON.stringify(forwarded.messages), /MEIO-UNICO-0/);
+  assert.match(JSON.stringify(forwarded.messages), /ULTIMA-MENSAGEM/);
 });
