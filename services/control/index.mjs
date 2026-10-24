@@ -15,6 +15,9 @@ try {
     geminiKey: process.env.GEMINI_API_KEY,
     geminiModel: process.env.GEMINI_MODEL,
     fallbackEnabled: process.env.FALLBACK_ENABLED,
+    attemptMs: process.env.ATTEMPT_MS,
+    compactionBudgetMs: process.env.COMPACTION_BUDGET_MS,
+    compactionEnabled: process.env.COMPACTION_ENABLED,
   });
   control.server.once('error', () => {
     process.stderr.write('Não foi possível iniciar o controle de acesso.\n');

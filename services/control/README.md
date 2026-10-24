@@ -15,9 +15,12 @@ Serviço separado do aplicativo. Executa em Node.js 24, usa SQLite e não possui
 | `JR_CONTROL_PORT`            | Porta do serviço. Padrão: `8787`.                                                                                               |
 | `OPENROUTER_API_KEY`         | Chave do OpenRouter. Sem ela, esse provedor não é chamado.                                                                      |
 | `OPENROUTER_FALLBACK_MODELS` | Modelos gratuitos separados por vírgula, cada um terminando em `:free`. O roteador `openrouter/free` vem sempre primeiro.       |
-| `GEMINI_API_KEY`             | Chave do AI Studio. Sem ela, o Gemini não é chamado.                                                                            |
-| `GEMINI_MODEL`               | Opcional. Padrão: `gemini-2.5-flash`.                                                                                           |
+| `GEMINI_API_KEY`             | Chave do AI Studio. Sem ela, o Gemini não entra no fallback nem resume histórico.                                               |
+| `GEMINI_MODEL`               | Opcional. Padrão: `gemini-3.8-flash`. Vale para o fallback e para o resumo.                                                     |
 | `FALLBACK_ENABLED`           | `true` ou `false`. Se omitida, o fallback fica ligado somente quando existe uma das chaves acima.                               |
+| `ATTEMPT_MS`                 | Tempo máximo até os headers de cada provedor, em milissegundos. Padrão: `90000`. Não corta um stream já iniciado.               |
+| `COMPACTION_BUDGET_MS`       | Teto somado das tentativas de resumo. Padrão: `180000`. Cada bloco usa no máximo `ATTEMPT_MS`. Estourou, o resto não vai ao Gemini. |
+| `COMPACTION_ENABLED`         | `true` ou `false`. Se omitida, a compactação fica ligada. `false` desliga só o resumo; 400/413 e o fallback continuam.          |
 
 O processo encerra se faltarem credenciais válidas. Não existe código de administrador padrão. Não grave credenciais no código, no histórico de comandos ou em arquivo versionado. O serviço não lê configurações do OpenCode.
 
@@ -29,13 +32,17 @@ node services/control/index.mjs
 
 Para o contêiner, execute `docker compose -f deploy/compose.yml --env-file .env up -d --build` dentro desta pasta. O volume `control_data` preserva usuários, hashes de sessões e medições. O contêiner roda como usuário `node`, com raiz somente para leitura. Mantenha uma única instância do serviço para que a revogação também encerre os fluxos em curso.
 
-O proxy reverso deve oferecer HTTPS e remover o prefixo público `/bot` antes de encaminhar para `127.0.0.1:8787`. Desative o armazenamento de respostas, a retenção de corpos e o registro de cabeçalhos `Authorization`. Para respostas SSE, desative o armazenamento intermediário e permita até três minutos por requisição. A configuração do proxy e a publicação na VPS não são executadas por este código.
+O proxy reverso deve oferecer HTTPS e remover o prefixo público `/bot` antes de encaminhar para `127.0.0.1:8787`. Desative o armazenamento de respostas, a retenção de corpos e o registro de cabeçalhos `Authorization`. Para respostas SSE, desative o armazenamento intermediário. Este processo espera os headers por no máximo `ATTEMPT_MS` e não corta o corpo SSE depois disso; um timeout de leitura no proxy reverso, se existir, é independente. A configuração do proxy e a publicação na VPS não são executadas por este código.
 
 O mesmo host publica o atualizador Windows em `https://jrsantafe.stratacerta.com.br/mmx/updates/latest.yml`. Os arquivos `latest.yml`, o instalador e o `.blockmap` ficam juntos em `/opt/mmx-gw/data/updates`. O overlay Traefik encaminha `/mmx/updates` para esse diretório.
 
 ## Fallback gratuito
 
 Quando o MiniMax falha por rede, tempo esgotado, HTTP 5xx, 429, 401 ou 403, a mesma requisição é refeita antes de responder ao aplicativo. A ordem é `openrouter/free`, depois cada modelo de `OPENROUTER_FALLBACK_MODELS`, e por último o Gemini se `GEMINI_API_KEY` existir. O corpo original é preservado, inclusive ferramentas e fluxo SSE. O aplicativo continua pedindo o modelo MiniMax; este serviço troca somente o modelo enviado ao provedor de fallback.
+
+HTTP 400 e 413 não entram nessa cadeia. O status e o corpo do upstream voltam ao aplicativo, com segredos removidos. A linha de log traz status, modelo, tamanho estimado em tokens e o motivo, nunca a chave. Um 400 ou 413 também não abre o circuito do MiniMax.
+
+`ATTEMPT_MS` vale só até a chegada dos headers. Um stream SSE que já começou segue até o cliente encerrar, a sessão ser revogada ou o upstream fechar. Com `stream: true`, os frames saem conforme chegam, com o `content-type` do upstream. A resposta não é acumulada nem reescrita como JSON.
 
 Depois de três falhas seguidas do MiniMax, as próximas requisições vão direto ao fallback por três minutos. Em seguida o MiniMax é tentado de novo. Uma resposta concluída pelo MiniMax zera a contagem. Cancelamento do usuário, sessão revogada e pedido inválido não acionam o fallback.
 
@@ -51,6 +58,16 @@ node services/control/index.mjs
 ```
 
 Para desligar mesmo com chave presente: `FALLBACK_ENABLED=false`.
+
+## Contexto longo
+
+O MiniMax recusa contexto perto de 200 mil tokens. Antes de chamar o provedor, o serviço estima o JSON do pedido com 3 caracteres por token (mais seguro para português e código do que 4). Acima de 130 mil tokens, os trechos antigos viram blocos. O system prompt permanece. As últimas mensagens ficam inteiras, inclusive um par recente de `tool_call`/`tool_result`. Um par antigo entra no mesmo bloco, sem separar a chamada do resultado.
+
+Cada bloco antigo é resumido pelo Gemini (`GEMINI_MODEL`, padrão `gemini-3.8-flash`) se `GEMINI_API_KEY` existir. Sem essa chave, se o Gemini responder 400 ou 413, se a chamada falhar ou estourar `ATTEMPT_MS`, o bloco vira um excerto (início e fim do texto). O pedido original segue. O teto `COMPACTION_BUDGET_MS` soma os blocos em série; o que passar dele não chama mais o Gemini.
+
+Se só o system prompt ainda estourar o teto, ele é truncado no meio, preservando começo e fim. Se nem isso couber, a resposta é 413 `{error:{code:"context_too_large"}}`, sem ficar em loop.
+
+`COMPACTION_ENABLED=false` envia o histórico como chegou. Use isso para voltar atrás da compactação sem desfazer o repasse de 400/413.
 
 ## Contrato HTTP
 
@@ -91,7 +108,7 @@ Os contadores vêm exclusivamente de `usage` informado pelo provedor. Ausência 
 
 A latência mede o tempo do envio ao provedor até o fim da resposta. `averageFirstByteMs` mede a chegada do primeiro trecho do corpo. Essas médias não incluem aprovação humana de ferramentas e não comprovam velocidade no computador do funcionário.
 
-Não existe teto inicial de tokens. Existem proteções de transporte: corpo máximo de 16 MiB, quatro requisições simultâneas por pessoa, dezesseis no serviço e duração máxima de três minutos. A reserva de concorrência ocorre antes da leitura de corpos. Login permite sessenta tentativas por minuto por endereço de conexão; com proxy local, esse limite é compartilhado.
+O teto de contexto enviado ao provedor é 130 mil tokens estimados. Existem proteções de transporte: corpo máximo de 16 MiB, quatro requisições simultâneas por pessoa e dezesseis no serviço. Cada tentativa de provedor espera no máximo `ATTEMPT_MS` pelos headers (padrão 90 segundos) e há um teto de três minutos para obter esses headers. Esse tempo não corta o corpo SSE depois que os headers chegaram. A reserva de concorrência ocorre antes da leitura de corpos. Login permite sessenta tentativas por minuto por endereço de conexão; com proxy local, esse limite é compartilhado.
 
 ## Dados e limites reais
 

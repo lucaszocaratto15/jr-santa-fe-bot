@@ -60,6 +60,14 @@ export function validateConfiguration(options) {
       ...options,
       upstreamUrl: url.toString().replace(/\/$/u, ''),
       fallback: fallbackProviders(options),
+      attemptMs: parseBoundedInteger(options.attemptMs, DEFAULT_ATTEMPT_MS, 1_000, 600_000),
+      compactionBudgetMs: parseBoundedInteger(
+        options.compactionBudgetMs,
+        DEFAULT_COMPACTION_BUDGET_MS,
+        0,
+        600_000
+      ),
+      compactionEnabled: parseEnabled(options.compactionEnabled, true),
     };
   } catch {
     throw new Error('invalid_configuration');
@@ -83,7 +91,11 @@ export function parseUsage(value) {
 const FREE_MODEL = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,120}:free$/u;
 const GEMINI_MODEL = /^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$/u;
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
+/** OpenAI-compatible Gemini endpoint already used by the fallback chain. */
+export const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
+export const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash';
+export const DEFAULT_ATTEMPT_MS = 90_000;
+export const DEFAULT_COMPACTION_BUDGET_MS = 180_000;
 
 function optionalSecret(value) {
   if (value == null || value === '') return null;
@@ -98,6 +110,18 @@ function hasForbiddenSecretCharacter(value) {
     if (code === 0 || code === 10 || code === 13) return true;
   }
   return false;
+}
+
+function parseBoundedInteger(value, fallback, minimum, maximum) {
+  if (value == null || value === '') return fallback;
+  const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value.trim()) : Number.NaN;
+  if (!Number.isInteger(parsed) || parsed < minimum || parsed > maximum) throw new Error();
+  return parsed;
+}
+
+function parseEnabled(value, fallback) {
+  if (typeof value === 'boolean') return value;
+  return fallbackSwitch(value, fallback);
 }
 
 function fallbackSwitch(value, hasKey) {
@@ -115,7 +139,7 @@ export function fallbackProviders(options) {
   const geminiKey = optionalSecret(options.geminiKey);
   const enabled = fallbackSwitch(options.fallbackEnabled, Boolean(openRouterKey || geminiKey));
   const secrets = [openRouterKey, geminiKey].filter(Boolean);
-  let geminiModel = 'gemini-2.5-flash';
+  let geminiModel = DEFAULT_GEMINI_MODEL;
   if (options.geminiModel != null && options.geminiModel !== '') {
     if (typeof options.geminiModel !== 'string' || !GEMINI_MODEL.test(options.geminiModel)) throw new Error();
     geminiModel = options.geminiModel;
