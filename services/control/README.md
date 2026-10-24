@@ -66,6 +66,49 @@ O proxy reverso deve oferecer HTTPS e remover o prefixo público `/bot` antes de
 
 O mesmo host publica o atualizador Windows em `https://jrsantafe.stratacerta.com.br/mmx/updates/latest.yml`. Os arquivos `latest.yml`, o instalador e o `.blockmap` ficam juntos em `/opt/mmx-gw/data/updates`. O overlay Traefik encaminha `/mmx/updates` para esse diretório.
 
+### Publicação automática de atualizações do Windows
+
+O fluxo `Distribute Release Assets` pode publicar o instalador no feed JR depois que uma versão estável é publicada no GitHub. Ele verifica a versão e o SHA-512 do instalador, envia primeiro o `.exe` e seu `.blockmap`, e troca `latest.yml` por último. O funcionário recebe o aviso dentro do JR Bot e instala a atualização por ali; não é necessário enviar o instalador de cada versão.
+
+Para ativar a publicação automática uma única vez:
+
+1. Em **Settings → Secrets and variables → Actions → Variables**, configure `PUBLISH_JR_UPDATES=true`, `JR_UPDATES_SSH_HOST=179.199.143.126` e `JR_UPDATES_SSH_USER=jr-bot-updates`. O fluxo existente também precisa de `PUBLISH_RELEASE=true` para gerar os instaladores.
+2. Crie uma chave de implantação fora do repositório: `mkdir -p ~/.ssh && chmod 700 ~/.ssh && ssh-keygen -t ed25519 -f ~/.ssh/jr-bot-updates -C jr-bot-updates -N ''`. Nunca coloque a chave privada no repositório.
+3. Na VPS, confirme com `namei -l /opt/mmx-gw/data` que todos os diretórios até essa raiz pertencem a `root` e não permitem escrita por grupo/outros. Confirme também com `find /opt/mmx-gw/data -mindepth 1 -maxdepth 1 -printf '%f\n'` que a raiz contém somente `updates`, que são arquivos públicos. Se qualquer verificação falhar, não altere essas permissões; configure uma raiz SFTP separada e um vínculo de montagem para o diretório do feed.
+4. Em uma sessão administrativa da VPS, crie o usuário e cadastre a chave pública. Se o usuário ainda não existir:
+
+   ```sh
+   sudo useradd --system --no-create-home --home-dir /updates --shell /usr/sbin/nologin jr-bot-updates
+   sudo install -d -o root -g root -m 755 /etc/ssh/authorized_keys
+   sudo install -o root -g root -m 600 /tmp/jr-bot-updates.pub /etc/ssh/authorized_keys/jr-bot-updates
+   sudo chown jr-bot-updates /opt/mmx-gw/data/updates
+   sudo chmod 755 /opt/mmx-gw/data/updates
+   ```
+
+   Coloque antes a chave pública gerada no computador administrativo em `/tmp/jr-bot-updates.pub` da VPS. No arquivo `/etc/ssh/sshd_config.d/90-jr-bot-updates.conf`, use:
+
+   ```sshconfig
+   Match User jr-bot-updates
+       ChrootDirectory /opt/mmx-gw/data
+       ForceCommand internal-sftp -d /updates -u 0022
+       AuthorizedKeysFile /etc/ssh/authorized_keys/%u
+       AuthenticationMethods publickey
+       PasswordAuthentication no
+       KbdInteractiveAuthentication no
+       AllowTcpForwarding no
+       X11Forwarding no
+       PermitTunnel no
+   ```
+
+   Valide com `sudo sshd -t` antes de `sudo systemctl reload ssh`. Essa conta não recebe terminal SSH; ela só grava no diretório público de atualizações.
+
+5. Gere a linha de host conhecido com `ssh-keyscan -H -t ed25519 179.199.143.126 > jr-bot-updates-known-hosts` e compare a impressão digital com `sudo ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` na VPS. Só depois da comparação, cadastre o conteúdo desse arquivo como segredo `JR_UPDATES_SSH_KNOWN_HOSTS`.
+6. Em **Actions secrets**, cadastre `JR_UPDATES_SSH_PRIVATE_KEY` com o conteúdo de `~/.ssh/jr-bot-updates`. Cadastre também `JR_UPDATES_SSH_KNOWN_HOSTS` com a linha conferida acima. O segredo da chave privada nunca sai do GitHub Actions.
+
+Depois de ativado, publique a versão estável no GitHub Releases (ou execute novamente `Distribute Release Assets` com uma versão publicada). O trabalho separado `Publish JR Bot Windows update feed` valida o instalador antes de substituir o manifesto público. Se as credenciais ou a conexão SFTP falharem, o trabalho falha e a versão anterior continua anunciada.
+
+Instalações que já consultam o feed JR recebem as próximas versões no próprio app. Quem estiver numa versão anterior que ainda não usa esse endereço precisa instalar o JR Bot 2.2.4 uma única vez; depois disso, as atualizações chegam pelo app. A lista de versões instaladas nos computadores dos funcionários não foi verificada.
+
 ## Fallback gratuito
 
 Quando o MiniMax falha por rede, tempo esgotado, HTTP 5xx, 429, 401 ou 403, a mesma requisição é refeita antes de responder ao aplicativo. A ordem é `openrouter/free`, depois cada modelo de `OPENROUTER_FALLBACK_MODELS`, e por último o Gemini se `GEMINI_API_KEY` existir. O corpo original é preservado, inclusive ferramentas e fluxo SSE. O aplicativo continua pedindo o modelo MiniMax; este serviço troca somente o modelo enviado ao provedor de fallback.

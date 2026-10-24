@@ -57,6 +57,34 @@ describe('release packaging configuration', () => {
     expect(workflow).not.toContain('out/AionUi-*-win32-*.zip');
   });
 
+  itWithBash('keeps Windows blockmaps in the published release assets', () => {
+    const tempDir = mkdtempSync(resolve(tmpdir(), 'aionui-release-blockmap-'));
+    const artifactsDir = resolve(tempDir, 'build-artifacts');
+    const outputDir = resolve(tempDir, 'release-assets');
+
+    try {
+      const env = { ...process.env, MOCK_VERSION: '1.0.0' };
+      const createResult = spawnSync('bash', ['scripts/create-mock-release-artifacts.sh', artifactsDir], {
+        cwd: projectRoot,
+        env,
+        encoding: 'utf8',
+      });
+      expect(createResult.status).toBe(0);
+
+      const prepareResult = spawnSync('bash', ['scripts/prepare-release-assets.sh', artifactsDir, outputDir], {
+        cwd: projectRoot,
+        env,
+        encoding: 'utf8',
+      });
+      expect(prepareResult.status).toBe(0);
+      expect(readFileSync(resolve(outputDir, 'AionUi-1.0.0-win-x64.exe.blockmap'), 'utf8')).toBe('');
+      expect(readProjectFile('.github/workflows/build-and-release.yml')).toContain('release-assets/**/*.blockmap');
+      expect(readProjectFile('.github/workflows/release-distribute.yml')).toContain('--pattern "*.blockmap"');
+    } finally {
+      rmSync(tempDir, { force: true, recursive: true });
+    }
+  });
+
   it('retries mac prepackaged builds with both dmg and zip targets', () => {
     const script = readProjectFile('scripts/build-with-builder.js');
 
