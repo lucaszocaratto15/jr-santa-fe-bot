@@ -61,12 +61,7 @@ export function validateConfiguration(options) {
       upstreamUrl: url.toString().replace(/\/$/u, ''),
       fallback: fallbackProviders(options),
       attemptMs: parseBoundedInteger(options.attemptMs, DEFAULT_ATTEMPT_MS, 1_000, 600_000),
-      compactionBudgetMs: parseBoundedInteger(
-        options.compactionBudgetMs,
-        DEFAULT_COMPACTION_BUDGET_MS,
-        0,
-        600_000
-      ),
+      compactionBudgetMs: parseBoundedInteger(options.compactionBudgetMs, DEFAULT_COMPACTION_BUDGET_MS, 0, 600_000),
       compactionEnabled: parseEnabled(options.compactionEnabled, true),
     };
   } catch {

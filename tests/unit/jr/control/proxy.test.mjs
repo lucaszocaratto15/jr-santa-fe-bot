@@ -1036,7 +1036,8 @@ test('Gemini 400 and 413 while summarizing still deliver the original request', 
       log: () => {},
       geminiKey: GEMINI_KEY,
       upstreamFetch: async (url, options) => {
-        if (url === GEMINI_URL) return new Response(JSON.stringify({ error: { message: 'resumo recusado' } }), { status });
+        if (url === GEMINI_URL)
+          return new Response(JSON.stringify({ error: { message: 'resumo recusado' } }), { status });
         forwarded = JSON.parse(options.body);
         return Response.json({ choices: [{ message: { content: 'seguiu' } }] });
       },
@@ -1099,7 +1100,10 @@ test('a system prompt over the ceiling is truncated and the latest user turn is 
     method: 'POST',
     token: owner.token,
     body: {
-      messages: [{ role: 'system', content: `INICIO-${'S'.repeat(450_000)}-FIM` }, { role: 'user', content: 'ping' }],
+      messages: [
+        { role: 'system', content: `INICIO-${'S'.repeat(450_000)}-FIM` },
+        { role: 'user', content: 'ping' },
+      ],
     },
   });
   assert.equal(response.status, 200);
