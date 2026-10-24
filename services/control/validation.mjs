@@ -87,9 +87,17 @@ const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/chat
 
 function optionalSecret(value) {
   if (value == null || value === '') return null;
-  if (typeof value !== 'string' || value.length < 16 || value.length > 512 || /[\r\n\0]/u.test(value))
+  if (typeof value !== 'string' || value.length < 16 || value.length > 512 || hasForbiddenSecretCharacter(value))
     throw new Error();
   return value;
+}
+
+function hasForbiddenSecretCharacter(value) {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code === 0 || code === 10 || code === 13) return true;
+  }
+  return false;
 }
 
 function fallbackSwitch(value, hasKey) {
