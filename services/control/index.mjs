@@ -10,6 +10,11 @@ try {
     upstreamUrl: process.env.JR_UPSTREAM_URL,
     upstreamKey: process.env.JR_UPSTREAM_KEY,
     model: process.env.JR_MODEL ?? 'MiniMax-M3.1-Flash',
+    openRouterKey: process.env.OPENROUTER_API_KEY,
+    openRouterModels: process.env.OPENROUTER_FALLBACK_MODELS,
+    geminiKey: process.env.GEMINI_API_KEY,
+    geminiModel: process.env.GEMINI_MODEL,
+    fallbackEnabled: process.env.FALLBACK_ENABLED,
   });
   control.server.once('error', () => {
     process.stderr.write('Não foi possível iniciar o controle de acesso.\n');

@@ -107,6 +107,22 @@ it('reports unavailable usage as null and keeps source tokens out of the rendere
   expect(JSON.stringify(status)).not.toContain(env.JR_RELAY_TOKEN);
 });
 
+it('reports fallback mode only from an explicit boolean and hides provider secrets', async () => {
+  const request = vi
+    .fn()
+    .mockResolvedValueOnce(Response.json({ model: 'MiniMax-M3.1-Flash', usage: null, fallback: true }))
+    .mockResolvedValueOnce(Response.json({ model: 'MiniMax-M3.1-Flash', usage: null, fallback: env.JR_RELAY_TOKEN }));
+  expect(await getJrConnectionStatus(env, request)).toEqual({
+    connected: true,
+    model: 'MiniMax-M3.1-Flash',
+    usage: null,
+    fallback: true,
+  });
+  const ignored = await getJrConnectionStatus(env, request);
+  expect(ignored).toEqual({ connected: true, model: 'MiniMax-M3.1-Flash', usage: null });
+  expect(JSON.stringify(ignored)).not.toContain(env.JR_RELAY_TOKEN);
+});
+
 it('rejects fabricated or malformed usage values instead of showing zero', async () => {
   const request = vi.fn().mockResolvedValue(
     Response.json({

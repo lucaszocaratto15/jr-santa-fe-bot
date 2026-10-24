@@ -402,6 +402,7 @@ export type I18nKey =
   | 'common.jr.emptyHint'
   | 'common.jr.errorDetail'
   | 'common.jr.executing'
+  | 'common.jr.fallbackNotice'
   | 'common.jr.firstBot'
   | 'common.jr.folderError'
   | 'common.jr.folderPlaceholder'

@@ -7,6 +7,11 @@ services:
       JR_UPSTREAM_KEY: ${JR_UPSTREAM_KEY:?Defina a chave do provedor}
       JR_UPSTREAM_URL: ${JR_UPSTREAM_URL:-https://jrsantafe.stratacerta.com.br/mmx/v1}
       JR_MODEL: MiniMax-M3.1-Flash
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_FALLBACK_MODELS: ${OPENROUTER_FALLBACK_MODELS:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-}
+      FALLBACK_ENABLED: ${FALLBACK_ENABLED:-}
     ports:
       - '127.0.0.1:8787:8787'
     volumes:

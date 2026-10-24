@@ -379,3 +379,255 @@ test('company presentation policy stays Portuguese while preserving tool and fil
   assert.match(forwarded.messages[0].content, /Keep approvals enabled/);
   assert.deepEqual(forwarded.messages[1], messages[1]);
 });
+
+const OPENROUTER_KEY = 'openrouter-test-key-not-real';
+const GEMINI_KEY = 'gemini-test-key-not-real-xx';
+const MINIMAX_URL = 'https://jrsantafe.stratacerta.com.br/mmx/v1/chat/completions';
+const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
+
+test('a failed MiniMax call is replayed on OpenRouter with the same tools and stream', async (t) => {
+  const logs = [];
+  const calls = [];
+  const tools = [{ type: 'function', function: { name: 'list_files', parameters: { type: 'object' } } }];
+  const app = await startControl(t, {
+    log: (line) => logs.push(line),
+    openRouterKey: OPENROUTER_KEY,
+    openRouterModels: 'deepseek/deepseek-chat:free',
+    upstreamFetch: async (url, options) => {
+      const body = JSON.parse(options.body);
+      calls.push({ url, authorization: options.headers.Authorization, body });
+      if (url === MINIMAX_URL) throw new Error(`network down ${UPSTREAM_KEY}`);
+      const encoder = new TextEncoder();
+      const payload =
+        'data: {"choices":[{"delta":{"tool_calls":[{"id":"call_1","function":{"name":"list_files","arguments":"{}"}}]}}]}\n\ndata: [DONE]\n\n';
+      return new Response(encoder.encode(payload), { headers: { 'Content-Type': 'text/event-stream' } });
+    },
+  });
+  const owner = await app.login();
+  const response = await app.request('/v1/chat/completions', {
+    method: 'POST',
+    token: owner.token,
+    body: { stream: true, tools, messages: [{ role: 'user', content: 'Liste' }] },
+  });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('x-jr-provider'), 'openrouter');
+  assert.match(await response.text(), /list_files/);
+  assert.equal(calls[0].url, MINIMAX_URL);
+  assert.equal(calls[1].url, OPENROUTER_URL);
+  assert.equal(calls[1].authorization, `Bearer ${OPENROUTER_KEY}`);
+  assert.equal(calls[1].body.model, 'openrouter/free');
+  assert.deepEqual(calls[1].body.tools, tools);
+  assert.equal(calls[1].body.stream_options.include_usage, true);
+  assert.deepEqual(logs, ['Provedor: openrouter openrouter/free']);
+  assert.equal(logs.join('\n').includes(OPENROUTER_KEY), false);
+  assert.equal(logs.join('\n').includes(UPSTREAM_KEY), false);
+  const usage = await (await app.request('/usage', { token: owner.token })).json();
+  assert.equal(usage.fallback, true);
+});
+
+test('OpenRouter rate limits walk the free list and then Gemini', async (t) => {
+  const calls = [];
+  const app = await startControl(t, {
+    log: () => {},
+    openRouterKey: OPENROUTER_KEY,
+    openRouterModels: 'deepseek/deepseek-chat:free,qwen/qwen3-coder:free',
+    geminiKey: GEMINI_KEY,
+    upstreamFetch: async (url, options) => {
+      const body = JSON.parse(options.body);
+      calls.push({ url, model: body.model, authorization: options.headers.Authorization, tools: body.tools });
+      if (url === MINIMAX_URL) return new Response('unavailable', { status: 401 });
+      if (url === OPENROUTER_URL) return new Response('busy', { status: 429 });
+      assert.equal(options.headers.Authorization, `Bearer ${GEMINI_KEY}`);
+      return Response.json({
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              tool_calls: [{ id: 'call_9', type: 'function', function: { name: 'save', arguments: '{"ok":true}' } }],
+            },
+          },
+        ],
+        usage: { prompt_tokens: 4, completion_tokens: 2 },
+      });
+    },
+  });
+  const owner = await app.login();
+  const response = await app.request('/v1/chat/completions', {
+    method: 'POST',
+    token: owner.token,
+    body: {
+      tools: [{ type: 'function', function: { name: 'save' } }],
+      messages: [{ role: 'user', content: 'Salve' }],
+    },
+  });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('x-jr-provider'), 'gemini');
+  const payload = await response.json();
+  assert.equal(payload.choices[0].message.tool_calls[0].function.name, 'save');
+  assert.deepEqual(
+    calls.map((call) => call.model),
+    [
+      'MiniMax-M3.1-Flash',
+      'openrouter/free',
+      'deepseek/deepseek-chat:free',
+      'qwen/qwen3-coder:free',
+      'gemini-2.5-flash',
+    ]
+  );
+  assert.equal(calls.at(-1).url, GEMINI_URL);
+  assert.equal(JSON.stringify(payload).includes(GEMINI_KEY), false);
+  const { usage } = await (await app.request('/usage', { token: owner.token })).json();
+  assert.equal(usage.completionTokens, 2);
+});
+
+test('exhausted fallbacks stay private and a closed switch never leaves MiniMax', async (t) => {
+  let calls = 0;
+  const logs = [];
+  const disabled = await startControl(t, {
+    log: (line) => logs.push(line),
+    openRouterKey: OPENROUTER_KEY,
+    geminiKey: GEMINI_KEY,
+    fallbackEnabled: 'false',
+    upstreamFetch: async () => {
+      calls += 1;
+      return new Response(`denied ${OPENROUTER_KEY}`, { status: 503 });
+    },
+  });
+  const owner = await disabled.login();
+  const blocked = await disabled.request('/v1/chat/completions', {
+    method: 'POST',
+    token: owner.token,
+    body: { messages: [{ role: 'user', content: 'Olá' }] },
+  });
+  assert.equal(blocked.status, 502);
+  assert.deepEqual(await blocked.json(), { error: { code: 'upstream_unavailable' } });
+  assert.equal(calls, 1);
+  assert.equal(JSON.stringify(logs).includes(OPENROUTER_KEY), false);
+
+  const logsAgain = [];
+  const exhausted = await startControl(t, {
+    log: (line) => logsAgain.push(line),
+    openRouterKey: OPENROUTER_KEY,
+    geminiKey: GEMINI_KEY,
+    upstreamFetch: async () => new Response(`secret ${GEMINI_KEY}`, { status: 429 }),
+  });
+  const again = await exhausted.login();
+  const failed = await exhausted.request('/v1/chat/completions', {
+    method: 'POST',
+    token: again.token,
+    body: { messages: [{ role: 'user', content: 'Olá' }] },
+  });
+  assert.equal(failed.status, 502);
+  assert.equal((await failed.text()).includes(GEMINI_KEY), false);
+  assert.equal(JSON.stringify(logsAgain).includes(GEMINI_KEY), false);
+  assert.equal(JSON.stringify(logsAgain).includes(OPENROUTER_KEY), false);
+});
+
+test('three MiniMax failures skip it until the cooling window ends', async (t) => {
+  let clock = Date.parse('2026-10-23T12:00:00.000Z');
+  let primaryUp = false;
+  const calls = [];
+  const logs = [];
+  const app = await startControl(t, {
+    now: () => clock,
+    log: (line) => logs.push(line),
+    openRouterKey: OPENROUTER_KEY,
+    upstreamFetch: async (url) => {
+      calls.push(url);
+      if (url === MINIMAX_URL) {
+        if (!primaryUp) return new Response('down', { status: 503 });
+        return Response.json({
+          choices: [{ message: { content: 'MiniMax' } }],
+          usage: { prompt_tokens: 1, completion_tokens: 1 },
+        });
+      }
+      return Response.json({
+        choices: [{ message: { content: 'livre' } }],
+        usage: { prompt_tokens: 2, completion_tokens: 2 },
+      });
+    },
+  });
+  const owner = await app.login();
+  const body = { messages: [{ role: 'user', content: 'Olá' }] };
+  for (let index = 0; index < 3; index += 1) {
+    assert.equal((await app.request('/v1/chat/completions', { method: 'POST', token: owner.token, body })).status, 200);
+  }
+  calls.length = 0;
+  const cooled = await app.request('/v1/chat/completions', { method: 'POST', token: owner.token, body });
+  assert.equal(cooled.status, 200);
+  assert.deepEqual(calls, [OPENROUTER_URL]);
+  assert.equal((await (await app.request('/usage', { token: owner.token })).json()).fallback, true);
+  clock += 3 * 60 * 1000 + 1;
+  primaryUp = true;
+  calls.length = 0;
+  const restored = await app.request('/v1/chat/completions', { method: 'POST', token: owner.token, body });
+  assert.equal((await restored.json()).choices[0].message.content, 'MiniMax');
+  assert.deepEqual(calls, [MINIMAX_URL]);
+  assert.equal((await (await app.request('/usage', { token: owner.token })).json()).fallback, undefined);
+  assert.equal(logs.includes('Provedor: circuito aberto'), true);
+  assert.equal(logs.join('\n').includes(OPENROUTER_KEY), false);
+});
+
+test('a MiniMax timeout is retried on OpenRouter before the client deadline', async (t) => {
+  const calls = [];
+  const app = await startControl(t, {
+    log: () => {},
+    fallbackAttemptMs: 30,
+    openRouterKey: OPENROUTER_KEY,
+    upstreamFetch: async (url, options) => {
+      calls.push(url);
+      if (url !== MINIMAX_URL) return Response.json({ choices: [{ message: { content: 'depois' } }] });
+      return new Promise((_resolve, reject) => {
+        options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true });
+      });
+    },
+  });
+  const owner = await app.login();
+  const response = await app.request('/v1/chat/completions', {
+    method: 'POST',
+    token: owner.token,
+    body: { messages: [{ role: 'user', content: 'Olá' }] },
+  });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).choices[0].message.content, 'depois');
+  assert.deepEqual(calls, [MINIMAX_URL, OPENROUTER_URL]);
+});
+
+test('provider 400 and a missing fallback key stay on the public MiniMax error', async (t) => {
+  let calls = 0;
+  const app = await startControl(t, {
+    openRouterModels: 'deepseek/deepseek-chat:free',
+    upstreamFetch: async () => {
+      calls += 1;
+      return new Response('bad request', { status: 400 });
+    },
+  });
+  const owner = await app.login();
+  const response = await app.request('/v1/chat/completions', {
+    method: 'POST',
+    token: owner.token,
+    body: { messages: [{ role: 'user', content: 'Olá' }] },
+  });
+  assert.equal(response.status, 502);
+  assert.equal(calls, 1);
+  const leaked = await startControl(t, {
+    log: () => {},
+    openRouterKey: OPENROUTER_KEY,
+    geminiKey: GEMINI_KEY,
+    upstreamFetch: async (url) => {
+      calls += 1;
+      if (url === GEMINI_URL) return Response.json({ choices: [{ message: { content: 'limpo' } }] });
+      return Response.json({ error: { message: OPENROUTER_KEY } });
+    },
+  });
+  const second = await leaked.login();
+  const recovered = await leaked.request('/v1/chat/completions', {
+    method: 'POST',
+    token: second.token,
+    body: { messages: [{ role: 'user', content: 'Olá' }] },
+  });
+  assert.equal(recovered.status, 200);
+  assert.equal((await recovered.text()).includes(OPENROUTER_KEY), false);
+  assert.equal(recovered.headers.get('x-jr-provider'), 'gemini');
+});

@@ -2,9 +2,54 @@ import { randomUUID } from 'node:crypto';
 import { createSseReader, httpError, isHttpError, parseUsage } from './validation.mjs';
 
 const MAX_RESPONSE_BYTES = 16 * 1024 * 1024;
+const PRIMARY_FAILURES = 3;
+const CIRCUIT_OPEN_MS = 3 * 60 * 1000;
+const ATTEMPT_MS = 45_000;
+
+function canFailOver(status) {
+  return status === 401 || status === 403 || status === 429 || status >= 500;
+}
+
+function markFailover(error) {
+  error.failover = true;
+  return error;
+}
 
 /** Proxy one configured model and cancel every active request belonging to a revoked identity. */
-export function createModelProxy({ store, upstreamUrl, upstreamKey, model, upstreamFetch = fetch, now = Date.now }) {
+export function createModelProxy({
+  store,
+  upstreamUrl,
+  upstreamKey,
+  model,
+  fallback = { enabled: false, providers: [], secrets: [] },
+  upstreamFetch = fetch,
+  now = Date.now,
+  log = (line) => process.stdout.write(`${line}\n`),
+  fallbackAttemptMs = ATTEMPT_MS,
+}) {
+  const backups = Array.isArray(fallback.providers) ? fallback.providers : [];
+  const secretValues = [upstreamKey, ...(Array.isArray(fallback.secrets) ? fallback.secrets : [])].filter(
+    (secret) => typeof secret === 'string' && secret.length > 0
+  );
+  const circuit = { failures: 0, openUntil: 0 };
+  let awayFromPrimary = false;
+  const safeLog = (line) => {
+    try {
+      if (typeof line !== 'string' || secretValues.some((secret) => line.includes(secret))) return;
+      log(line);
+    } catch {
+      // A logging failure must not change the model response.
+    }
+  };
+  const circuitOpen = (timestamp) => circuit.failures >= PRIMARY_FAILURES && timestamp < circuit.openUntil;
+  const notePrimaryFailure = (timestamp) => {
+    if (backups.length === 0) return;
+    circuit.failures += 1;
+    if (circuit.failures < PRIMARY_FAILURES) return;
+    const alreadyOpen = circuit.openUntil > timestamp;
+    circuit.openUntil = timestamp + CIRCUIT_OPEN_MS;
+    if (!alreadyOpen && circuit.failures === PRIMARY_FAILURES) safeLog('Provedor: circuito aberto');
+  };
   const active = new Map();
   const abortWhere = (matches) => {
     for (const entry of active.values()) {
@@ -79,40 +124,159 @@ export function createModelProxy({ store, upstreamUrl, upstreamKey, model, upstr
         else body.messages.unshift({ role: 'system', content: policy });
         requestId = store.beginRequest(session.user.id);
         startedAt = now();
+        const stream = body.stream === true;
         const payload = {
           ...body,
           model,
-          ...(body.stream ? { stream_options: { ...body.stream_options, include_usage: true } } : {}),
+          ...(stream ? { stream_options: { ...body.stream_options, include_usage: true } } : {}),
         };
-        const upstream = await upstreamFetch(`${upstreamUrl}/chat/completions`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${upstreamKey}`,
-            'Content-Type': 'application/json',
-            Accept: body.stream ? 'text/event-stream' : 'application/json',
-          },
-          body: JSON.stringify(payload),
-          signal: controller.signal,
-          redirect: 'error',
-        });
-        if (controller.signal.aborted) throw controller.signal.reason;
-        upstreamStatus = upstream.status;
-        if (!upstream.ok || !upstream.body) {
-          await upstream.body?.cancel();
-          throw httpError(502, 'upstream_unavailable');
+        const primary = { id: 'minimax', model, url: `${upstreamUrl}/chat/completions`, key: upstreamKey };
+        const providers = backups.length === 0 || !circuitOpen(now()) ? [primary, ...backups] : backups;
+        const fetchProvider = async (provider) => {
+          const linked = backups.length > 0;
+          const attempt = linked ? new AbortController() : null;
+          const abortAttempt = () => attempt.abort(controller.signal.reason);
+          if (linked) {
+            if (controller.signal.aborted) throw controller.signal.reason;
+            controller.signal.addEventListener('abort', abortAttempt, { once: true });
+          }
+          let timedOut = false;
+          const timer = linked
+            ? setTimeout(() => {
+                timedOut = true;
+                attempt.abort(httpError(504, 'upstream_timeout'));
+              }, fallbackAttemptMs)
+            : null;
+          timer?.unref();
+          try {
+            const upstream = await upstreamFetch(provider.url, {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${provider.key}`,
+                'Content-Type': 'application/json',
+                Accept: stream ? 'text/event-stream' : 'application/json',
+              },
+              body: JSON.stringify({ ...payload, model: provider.model }),
+              signal: attempt ? attempt.signal : controller.signal,
+              redirect: 'error',
+            });
+            if (controller.signal.aborted) throw controller.signal.reason;
+            if (timedOut) {
+              await upstream.body?.cancel().catch(() => {});
+              return { failover: true, failure: true, status: 504, error: httpError(504, 'upstream_timeout') };
+            }
+            const failover = canFailOver(upstream.status);
+            if (!upstream.ok || !upstream.body) {
+              await upstream.body?.cancel().catch(() => {});
+              return {
+                failover,
+                failure: failover,
+                status: upstream.status,
+                error: httpError(502, 'upstream_unavailable'),
+              };
+            }
+            return { response: upstream, status: upstream.status };
+          } catch (error) {
+            if (controller.signal.aborted) return { aborted: true, reason: controller.signal.reason };
+            if (isHttpError(error) && !timedOut) throw error;
+            return {
+              failover: true,
+              failure: true,
+              status: timedOut ? 504 : null,
+              error: httpError(timedOut ? 504 : 502, timedOut ? 'upstream_timeout' : 'upstream_unavailable'),
+            };
+          } finally {
+            if (timer) clearTimeout(timer);
+            if (linked) controller.signal.removeEventListener('abort', abortAttempt);
+          }
+        };
+        const readJsonBody = async (upstream) => {
+          const local = upstream.body.getReader();
+          const chunks = [];
+          let received = 0;
+          try {
+            while (true) {
+              const next = await local.read();
+              if (controller.signal.aborted) throw controller.signal.reason;
+              if (next.done) break;
+              received += next.value.byteLength;
+              if (received > MAX_RESPONSE_BYTES) throw markFailover(httpError(502, 'upstream_unavailable'));
+              chunks.push(next.value);
+            }
+          } catch (error) {
+            if (controller.signal.aborted) throw controller.signal.reason;
+            if (error?.failover) throw error;
+            throw markFailover(httpError(502, 'upstream_unavailable'));
+          } finally {
+            await local.cancel().catch(() => {});
+          }
+          const text = Buffer.concat(chunks).toString('utf8');
+          let data;
+          try {
+            data = JSON.parse(text);
+          } catch {
+            throw markFailover(httpError(502, 'upstream_unavailable'));
+          }
+          if (
+            !data ||
+            typeof data !== 'object' ||
+            Array.isArray(data) ||
+            data.error ||
+            secretValues.some((secret) => text.includes(secret))
+          )
+            throw markFailover(httpError(502, 'upstream_unavailable'));
+          return { text, usage: parseUsage(data.usage) };
+        };
+        let accepted = null;
+        let lastError = httpError(502, 'upstream_unavailable');
+        for (const provider of providers) {
+          if (controller.signal.aborted) throw controller.signal.reason;
+          const attempt = await fetchProvider(provider);
+          if (attempt.aborted) throw attempt.reason;
+          if (!attempt.response) {
+            lastError = attempt.error;
+            upstreamStatus = attempt.status ?? upstreamStatus;
+            if (provider.id === 'minimax' && attempt.failure) notePrimaryFailure(now());
+            if (!attempt.failover) throw attempt.error;
+            continue;
+          }
+          upstreamStatus = attempt.status;
+          try {
+            if (stream && !attempt.response.headers.get('content-type')?.includes('text/event-stream')) {
+              await attempt.response.body.cancel().catch(() => {});
+              throw markFailover(httpError(502, 'upstream_unavailable'));
+            }
+            const jsonBody = stream ? null : await readJsonBody(attempt.response);
+            accepted = { provider, response: attempt.response, jsonBody };
+            if (jsonBody && firstByteMs === null && jsonBody.text.length > 0)
+              firstByteMs = Math.max(0, now() - startedAt);
+            if (provider.id === 'minimax') {
+              circuit.failures = 0;
+              circuit.openUntil = 0;
+              awayFromPrimary = false;
+            } else awayFromPrimary = true;
+            safeLog(`Provedor: ${provider.id} ${provider.model}`);
+            break;
+          } catch (error) {
+            if (controller.signal.aborted) throw controller.signal.reason;
+            if (error?.failover) {
+              lastError = httpError(502, 'upstream_unavailable');
+              if (provider.id === 'minimax') notePrimaryFailure(now());
+              continue;
+            }
+            throw error;
+          }
         }
-        reader = upstream.body.getReader();
-        const stream = body.stream === true;
-        if (stream && !upstream.headers.get('content-type')?.includes('text/event-stream'))
-          throw httpError(502, 'upstream_unavailable');
-        const sseReader = createSseReader(upstreamKey);
-        const chunks = [];
-        let received = 0;
+        if (!accepted) throw lastError;
+        const served = accepted.provider;
+        reader = stream ? accepted.response.body.getReader() : null;
+        const sseReader = createSseReader(secretValues);
         if (stream) {
           response.writeHead(200, {
             'Content-Type': 'text/event-stream; charset=utf-8',
             'Cache-Control': 'no-store',
             'X-Accel-Buffering': 'no',
+            'X-JR-Provider': served.id,
           });
         }
         const forwardSse = async (chunk, final = false) => {
@@ -140,28 +304,22 @@ export function createModelProxy({ store, upstreamUrl, upstreamKey, model, upstr
             }
           }
         };
-        while (true) {
+        while (stream) {
           const next = await reader.read();
           if (controller.signal.aborted) throw controller.signal.reason;
           if (next.done) break;
           if (firstByteMs === null) firstByteMs = Math.max(0, now() - startedAt);
-          if (stream) {
-            await forwardSse(next.value);
-          } else {
-            received += next.value.byteLength;
-            if (received > MAX_RESPONSE_BYTES) throw httpError(502, 'upstream_unavailable');
-            chunks.push(next.value);
-          }
+          await forwardSse(next.value);
         }
         if (stream) await forwardSse(undefined, true);
         else {
-          const text = Buffer.concat(chunks).toString('utf8');
-          const data = JSON.parse(text);
-          if (!data || typeof data !== 'object' || Array.isArray(data) || data.error || text.includes(upstreamKey))
-            throw httpError(502, 'upstream_unavailable');
-          usage = parseUsage(data.usage);
-          response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-          response.write(text);
+          usage = accepted.jsonBody.usage;
+          response.writeHead(200, {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Cache-Control': 'no-store',
+            'X-JR-Provider': served.id,
+          });
+          response.write(accepted.jsonBody.text);
         }
         status = 'completed';
         response.end();
@@ -205,6 +363,9 @@ export function createModelProxy({ store, upstreamUrl, upstreamKey, model, upstr
     async close() {
       abortWhere(() => true);
       await Promise.allSettled([...active.values()].map((entry) => entry.done));
+    },
+    usingFallback() {
+      return backups.length > 0 && (awayFromPrimary || circuitOpen(now()));
     },
   };
 }
