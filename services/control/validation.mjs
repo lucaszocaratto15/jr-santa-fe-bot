@@ -56,7 +56,19 @@ export function validateConfiguration(options) {
       !url.pathname.endsWith('/v1')
     )
       throw new Error();
-    return { ...options, upstreamUrl: url.toString().replace(/\/$/u, '') };
+    return {
+      ...options,
+      upstreamUrl: url.toString().replace(/\/$/u, ''),
+      fallback: fallbackProviders(options),
+      attemptMs: parseBoundedInteger(options.attemptMs, DEFAULT_ATTEMPT_MS, 1_000, 600_000),
+      compactionBudgetMs: parseBoundedInteger(
+        options.compactionBudgetMs,
+        DEFAULT_COMPACTION_BUDGET_MS,
+        0,
+        600_000
+      ),
+      compactionEnabled: parseEnabled(options.compactionEnabled, true),
+    };
   } catch {
     throw new Error('invalid_configuration');
   }
@@ -76,8 +88,94 @@ export function parseUsage(value) {
   };
 }
 
+const FREE_MODEL = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,120}:free$/u;
+const GEMINI_MODEL = /^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$/u;
+const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+/** OpenAI-compatible Gemini endpoint already used by the fallback chain. */
+export const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
+export const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash';
+export const DEFAULT_ATTEMPT_MS = 90_000;
+export const DEFAULT_COMPACTION_BUDGET_MS = 60_000;
+
+function optionalSecret(value) {
+  if (value == null || value === '') return null;
+  if (typeof value !== 'string' || value.length < 16 || value.length > 512 || hasForbiddenSecretCharacter(value))
+    throw new Error();
+  return value;
+}
+
+function hasForbiddenSecretCharacter(value) {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code === 0 || code === 10 || code === 13) return true;
+  }
+  return false;
+}
+
+function parseBoundedInteger(value, fallback, minimum, maximum) {
+  if (value == null || value === '') return fallback;
+  const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value.trim()) : Number.NaN;
+  if (!Number.isInteger(parsed) || parsed < minimum || parsed > maximum) throw new Error();
+  return parsed;
+}
+
+function parseEnabled(value, fallback) {
+  if (typeof value === 'boolean') return value;
+  return fallbackSwitch(value, fallback);
+}
+
+function fallbackSwitch(value, hasKey) {
+  if (value == null || value === '') return hasKey;
+  if (typeof value !== 'string') throw new Error();
+  const normalized = value.trim().toLowerCase();
+  if (normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on') return true;
+  if (normalized === '0' || normalized === 'false' || normalized === 'no' || normalized === 'off') return false;
+  throw new Error();
+}
+
+/** Build the free-provider chain. Missing keys disable that provider and never appear in errors. */
+export function fallbackProviders(options) {
+  const openRouterKey = optionalSecret(options.openRouterKey);
+  const geminiKey = optionalSecret(options.geminiKey);
+  const enabled = fallbackSwitch(options.fallbackEnabled, Boolean(openRouterKey || geminiKey));
+  const secrets = [openRouterKey, geminiKey].filter(Boolean);
+  let geminiModel = DEFAULT_GEMINI_MODEL;
+  if (options.geminiModel != null && options.geminiModel !== '') {
+    if (typeof options.geminiModel !== 'string' || !GEMINI_MODEL.test(options.geminiModel)) throw new Error();
+    geminiModel = options.geminiModel;
+  }
+  let models = [];
+  if (options.openRouterModels != null && options.openRouterModels !== '') {
+    if (typeof options.openRouterModels !== 'string') throw new Error();
+    models = options.openRouterModels
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+    if (enabled && openRouterKey) {
+      for (const model of models) {
+        if (!FREE_MODEL.test(model) || model.includes('..') || model.includes('//')) throw new Error();
+      }
+    } else models = [];
+  }
+  if (!enabled) return { enabled: false, providers: [], secrets };
+  const providers = [];
+  if (openRouterKey) {
+    const seen = new Set();
+    for (const model of ['openrouter/free', ...models]) {
+      if (seen.has(model)) continue;
+      seen.add(model);
+      providers.push({ id: 'openrouter', model, url: OPENROUTER_URL, key: openRouterKey });
+    }
+  }
+  if (geminiKey) providers.push({ id: 'gemini', model: geminiModel, url: GEMINI_URL, key: geminiKey });
+  return { enabled: providers.length > 0, providers, secrets };
+}
+
 /** Validate complete SSE frames before forwarding them; retain only cumulative usage between frames. */
 export function createSseReader(forbiddenSecret) {
+  const secrets = (Array.isArray(forbiddenSecret) ? forbiddenSecret : [forbiddenSecret]).filter(
+    (secret) => typeof secret === 'string' && secret.length > 0
+  );
   const decoder = new TextDecoder();
   let pending = '';
   let usage = null;
@@ -97,7 +195,7 @@ export function createSseReader(forbiddenSecret) {
         pending = '';
       }
       for (const frame of frames) {
-        if (frame.includes(forbiddenSecret) || /^event:\s*error\s*$/mu.test(frame))
+        if (secrets.some((secret) => frame.includes(secret)) || /^event:\s*error\s*$/mu.test(frame))
           throw httpError(502, 'upstream_unavailable');
         const data = frame
           .split(/\r?\n/u)

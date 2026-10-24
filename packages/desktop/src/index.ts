@@ -33,6 +33,7 @@ import {
   setJrAccessController,
 } from './process/services/jr/auth';
 import { startJrAuthProxy } from './process/services/jr/authProxy';
+import { appendJrOpenLog } from './process/services/jr/openLog';
 import { assertStartupArchitectureCompatible } from './process/startup/architectureCompatibility';
 import { classifyBackendStartupFailure } from './process/startup/backendStartupFailure';
 import { installQuitCleanup } from './process/startup/quitCleanup';
@@ -935,6 +936,10 @@ const handleAppReady = async (): Promise<void> => {
       }
     },
     onChange: (state) => ipcBridge.jr.accessChanged.emit(state),
+    onDiagnostic: (cause) => {
+      console.warn(`[JR] ${cause}`);
+      void appendJrOpenLog(app.getPath('userData'), { message: cause }).catch(() => {});
+    },
     stopCore: stopJrRuntime,
     ensurePilot: () =>
       serializeRuntime(async () => {
@@ -981,6 +986,7 @@ const handleAppReady = async (): Promise<void> => {
   if (debugBackendStartupFailure) {
     applyDebugBackendStartupFailure(debugBackendStartupFailure);
     mark(`debugBackendStartupFailure:${debugBackendStartupFailure.reason}`);
+    if (!app.isReady()) await app.whenReady();
     await controller.initialize();
   } else if (localPilot) {
     const backendStartup = await startJrCore();
@@ -993,8 +999,10 @@ const handleAppReady = async (): Promise<void> => {
         console.warn('[JR] Company connection could not be configured.');
       }
     }
+    if (!app.isReady()) await app.whenReady();
     await controller.initialize();
   } else {
+    if (!app.isReady()) await app.whenReady();
     await controller.initialize();
   }
   controller.startHeartbeat();

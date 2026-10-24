@@ -42,13 +42,9 @@ export function getUpdateChannel(): string | undefined {
   //   Linux  → "-linux"     (+ arch suffix for non-x64, e.g. "latest-linux-arm64.yml")
   //   Windows → ""          (no suffix, e.g. "latest.yml")
   //
-  // Linux arm64 is handled natively by electron-updater (appends "-linux-arm64"),
-  // so only Windows arm64 and macOS arm64 need a custom channel.
+  // The company feed publishes one Windows file, latest.yml, for every arch.
+  if (platform === 'win32') return undefined;
 
-  if (platform === 'win32' && arch === 'arm64') {
-    // "latest-win-arm64" + "" → "latest-win-arm64.yml"
-    return 'latest-win-arm64';
-  }
   if (platform === 'darwin' && arch === 'arm64') {
     // "latest-arm64" + "-mac" → "latest-arm64-mac.yml"
     return 'latest-arm64';
@@ -326,19 +322,14 @@ class AutoUpdaterService extends EventEmitter {
   }
 
   /**
-   * Set whether to allow prerelease/dev updates.
-   * Only tracks the flag; prerelease filtering is handled by the manual GitHub
-   * API check. Does not touch `autoUpdater.allowDowngrade` (see note below).
+   * Remember the prerelease preference without switching electron-updater off latest.yml.
+   * The company feed is a single stable channel and is not a GitHub release list.
    */
   setAllowPrerelease(allow: boolean): void {
     this._allowPrerelease = allow;
-    // Do NOT set autoUpdater.allowPrerelease here.
-    // electron-updater's prerelease mode conflicts with custom channel names
-    // (e.g. 'latest-arm64'): it treats the channel as a prerelease identifier
-    // and tries to match it against tag prerelease components, which always fails
-    // with "No published versions on GitHub".
-    // Prerelease filtering is handled by the manual update check (GitHub API) instead.
-    log.info(`Prerelease updates ${allow ? 'enabled' : 'disabled'} (manual check only)`);
+    // Do NOT set autoUpdater.allowPrerelease here. That mode treats the channel
+    // name as a prerelease tag and looks for a different metadata file.
+    log.info(`Prerelease preference ${allow ? 'enabled' : 'disabled'}; feed stays on latest.yml`);
   }
 
   /**
@@ -616,9 +607,8 @@ class AutoUpdaterService extends EventEmitter {
         appIsPackaged: app.isPackaged,
       });
 
-      if (this._allowPrerelease) {
-        log.info('Skipping electron-updater check for prerelease manual mode');
-        log.debug('[auto-update] CDN stable feed skipped because prerelease mode is handled by GitHub API');
+      if (process.platform !== 'win32') {
+        log.debug('[auto-update] update checks run only on Windows against the company feed');
         return { success: true };
       }
 
@@ -904,6 +894,7 @@ class AutoUpdaterService extends EventEmitter {
    */
   async checkForUpdatesAndNotify(): Promise<void> {
     try {
+      if (process.platform !== 'win32') return;
       // Ensure clean state: prevent stale allowDowngrade=true from prior setAllowPrerelease(true) calls
       autoUpdater.allowDowngrade = false;
       await autoUpdater.checkForUpdatesAndNotify();

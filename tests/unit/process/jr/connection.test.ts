@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, readFile, stat, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { beforeEach, expect, it, vi } from 'vitest';
 import {
   bootstrapJrConnection,
@@ -108,6 +108,22 @@ it('reports unavailable usage as null and keeps source tokens out of the rendere
   expect(JSON.stringify(status)).not.toContain(env.JR_RELAY_TOKEN);
 });
 
+it('reports fallback mode only from an explicit boolean and hides provider secrets', async () => {
+  const request = vi
+    .fn()
+    .mockResolvedValueOnce(Response.json({ model: 'MiniMax-M3.1-Flash', usage: null, fallback: true }))
+    .mockResolvedValueOnce(Response.json({ model: 'MiniMax-M3.1-Flash', usage: null, fallback: env.JR_RELAY_TOKEN }));
+  expect(await getJrConnectionStatus(env, request)).toEqual({
+    connected: true,
+    model: 'MiniMax-M3.1-Flash',
+    usage: null,
+    fallback: true,
+  });
+  const ignored = await getJrConnectionStatus(env, request);
+  expect(ignored).toEqual({ connected: true, model: 'MiniMax-M3.1-Flash', usage: null });
+  expect(JSON.stringify(ignored)).not.toContain(env.JR_RELAY_TOKEN);
+});
+
 it('rejects fabricated or malformed usage values instead of showing zero', async () => {
   const request = vi.fn().mockResolvedValue(
     Response.json({
@@ -130,7 +146,7 @@ it('creates separate private workspaces inside the application profile', async (
     const first = await createJrWorkspace(root),
       second = await createJrWorkspace(root);
     expect(first).not.toBe(second);
-    expect(first.startsWith(join(root, 'jr-workspaces') + '/')).toBe(true);
+    expect(first.startsWith(join(root, 'jr-workspaces') + sep)).toBe(true);
     expect((await stat(first)).isDirectory()).toBe(true);
     expect(await readFile(join(first, '.aionrs.toml'), 'utf8')).toContain('autocompact_threshold_pct = 55');
     if (process.platform !== 'win32') expect((await stat(join(first, '.aionrs.toml'))).mode & 0o777).toBe(0o600);

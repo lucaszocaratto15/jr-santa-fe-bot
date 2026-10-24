@@ -119,6 +119,8 @@ export type JrAccessState = {
     | 'unconfigured'
     | 'pilot';
   user: JrAccessUser | null;
+  /** Set when sign-in is waiting on OS encryption rather than a missing service URL. */
+  notice?: 'storage';
 };
 export type JrAdminEmployee = JrAccessUser & {
   email?: string | null;
@@ -142,4 +144,6 @@ export type JrConnectionStatus = {
   connected: boolean;
   model: string | null;
   usage: JrUsageSnapshot | null;
+  /** Set when the control service is answering through a free fallback provider. */
+  fallback?: boolean;
 };

@@ -5,12 +5,16 @@ function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+function withFallback(value: Record<string, unknown>, status: JrConnectionStatus): JrConnectionStatus {
+  return value.fallback === true ? { ...status, fallback: true } : status;
+}
+
 /** Validate server counters without replacing unavailable token counts with zero. */
 export function parseJrConnectionStatus(value: unknown): JrConnectionStatus {
   if (!record(value) || typeof value.model !== 'string' || !/^MiniMax-[A-Za-z0-9.-]+$/.test(value.model)) {
     throw new Error('Invalid reported company model');
   }
-  if (value.usage === null) return { connected: true, model: value.model, usage: null };
+  if (value.usage === null) return withFallback(value, { connected: true, model: value.model, usage: null });
   if (!record(value.usage)) throw new Error('Invalid reported usage');
   const raw = value.usage;
   const counter = (entry: unknown): entry is number =>
@@ -64,7 +68,7 @@ export function parseJrConnectionStatus(value: unknown): JrConnectionStatus {
       throw new Error('Invalid reported usage');
     usage.lastRequestAt = raw.lastRequestAt as string | null;
   }
-  return { connected: true, model: value.model, usage };
+  return withFallback(value, { connected: true, model: value.model, usage });
 }
 
 export async function getJrConnectionStatus(

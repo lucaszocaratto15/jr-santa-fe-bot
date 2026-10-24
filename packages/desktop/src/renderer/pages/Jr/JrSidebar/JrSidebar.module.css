@@ -251,15 +251,24 @@
   align-items: center;
   flex: 1;
   min-width: 0;
-  height: auto;
-  min-height: 48px;
+  height: 48px;
   justify-content: flex-start;
-  padding: 8px;
+  padding: 0 8px;
   border-radius: 12px;
   color: var(--color-text-1);
   font-weight: 500;
-  line-height: 20px;
+  line-height: 1;
   transition: background-color 160ms ease-out;
+}
+
+.profile:global(.arco-btn) :global(.arco-btn-content) {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  line-height: 1;
 }
 
 .profileIdentity {
@@ -268,13 +277,6 @@
   gap: 10px;
   min-width: 0;
   flex: 1;
-}
-
-.profileText {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  min-width: 0;
 }
 
 .profile:global(.arco-btn):hover {
@@ -298,17 +300,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  line-height: 20px;
-}
-
-.profileRole {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  line-height: 16px;
-  font-size: 12px;
-  font-weight: 400;
-  color: var(--color-text-3);
+  line-height: 32px;
 }
 
 .bottom .iconButton:global(.arco-btn) {

@@ -93,8 +93,8 @@ Var /GLOBAL AionUiActiveMarkerResult
 
 !macro AIONUI_OVERRIDE_APP_CANNOT_BE_CLOSED_MESSAGE
   !pragma warning disable 6030
-  LangString appCannotBeClosed 1033 "${AIONUI_MSG_APP_CANNOT_BE_CLOSED_ZH}$\r$\n$\r$\n${AIONUI_MSG_BLOCK_SEPARATOR}$\r$\n$\r$\n${AIONUI_MSG_APP_CANNOT_BE_CLOSED_EN}"
-  LangString appCannotBeClosed 2052 "${AIONUI_MSG_APP_CANNOT_BE_CLOSED_ZH}$\r$\n$\r$\n${AIONUI_MSG_BLOCK_SEPARATOR}$\r$\n$\r$\n${AIONUI_MSG_APP_CANNOT_BE_CLOSED_EN}"
+  LangString appCannotBeClosed 1046 "${AIONUI_MSG_APP_CANNOT_BE_CLOSED_EN}"
+  LangString appClosing 1046 "Fechando o JR Bot..."
   !pragma warning default 6030
 !macroend
 
@@ -170,7 +170,7 @@ Var /GLOBAL AionUiActiveMarkerResult
 
 !macro AIONUI_VERIFY_CORE_APP_FILES
   !insertmacro AIONUI_LOG_EVENT "verify-install start instDir=$INSTDIR"
-  !insertmacro AIONUI_VERIFY_REQUIRED_FILE "$INSTDIR\AionUi.exe" "AionUi.exe"
+  !insertmacro AIONUI_VERIFY_REQUIRED_FILE "$INSTDIR\${AIONUI_APP_EXECUTABLE_FILENAME}" "${AIONUI_APP_EXECUTABLE_FILENAME}"
   !insertmacro AIONUI_VERIFY_REQUIRED_FILE "$INSTDIR\ffmpeg.dll" "ffmpeg.dll"
   !insertmacro AIONUI_VERIFY_REQUIRED_FILE "$INSTDIR\libEGL.dll" "libEGL.dll"
   !insertmacro AIONUI_VERIFY_REQUIRED_FILE "$INSTDIR\libGLESv2.dll" "libGLESv2.dll"

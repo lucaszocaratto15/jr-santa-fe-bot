@@ -9,11 +9,11 @@ Var /GLOBAL AionUiInnerFailureReadResult
 !macro AIONUI_READ_LAST_INNER_FAILURE
   InitPluginsDir
   StrCpy $AionUiInnerRootCode ""
-  StrCpy $AionUiInnerFailureSummary "No specific locking process was identified. Close AionUi, terminals, editors, and file managers opened in the install folder."
+  StrCpy $AionUiInnerFailureSummary "Nenhum processo específico foi identificado. Feche o JR Bot, terminais, editores e janelas abertas na pasta de instalação."
   nsExec::ExecToStack `"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -Command "& { \
     $$ErrorActionPreference = 'SilentlyContinue'; \
     $$logPath = '$AionUiSessionLogPath'; \
-    $$summary = 'No specific locking process was identified. Close AionUi, terminals, editors, and file managers opened in the install folder.'; \
+    $$summary = 'Nenhum processo específico foi identificado. Feche o JR Bot, terminais, editores e janelas abertas na pasta de instalação.'; \
     $$code = ''; \
     if ($$logPath -and (Test-Path -LiteralPath $$logPath)) { \
       $$events = @(Get-Content -LiteralPath $$logPath -ErrorAction SilentlyContinue | ForEach-Object { try { $$_ | ConvertFrom-Json } catch { $$null } } | Where-Object { $$_ }); \
@@ -27,10 +27,10 @@ Var /GLOBAL AionUiInnerFailureReadResult
         $$processes = @($$failure.blockingProcesses); \
         if ($$processes.Count -gt 0) { $$blocking = (@($$processes | ForEach-Object { if ($$_.pid) { [string]$$_.name + '(' + [string]$$_.pid + ')' } else { [string]$$_.name } }) -join ', ') }; \
         if (-not $$blocking) { $$blocking = ([string]$$failure.message).Trim() }; \
-        if (-not $$blocking) { $$blocking = 'Windows did not identify a specific locking process. Close terminals, editors, and file managers opened in the install folder.' }; \
-        $$parts = @('- Outer installer: previous uninstaller exited with code $R0', ('- Inner failure: ' + $$code + ' phase ' + $$phase)); \
-        if ($$path) { $$parts += ('- File or folder: ' + $$path) }; \
-        $$parts += ('- Blocking process: ' + $$blocking); \
+        if (-not $$blocking) { $$blocking = 'O Windows não identificou um processo específico. Feche terminais, editores e janelas abertas na pasta de instalação.' }; \
+        $$parts = @('- Instalador: o desinstalador anterior terminou com o código $R0', ('- Falha interna: ' + $$code + ' fase ' + $$phase)); \
+        if ($$path) { $$parts += ('- Arquivo ou pasta: ' + $$path) }; \
+        $$parts += ('- Processo em uso: ' + $$blocking); \
         $$summary = $$parts -join [Environment]::NewLine; \
       } \
     }; \
@@ -160,15 +160,15 @@ Var /GLOBAL AionUiInnerFailureReadResult
   !insertmacro AIONUI_LOG_UNINSTALL_RESULT "${_ROOT_KEY}" "$AionUiUninstallHadErrors"
 
   ${If} $AionUiUninstallHadErrors == "1"
-    DetailPrint `Uninstall was not successful. Not able to launch uninstaller!`
+    DetailPrint `A desinstalação não foi concluída. Não foi possível iniciar o desinstalador.`
     Return
   ${EndIf}
 
   ${If} $R0 != 0
-      DetailPrint `Uninstall was not successful. Uninstaller error code: $R0.`
+      DetailPrint `A desinstalação não foi concluída. Código do desinstalador: $R0.`
       !insertmacro AIONUI_READ_LAST_INNER_FAILURE
       ${If} $AionUiLockerList != ""
-        StrCpy $AionUiInnerFailureSummary "- Failure: previous uninstaller failed with exit code $R0$\r$\n- File or folder: $INSTDIR$\r$\n- Blocking process: $AionUiLockerList"
+        StrCpy $AionUiInnerFailureSummary "- Falha: o desinstalador anterior terminou com o código $R0$\r$\n- Arquivo ou pasta: $INSTDIR$\r$\n- Processo em uso: $AionUiLockerList"
       ${EndIf}
       !insertmacro AIONUI_LOG_EVENT "event=old-uninstaller-failed action=report exitCode=$R0 lockers=$AionUiLockerList uninstallerDetail=$AionUiInnerFailureSummary"
       ${If} $AionUiInnerRootCode != ""

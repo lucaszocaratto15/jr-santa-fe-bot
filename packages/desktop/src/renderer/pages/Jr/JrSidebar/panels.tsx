@@ -254,6 +254,7 @@ export const UsagePanel: React.FC = () => {
   return (
     <div>
       <h1 className={styles.pageTitle}>{t('common.jr.look.usageTitle')}</h1>
+      {status?.fallback ? <p className={styles.muted}>{t('common.jr.fallbackNotice')}</p> : null}
       {isLoading ? (
         <Spin aria-label={t('common.loading')} />
       ) : (

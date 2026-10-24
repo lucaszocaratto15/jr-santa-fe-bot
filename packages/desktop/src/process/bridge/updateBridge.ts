@@ -25,6 +25,7 @@ import * as path from 'path';
 import semver from 'semver';
 import { autoUpdaterService } from '../services/autoUpdaterService';
 import { consumeInstallerLastFailure } from '../services/installerLastFailure';
+import { CDN_UPDATE_BASE_URL } from '../services/updateFeed';
 
 /** Lazily loads i18n to avoid pulling in initStorage chain at module load time */
 let _i18nCache: Promise<typeof import('../services/i18n')> | null = null;
@@ -36,42 +37,16 @@ const getI18n = async () => {
   return m.default;
 };
 
-type GitHubReleaseApiAsset = {
-  name: string;
-  browser_download_url: string;
-  size: number;
-  content_type?: string;
-};
-
-type GitHubReleaseApi = {
-  tag_name: string;
-  name?: string;
-  body?: string;
-  html_url: string;
-  published_at?: string;
-  prerelease: boolean;
-  draft: boolean;
-  assets?: GitHubReleaseApiAsset[];
-};
-
 /** Parameters for auto-update check via electron-updater */
 interface AutoUpdateCheckParams {
   /** Whether to include prerelease/dev builds in update check */
   includePrerelease?: boolean;
 }
 
-const DEFAULT_REPO = 'iOfficeAI/AionUi';
 const DEFAULT_USER_AGENT = 'AionUi';
 const ALLOWED_ASSET_EXTS = new Set(['.exe', '.msi', '.dmg', '.zip', '.deb', '.rpm']);
-const CDN_HOST = 'static.aionui.com';
-const CDN_BASE_URL = `https://${CDN_HOST}/releases`;
-const ALLOWED_DOWNLOAD_HOSTS = new Set<string>([
-  CDN_HOST,
-  'github.com',
-  'objects.githubusercontent.com',
-  'github-releases.githubusercontent.com',
-  'release-assets.githubusercontent.com',
-]);
+const UPDATE_FEED_HOST = new URL(CDN_UPDATE_BASE_URL).hostname;
+const ALLOWED_DOWNLOAD_HOSTS = new Set<string>([UPDATE_FEED_HOST]);
 const MAX_REDIRECTS = 8;
 
 const isAllowedAssetName = (name: string) => {
@@ -79,22 +54,8 @@ const isAllowedAssetName = (name: string) => {
   return ALLOWED_ASSET_EXTS.has(ext);
 };
 
-const normalizeTagToSemver = (tag: string): string | null => {
-  const trimmed = tag.trim();
-  const withoutV = trimmed.startsWith('v') ? trimmed.slice(1) : trimmed;
-  // Ensure it looks like a semver prefix at least.
-  if (!/^\d+\.\d+\.\d+/.test(withoutV)) return null;
-  return semver.valid(withoutV);
-};
-
-/**
- * Rewrite a GitHub release asset URL to the CDN URL for faster download.
- * The CDN path follows the fixed convention `{base}/{version}/{original-filename}`,
- * matching electron-builder's artifactName output, so no name conversion is needed.
- */
-const rewriteAssetUrlToCDN = (assetName: string, version: string): string => {
-  return `${CDN_BASE_URL}/${version}/${assetName}`;
-};
+/** Installers are published next to latest.yml, not under a version directory. */
+const feedAssetUrl = (assetName: string): string => `${CDN_UPDATE_BASE_URL}/${assetName}`;
 
 type RuntimePlatformInfo = {
   platform: NodeJS.Platform;
@@ -194,14 +155,14 @@ export type CdnManifestFile = { url: string; size?: number };
 export type CdnLatestManifest = { version: string; files: CdnManifestFile[]; releaseDate?: string };
 
 /**
- * Pick the electron-builder channel file for the current platform/arch,
- * matching the names build-and-release uploads to the CDN root.
+ * Channel metadata file for a platform. Windows always uses latest.yml because
+ * that is the only file published on the company feed.
  */
 export const resolveCdnChannelFile = (
   runtime: RuntimePlatformInfo = { platform: process.platform, arch: process.arch }
 ): string => {
+  if (runtime.platform === 'win32') return 'latest.yml';
   const isArm64 = normalizeArch(runtime.arch) === 'arm64';
-  if (runtime.platform === 'win32') return isArm64 ? 'latest-win-arm64.yml' : 'latest.yml';
   if (runtime.platform === 'darwin') return isArm64 ? 'latest-arm64-mac.yml' : 'latest-mac.yml';
   return isArm64 ? 'latest-linux-arm64.yml' : 'latest-linux.yml';
 };
@@ -230,12 +191,10 @@ export const parseCdnManifest = (raw: string): CdnLatestManifest | null => {
 };
 
 /**
- * Build an UpdateReleaseInfo from the CDN manifest alone. `htmlUrl`/`body`
- * stay empty here — the GitHub best-effort enrichment fills them when
- * reachable. fallbackUrl follows GitHub's fixed release-asset URL scheme, so
- * no API call is needed to construct it.
+ * Build an UpdateReleaseInfo from the company feed. Asset URLs stay on that
+ * host, beside latest.yml. No other release service is consulted.
  */
-export const mapCdnManifestToRelease = (manifest: CdnLatestManifest, repo: string): UpdateReleaseInfo | null => {
+export const mapCdnManifestToRelease = (manifest: CdnLatestManifest): UpdateReleaseInfo | null => {
   const version = semver.valid(manifest.version);
   if (!version) return null;
   const assets: GitHubReleaseAsset[] = [];
@@ -244,8 +203,7 @@ export const mapCdnManifestToRelease = (manifest: CdnLatestManifest, repo: strin
     if (!name || !isAllowedAssetName(name)) continue;
     assets.push({
       name,
-      url: rewriteAssetUrlToCDN(name, version),
-      fallbackUrl: `https://github.com/${repo}/releases/download/v${version}/${name}`,
+      url: feedAssetUrl(name),
       size: file.size ?? 0,
     });
   }
@@ -259,12 +217,6 @@ export const mapCdnManifestToRelease = (manifest: CdnLatestManifest, repo: strin
     assets,
     recommendedAsset: pickRecommendedAsset(assets),
   };
-};
-
-const resolveRepo = (requestRepo?: string): string => {
-  const envRepo = process.env.AIONUI_GITHUB_REPO?.trim();
-  const repo = (requestRepo || envRepo || DEFAULT_REPO).trim();
-  return repo || DEFAULT_REPO;
 };
 
 const assertAllowedUrl = async (rawUrl: string) => {
@@ -312,51 +264,14 @@ const fetchWithAllowlistedRedirects = async (rawUrl: string, signal: AbortSignal
   throw new Error((await getI18n()).t('update.errors.tooManyRedirects'));
 };
 
-const fetchGitHubReleases = async (repo: string, timeoutMs = 30000): Promise<GitHubReleaseApi[]> => {
-  const url = `https://api.github.com/repos/${repo}/releases`;
-
-  // 添加超时控制，防止网络问题导致无限等待 / Add timeout to prevent infinite wait on network issues
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const res = await fetch(url, {
-      headers: {
-        Accept: 'application/vnd.github+json',
-        'User-Agent': DEFAULT_USER_AGENT,
-      },
-      signal: controller.signal,
-    });
-
-    if (!res.ok) {
-      throw new Error((await getI18n()).t('update.errors.githubApiFailed', { status: res.status }));
-    }
-
-    const json = (await res.json()) as unknown;
-    if (!Array.isArray(json)) {
-      throw new Error((await getI18n()).t('update.errors.githubApiNotArray'));
-    }
-    return json as GitHubReleaseApi[];
-  } catch (err: unknown) {
-    if (err instanceof Error && err.name === 'AbortError') {
-      throw new Error((await getI18n()).t('update.errors.githubApiTimeout'), { cause: err });
-    }
-    throw err;
-  } finally {
-    clearTimeout(timeoutId);
-  }
-};
-
 const CDN_MANIFEST_TIMEOUT_MS = 15000;
-const GITHUB_NOTES_TIMEOUT_MS = 10000;
 
 /**
- * Fetch and parse the authoritative CDN channel manifest for the current
- * platform/arch. Any failure here fails the manual check — the CDN is the
- * single source of truth for "is there an update".
+ * Fetch and parse the company feed manifest. On Windows this is latest.yml.
+ * Any failure fails the manual check — that file is the only update source.
  */
 const fetchCdnManifest = async (): Promise<CdnLatestManifest> => {
-  const url = `${CDN_BASE_URL}/${resolveCdnChannelFile()}`;
+  const url = `${CDN_UPDATE_BASE_URL}/${resolveCdnChannelFile()}`;
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), CDN_MANIFEST_TIMEOUT_MS);
 
@@ -386,29 +301,6 @@ const fetchCdnManifest = async (): Promise<CdnLatestManifest> => {
     throw err;
   } finally {
     clearTimeout(timeoutId);
-  }
-};
-
-type ReleaseNotesEnrichment = { body?: string; htmlUrl?: string; name?: string; publishedAt?: string };
-
-/**
- * Best-effort GitHub lookup for the release matching the CDN version. The
- * manual check must work without GitHub (the repo stays the changelog source
- * but may be unreachable), so every failure path resolves to an empty object.
- */
-const fetchReleaseNotesEnrichment = async (repo: string, version: string): Promise<ReleaseNotesEnrichment> => {
-  try {
-    const releases = await fetchGitHubReleases(repo, GITHUB_NOTES_TIMEOUT_MS);
-    const match = releases.find((rel) => rel && !rel.draft && normalizeTagToSemver(rel.tag_name) === version);
-    if (!match) return {};
-    return {
-      body: match.body,
-      htmlUrl: match.html_url,
-      name: match.name,
-      publishedAt: match.published_at,
-    };
-  } catch {
-    return {};
   }
 };
 
@@ -673,47 +565,29 @@ export function initUpdateBridge(): void {
   );
 
   ipcBridge.update.check.provider(
-    async (params): Promise<{ success: boolean; data?: UpdateCheckResult; msg?: string }> => {
+    async (_params): Promise<{ success: boolean; data?: UpdateCheckResult; msg?: string }> => {
       try {
-        const repo = resolveRepo(params?.repo);
         const currentVersion = app.getVersion();
+        if (process.platform !== 'win32') {
+          return { success: true, data: { currentVersion, updateAvailable: false } };
+        }
 
-        // EN: Versioning note
-        // Update comparisons are pure semver: `app.getVersion()` (packaged app version) vs the CDN
-        // manifest `version`. If you want dev/prerelease updates to work reliably, CI must inject a
-        // prerelease semver into `package.json#version` for dev builds (e.g. `1.7.2-dev.1234+sha.abcdef0`)
-        // so semver ordering holds.
-        //
-        // 中文：版本号说明
-        // 更新比较严格使用 semver：`app.getVersion()`（应用自身版本号）对比 CDN manifest 的 `version`。
-        // 若要 dev/预发布版本更新可靠生效，需要 CI 在 dev 构建时把 `package.json#version`
-        // 注入为带 prerelease 的 semver（如 `1.7.2-dev.1234+sha.abcdef0`），以保证比较顺序正确。
-
-        // The CDN channel manifest is the authoritative source. It serves a single
-        // stable channel, so `includePrerelease` no longer affects detection.
+        // Windows compares the installed version with latest.yml on the company feed.
+        // Other release hosts are not consulted.
         const manifest = await fetchCdnManifest();
-        const latest = mapCdnManifestToRelease(manifest, repo);
+        const latest = mapCdnManifestToRelease(manifest);
 
         const currentSemver = semver.valid(currentVersion) || semver.coerce(currentVersion)?.version;
         if (!currentSemver || !latest) {
           return { success: true, data: { currentVersion, updateAvailable: false } };
         }
 
-        // GitHub only enriches the result with release notes; it never blocks.
-        const enrichment = await fetchReleaseNotesEnrichment(repo, latest.version);
-
         return {
           success: true,
           data: {
             currentVersion,
             updateAvailable: semver.gt(latest.version, currentSemver),
-            latest: {
-              ...latest,
-              body: enrichment.body,
-              name: enrichment.name,
-              htmlUrl: enrichment.htmlUrl ?? '',
-              publishedAt: enrichment.publishedAt ?? latest.publishedAt,
-            },
+            latest,
           },
         };
       } catch (err: unknown) {
@@ -729,10 +603,7 @@ export function initUpdateBridge(): void {
           return { success: false, msg: (await getI18n()).t('update.errors.missingUrl') };
         }
 
-        // Defense-in-depth: do not allow arbitrary downloads from renderer.
-        // EN: Only allowlisted hosts (CDN + GitHub release hosts) are permitted;
-        // each redirect hop is re-validated against the allowlist.
-        // 中文：仅允许白名单内的域名（CDN + GitHub release 相关），并手动处理重定向，每一跳都校验白名单。
+        // Only the company update host is allowlisted. Each redirect hop is checked again.
         await assertAllowedUrl(params.url);
         if (params.fallbackUrl) {
           await assertAllowedUrl(params.fallbackUrl);

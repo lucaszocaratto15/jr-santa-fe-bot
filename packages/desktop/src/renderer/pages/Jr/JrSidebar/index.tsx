@@ -163,12 +163,6 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
   const profile = sidebarProfile(state.user);
   const profileName = profile.name || t('common.jr.companyShortName');
   const initials = profile.name ? profile.initial : initialsFromName(profileName);
-  const roleLabel =
-    profile.role === 'admin'
-      ? t('common.jr.access.roleAdmin')
-      : profile.role === 'employee'
-        ? t('common.jr.access.roleEmployee')
-        : null;
 
   useEffect(() => {
     // SWR starts as undefined. Pruning that empty placeholder would wipe saved pins.
@@ -406,10 +400,7 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
               <span className={styles.initials} aria-hidden='true'>
                 {initials}
               </span>
-              <span className={styles.profileText}>
-                <span className={styles.profileName}>{profileName}</span>
-                {roleLabel ? <span className={styles.profileRole}>{roleLabel}</span> : null}
-              </span>
+              <span className={styles.profileName}>{profileName}</span>
             </span>
           </Button>
         </Dropdown>
