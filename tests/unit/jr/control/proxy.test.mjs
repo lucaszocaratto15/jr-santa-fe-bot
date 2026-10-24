@@ -381,11 +381,9 @@ test('company presentation policy stays Portuguese while preserving tool and fil
 });
 
 const OPENROUTER_KEY = 'openrouter-test-key-not-real';
-const OPENCODE_KEY = 'opencode-test-key-not-real-xx';
 const GEMINI_KEY = 'gemini-test-key-not-real-xx';
 const MINIMAX_URL = 'https://jrsantafe.stratacerta.com.br/mmx/v1/chat/completions';
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const OPENCODE_URL = 'https://opencode.ai/inference/openai/v1/chat/completions';
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
 
 test('a failed MiniMax call is replayed on OpenRouter with the same tools and stream', async (t) => {
@@ -632,110 +630,4 @@ test('provider 400 and a missing fallback key stay on the public MiniMax error',
   assert.equal(recovered.status, 200);
   assert.equal((await recovered.text()).includes(OPENROUTER_KEY), false);
   assert.equal(recovered.headers.get('x-jr-provider'), 'gemini');
-});
-
-test('a failed OpenRouter call is replayed on the next free OpenCode model', async (t) => {
-  const logs = [];
-  const calls = [];
-  const app = await startControl(t, {
-    log: (line) => logs.push(line),
-    openRouterKey: OPENROUTER_KEY,
-    openRouterModels: 'deepseek/deepseek-chat:free',
-    openCodeKey: OPENCODE_KEY,
-    openCodeModels: 'big-pickle,glm-5.3-flash-free',
-    geminiKey: GEMINI_KEY,
-    upstreamFetch: async (url, options) => {
-      const body = JSON.parse(options.body);
-      calls.push({ url, model: body.model, authorization: options.headers.Authorization });
-      if (url === MINIMAX_URL) return new Response('down', { status: 503 });
-      if (url === OPENROUTER_URL) return new Response('busy', { status: 429 });
-      if (body.model === 'big-pickle') return new Response('opencode down', { status: 503 });
-      assert.equal(options.headers.Authorization, `Bearer ${OPENCODE_KEY}`);
-      return Response.json({
-        choices: [{ message: { content: 'livre' } }],
-        usage: { prompt_tokens: 3, completion_tokens: 1 },
-      });
-    },
-  });
-  const owner = await app.login();
-  const response = await app.request('/v1/chat/completions', {
-    method: 'POST',
-    token: owner.token,
-    body: { messages: [{ role: 'user', content: 'Olá' }] },
-  });
-  assert.equal(response.status, 200);
-  assert.equal(response.headers.get('x-jr-provider'), 'opencode');
-  assert.equal((await response.json()).choices[0].message.content, 'livre');
-  assert.deepEqual(
-    calls.map((call) => call.model),
-    ['MiniMax-M3.1-Flash', 'openrouter/free', 'deepseek/deepseek-chat:free', 'big-pickle', 'glm-5.3-flash-free']
-  );
-  assert.equal(calls.at(-1).url, OPENCODE_URL);
-  assert.equal(
-    calls.some((call) => call.url === GEMINI_URL),
-    false
-  );
-  assert.deepEqual(logs, ['Provedor: opencode glm-5.3-flash-free']);
-  assert.equal(logs.join('\n').includes(OPENCODE_KEY), false);
-});
-
-test('a failed OpenCode call continues to Gemini', async (t) => {
-  const logs = [];
-  const calls = [];
-  const app = await startControl(t, {
-    log: (line) => logs.push(line),
-    openCodeKey: OPENCODE_KEY,
-    openCodeModels: 'beam-free,flint-40b-free',
-    geminiKey: GEMINI_KEY,
-    upstreamFetch: async (url, options) => {
-      const body = JSON.parse(options.body);
-      calls.push({ url, model: body.model });
-      if (url === OPENCODE_URL) return new Response(`limit ${OPENCODE_KEY}`, { status: 429 });
-      if (url === MINIMAX_URL) throw new Error('network down');
-      assert.equal(options.headers.Authorization, `Bearer ${GEMINI_KEY}`);
-      return Response.json({ choices: [{ message: { content: 'gemini' } }] });
-    },
-  });
-  const owner = await app.login();
-  const response = await app.request('/v1/chat/completions', {
-    method: 'POST',
-    token: owner.token,
-    body: { messages: [{ role: 'user', content: 'Olá' }] },
-  });
-  assert.equal(response.status, 200);
-  assert.equal(response.headers.get('x-jr-provider'), 'gemini');
-  assert.equal((await response.text()).includes(OPENCODE_KEY), false);
-  assert.deepEqual(
-    calls.map((call) => call.model),
-    ['MiniMax-M3.1-Flash', 'beam-free', 'flint-40b-free', 'gemini-2.5-flash']
-  );
-  assert.equal(logs.join('\n').includes(OPENCODE_KEY), false);
-});
-
-test('a missing OpenCode key skips that provider', async (t) => {
-  const calls = [];
-  const app = await startControl(t, {
-    log: () => {},
-    openRouterKey: OPENROUTER_KEY,
-    openCodeModels: 'big-pickle,minimax-m3',
-    geminiKey: GEMINI_KEY,
-    upstreamFetch: async (url, options) => {
-      const body = JSON.parse(options.body);
-      calls.push({ url, model: body.model });
-      if (url === GEMINI_URL) return Response.json({ choices: [{ message: { content: 'gemini' } }] });
-      return new Response('down', { status: 429 });
-    },
-  });
-  const owner = await app.login();
-  const response = await app.request('/v1/chat/completions', {
-    method: 'POST',
-    token: owner.token,
-    body: { messages: [{ role: 'user', content: 'Olá' }] },
-  });
-  assert.equal(response.status, 200);
-  assert.equal(response.headers.get('x-jr-provider'), 'gemini');
-  assert.equal(
-    calls.some((call) => call.url === OPENCODE_URL || call.model === 'minimax-m3'),
-    false
-  );
 });

@@ -15,13 +15,11 @@ Serviço separado do aplicativo. Executa em Node.js 24, usa SQLite e não possui
 | `JR_CONTROL_PORT`            | Porta do serviço. Padrão: `8787`.                                                                                               |
 | `OPENROUTER_API_KEY`         | Chave do OpenRouter. Sem ela, esse provedor não é chamado.                                                                      |
 | `OPENROUTER_FALLBACK_MODELS` | Modelos gratuitos separados por vírgula, cada um terminando em `:free`. O roteador `openrouter/free` vem sempre primeiro.       |
-| `OPENCODE_API_KEY`           | Chave do OpenCode Zen. Sem ela, esse provedor não é chamado.                                                                    |
-| `OPENCODE_FALLBACK_MODELS`   | Opcional. Subconjunto dos modelos gratuitos de chat, separados por vírgula. Qualquer outro identificador recusa a configuração. |
 | `GEMINI_API_KEY`             | Chave do AI Studio. Sem ela, o Gemini não é chamado.                                                                            |
 | `GEMINI_MODEL`               | Opcional. Padrão: `gemini-2.5-flash`.                                                                                           |
 | `FALLBACK_ENABLED`           | `true` ou `false`. Se omitida, o fallback fica ligado somente quando existe uma das chaves acima.                               |
 
-O processo encerra se faltarem credenciais válidas. Não existe código de administrador padrão. Não grave credenciais no código, no histórico de comandos ou em arquivo versionado. O serviço não lê o arquivo de configuração do OpenCode no computador do funcionário; só usa `OPENCODE_API_KEY` quando ela está no ambiente deste processo.
+O processo encerra se faltarem credenciais válidas. Não existe código de administrador padrão. Não grave credenciais no código, no histórico de comandos ou em arquivo versionado. O serviço não lê configurações do OpenCode.
 
 Com as variáveis disponíveis no ambiente seguro do processo:
 
@@ -37,22 +35,17 @@ O mesmo host publica o atualizador Windows em `https://jrsantafe.stratacerta.com
 
 ## Fallback gratuito
 
-Quando o MiniMax falha por rede, tempo esgotado, HTTP 5xx, 429, 401 ou 403, a mesma requisição é refeita antes de responder ao aplicativo. A ordem é MiniMax, depois `openrouter/free` e cada modelo de `OPENROUTER_FALLBACK_MODELS`, depois os modelos gratuitos de chat do OpenCode Zen, e por último o Gemini se `GEMINI_API_KEY` existir. O corpo original é preservado, inclusive ferramentas e fluxo SSE. O aplicativo continua pedindo o modelo MiniMax; este serviço troca somente o modelo enviado ao provedor de fallback.
-
-Os identificadores gratuitos de chat, nesta ordem, são `big-pickle`, `glm-5.3-flash-free`, `deepseek-v4.1-flash-free`, `beam-free`, `flint-40b-free`, `longcat-2.5-preview-free`, `mimo-v2.6-flash-free`, `nemotron-3-ultra-free`, `nemotron-3.5-lightning-free` e `nemotron-3.5-super-vl-free`. A lista é a tabela de preço zero em `https://opencode.ai/v2/docs/console/models/`, restrita ao endpoint `https://opencode.ai/inference/openai/v1/chat/completions`. `jev-1.13-free` fica de fora porque não usa chat completions. Um identificador pago, mesmo que o nome termine em `free`, recusa a configuração e nunca é enviado.
-
-O nível gratuito do OpenCode pode responder 429 para clientes que não são o aplicativo OpenCode. O serviço então tenta o próximo modelo gratuito e, se todos falharem, o Gemini. Não há troca para um modelo pago.
+Quando o MiniMax falha por rede, tempo esgotado, HTTP 5xx, 429, 401 ou 403, a mesma requisição é refeita antes de responder ao aplicativo. A ordem é `openrouter/free`, depois cada modelo de `OPENROUTER_FALLBACK_MODELS`, e por último o Gemini se `GEMINI_API_KEY` existir. O corpo original é preservado, inclusive ferramentas e fluxo SSE. O aplicativo continua pedindo o modelo MiniMax; este serviço troca somente o modelo enviado ao provedor de fallback.
 
 Depois de três falhas seguidas do MiniMax, as próximas requisições vão direto ao fallback por três minutos. Em seguida o MiniMax é tentado de novo. Uma resposta concluída pelo MiniMax zera a contagem. Cancelamento do usuário, sessão revogada e pedido inválido não acionam o fallback.
 
-Cada resposta concluída grava uma linha `Provedor: <nome> <modelo>`. A abertura do intervalo grava `Provedor: circuito aberto`. Essas linhas não incluem chaves. A resposta leva `X-JR-Provider` com `minimax`, `openrouter`, `opencode` ou `gemini`. `GET /usage` inclui `"fallback": true` enquanto o serviço estiver nesse modo, para o texto curto na tela de uso.
+Cada resposta concluída grava uma linha `Provedor: <nome> <modelo>`. A abertura do intervalo grava `Provedor: circuito aberto`. Essas linhas não incluem chaves. A resposta leva `X-JR-Provider` com `minimax`, `openrouter` ou `gemini`. `GET /usage` inclui `"fallback": true` enquanto o serviço estiver nesse modo, para o texto curto na tela de uso.
 
 Para ativar, coloque as variáveis no ambiente do processo, sem publicá-las no repositório. O exemplo comentado está em `deploy/.env.example`. No contêiner, o `deploy/compose.yml` só repassa a variável se ela existir no ambiente; valor vazio deixa o provedor desligado. Isto não altera a VPS: o fallback permanece desligado até alguém definir uma chave e reiniciar o processo.
 
 ```sh
 OPENROUTER_API_KEY='cole-a-chave-no-ambiente' \
 OPENROUTER_FALLBACK_MODELS='deepseek/deepseek-chat:free,qwen/qwen3-coder:free' \
-OPENCODE_API_KEY='cole-a-chave-no-ambiente' \
 GEMINI_API_KEY='cole-a-chave-no-ambiente' \
 node services/control/index.mjs
 ```

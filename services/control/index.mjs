@@ -12,8 +12,6 @@ try {
     model: process.env.JR_MODEL ?? 'MiniMax-M3.1-Flash',
     openRouterKey: process.env.OPENROUTER_API_KEY,
     openRouterModels: process.env.OPENROUTER_FALLBACK_MODELS,
-    openCodeKey: process.env.OPENCODE_API_KEY,
-    openCodeModels: process.env.OPENCODE_FALLBACK_MODELS,
     geminiKey: process.env.GEMINI_API_KEY,
     geminiModel: process.env.GEMINI_MODEL,
     fallbackEnabled: process.env.FALLBACK_ENABLED,
