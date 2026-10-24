@@ -6,6 +6,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { createControlServer } from '../../../../services/control/server.mjs';
 import { createStore } from '../../../../services/control/store.mjs';
+import { fallbackProviders } from '../../../../services/control/validation.mjs';
 import { ADMIN_CODE, MODEL, startControl, UPSTREAM_KEY } from './support.mjs';
 
 test('requires explicit strong owner and upstream configuration', () => {
@@ -28,6 +29,9 @@ test('requires explicit strong owner and upstream configuration', () => {
     { openRouterKey: 'short-key' },
     { geminiKey: `bad\n${'k'.repeat(20)}` },
     { openRouterKey: 'openrouter-test-key-not-real', openRouterModels: 'openai/gpt-4o' },
+    { openCodeKey: 'short-key' },
+    { openCodeKey: 'opencode-test-key-not-real-xx', openCodeModels: 'minimax-m3' },
+    { openCodeKey: 'opencode-test-key-not-real-xx', openCodeModels: 'jev-1.13-free' },
     { fallbackEnabled: 'maybe', openRouterKey: 'openrouter-test-key-not-real' },
   ]) {
     assert.throws(() => createControlServer({ ...valid, ...overrides }), /invalid_configuration/);
@@ -39,6 +43,78 @@ test('requires explicit strong owner and upstream configuration', () => {
   } catch (error) {
     assert.equal(error instanceof Error && error.message.includes(refused.openRouterKey), false);
   }
+});
+
+test('OpenCode fallback uses only the documented free chat models', () => {
+  const key = 'opencode-test-key-not-real-xx';
+  const chain = fallbackProviders({ openCodeKey: key });
+  assert.deepEqual(
+    chain.providers.map((provider) => provider.model),
+    [
+      'big-pickle',
+      'glm-5.3-flash-free',
+      'deepseek-v4.1-flash-free',
+      'beam-free',
+      'flint-40b-free',
+      'longcat-2.5-preview-free',
+      'mimo-v2.6-flash-free',
+      'nemotron-3-ultra-free',
+      'nemotron-3.5-lightning-free',
+      'nemotron-3.5-super-vl-free',
+    ]
+  );
+  assert.equal(
+    chain.providers.every(
+      (provider) =>
+        provider.id === 'opencode' && provider.url === 'https://opencode.ai/inference/openai/v1/chat/completions'
+    ),
+    true
+  );
+  const subset = fallbackProviders({ openCodeKey: key, openCodeModels: 'flint-40b-free, big-pickle, big-pickle' });
+  assert.deepEqual(
+    subset.providers.map((provider) => provider.model),
+    ['flint-40b-free', 'big-pickle']
+  );
+  assert.deepEqual(fallbackProviders({ openCodeModels: 'big-pickle' }).providers, []);
+});
+
+test('a paid OpenCode model is refused without revealing the key', () => {
+  const key = 'opencode-test-key-not-real-xx';
+  for (const models of ['minimax-m3', 'jev-1.13', 'jev-1.13-free', 'glm-5.3', 'big-pickle,openai/gpt-4o']) {
+    try {
+      fallbackProviders({ openCodeKey: key, openCodeModels: models });
+      assert.fail(`paid or non-chat model was accepted: ${models}`);
+    } catch (error) {
+      const text = String(error);
+      assert.equal(text.includes(key), false);
+      assert.equal(text.includes(models), false);
+    }
+  }
+});
+
+test('fallback order is OpenRouter, then OpenCode, then Gemini', () => {
+  const chain = fallbackProviders({
+    openRouterKey: 'openrouter-test-key-not-real',
+    openRouterModels: 'deepseek/deepseek-chat:free',
+    openCodeKey: 'opencode-test-key-not-real-xx',
+    openCodeModels: 'big-pickle',
+    geminiKey: 'gemini-test-key-not-real-xx',
+  });
+  assert.deepEqual(
+    chain.providers.map((provider) => `${provider.id}:${provider.model}`),
+    [
+      'openrouter:openrouter/free',
+      'openrouter:deepseek/deepseek-chat:free',
+      'opencode:big-pickle',
+      'gemini:gemini-2.5-flash',
+    ]
+  );
+  const opencodeOnly = fallbackProviders({ openCodeKey: 'opencode-test-key-not-real-xx', openCodeModels: 'beam-free' });
+  assert.equal(opencodeOnly.enabled, true);
+  assert.deepEqual(
+    opencodeOnly.providers.map((provider) => provider.id),
+    ['opencode']
+  );
 });
 
 test('only health and login are public', async (t) => {

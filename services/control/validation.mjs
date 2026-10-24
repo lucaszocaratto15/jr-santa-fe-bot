@@ -83,7 +83,23 @@ export function parseUsage(value) {
 const FREE_MODEL = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,120}:free$/u;
 const GEMINI_MODEL = /^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$/u;
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const OPENCODE_URL = 'https://opencode.ai/inference/openai/v1/chat/completions';
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
+// Free chat/completions models from https://opencode.ai/v2/docs/console/models/ (input, output, and cache all Free).
+// jev-1.13-free is free but uses a different endpoint, so it stays out. Paid ids are never added here.
+const OPENCODE_FREE_MODELS = [
+  'big-pickle',
+  'glm-5.3-flash-free',
+  'deepseek-v4.1-flash-free',
+  'beam-free',
+  'flint-40b-free',
+  'longcat-2.5-preview-free',
+  'mimo-v2.6-flash-free',
+  'nemotron-3-ultra-free',
+  'nemotron-3.5-lightning-free',
+  'nemotron-3.5-super-vl-free',
+];
+const OPENCODE_FREE = new Set(OPENCODE_FREE_MODELS);
 
 function optionalSecret(value) {
   if (value == null || value === '') return null;
@@ -101,12 +117,36 @@ function fallbackSwitch(value, hasKey) {
   throw new Error();
 }
 
+function listedModels(value) {
+  if (value == null || value === '') return [];
+  if (typeof value !== 'string') throw new Error();
+  return value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function openCodeModels(value) {
+  const requested = listedModels(value);
+  if (requested.length === 0) return [...OPENCODE_FREE_MODELS];
+  const seen = new Set();
+  const models = [];
+  for (const model of requested) {
+    if (!OPENCODE_FREE.has(model)) throw new Error();
+    if (seen.has(model)) continue;
+    seen.add(model);
+    models.push(model);
+  }
+  return models;
+}
+
 /** Build the free-provider chain. Missing keys disable that provider and never appear in errors. */
 export function fallbackProviders(options) {
   const openRouterKey = optionalSecret(options.openRouterKey);
+  const openCodeKey = optionalSecret(options.openCodeKey);
   const geminiKey = optionalSecret(options.geminiKey);
-  const enabled = fallbackSwitch(options.fallbackEnabled, Boolean(openRouterKey || geminiKey));
-  const secrets = [openRouterKey, geminiKey].filter(Boolean);
+  const enabled = fallbackSwitch(options.fallbackEnabled, Boolean(openRouterKey || openCodeKey || geminiKey));
+  const secrets = [openRouterKey, openCodeKey, geminiKey].filter(Boolean);
   let geminiModel = 'gemini-2.5-flash';
   if (options.geminiModel != null && options.geminiModel !== '') {
     if (typeof options.geminiModel !== 'string' || !GEMINI_MODEL.test(options.geminiModel)) throw new Error();
@@ -114,11 +154,7 @@ export function fallbackProviders(options) {
   }
   let models = [];
   if (options.openRouterModels != null && options.openRouterModels !== '') {
-    if (typeof options.openRouterModels !== 'string') throw new Error();
-    models = options.openRouterModels
-      .split(',')
-      .map((entry) => entry.trim())
-      .filter(Boolean);
+    models = listedModels(options.openRouterModels);
     if (enabled && openRouterKey) {
       for (const model of models) {
         if (!FREE_MODEL.test(model) || model.includes('..') || model.includes('//')) throw new Error();
@@ -133,6 +169,11 @@ export function fallbackProviders(options) {
       if (seen.has(model)) continue;
       seen.add(model);
       providers.push({ id: 'openrouter', model, url: OPENROUTER_URL, key: openRouterKey });
+    }
+  }
+  if (openCodeKey) {
+    for (const model of openCodeModels(options.openCodeModels)) {
+      providers.push({ id: 'opencode', model, url: OPENCODE_URL, key: openCodeKey });
     }
   }
   if (geminiKey) providers.push({ id: 'gemini', model: geminiModel, url: GEMINI_URL, key: geminiKey });
