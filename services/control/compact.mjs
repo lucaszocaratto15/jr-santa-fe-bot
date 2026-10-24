@@ -1,4 +1,4 @@
-import { httpError } from './validation.mjs';
+import { DEFAULT_COMPACTION_BUDGET_MS, httpError } from './validation.mjs';
 
 /** Portuguese and source text are denser than English; do not estimate with 4 characters per token. */
 export const CHARS_PER_TOKEN = 3;
@@ -115,8 +115,65 @@ export function excerptSummary(messages) {
   return `${joined.slice(0, 4_000)}\n…\n${joined.slice(-4_000)}`;
 }
 
-function excerptMessage(messages) {
-  return { role: 'user', content: `${EXCERPT_MARK}\n${excerptSummary(messages)}` };
+function noteText(mark, body) {
+  return `${mark}\n${body}`;
+}
+
+function joinPlain(left, right) {
+  const a = typeof left === 'string' ? left : '';
+  const b = typeof right === 'string' ? right : '';
+  if (!a && !b) return left == null && right == null ? null : a || b;
+  if (!a) return b;
+  if (!b) return a;
+  return `${a}\n\n${b}`;
+}
+
+/**
+ * One system prompt at the start, then alternating roles.
+ * Consecutive user or assistant turns are merged. Tool results stay paired with their call.
+ */
+function normalizeTranscript(messages) {
+  const systems = [];
+  const rest = [];
+  for (const message of messages) {
+    const copy = cloneMessage(message);
+    if (copy?.role === 'system') systems.push(copy);
+    else rest.push(copy);
+  }
+  const out = [];
+  if (systems.length > 0) {
+    const content = systems
+      .map((message) => (typeof message.content === 'string' ? message.content : textOf(message.content)))
+      .filter((text) => text.length > 0)
+      .join('\n\n');
+    out.push({ role: 'system', content });
+  }
+  for (const message of rest) {
+    const previous = out.at(-1);
+    if (previous && previous.role === message.role && (message.role === 'user' || message.role === 'assistant')) {
+      previous.content = joinPlain(previous.content, message.content);
+      if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
+        previous.tool_calls = [
+          ...(Array.isArray(previous.tool_calls) ? previous.tool_calls : []),
+          ...message.tool_calls,
+        ];
+      }
+      continue;
+    }
+    out.push(message);
+  }
+  return out;
+}
+
+function foldNote(messages, note, limit) {
+  const next = messages.map(cloneMessage);
+  const room = limit - jsonSize(next) - 48;
+  if (room < 24) return next;
+  const body = note.length > room ? truncateMiddle(note, room) : note;
+  const system = next.find((message) => message?.role === 'system' && typeof message.content === 'string');
+  if (system) system.content = system.content ? `${system.content}\n\n${body}` : body;
+  else next.unshift({ role: 'system', content: body });
+  return next;
 }
 
 function redact(text, secrets) {
@@ -177,16 +234,12 @@ export function clampToSend(messages, ceilingChars = CHAR_CEILING) {
     const groups = atomicGroups(flat);
     const dropAt = groups.findIndex((group) => group.some((message) => message?.role !== 'system'));
     if (dropAt !== -1) {
-      const excerpted = excerptMessage(groups[dropAt]);
       const others = groups.filter((_, index) => index !== dropAt).flat();
-      const room = limit - jsonSize(others) - 48;
-      if (room < 24) flat = others;
-      else {
-        if (excerpted.content.length > room) excerpted.content = truncateMiddle(excerpted.content, room);
-        flat = groups.map((group, index) => (index === dropAt ? [excerpted] : group)).flat();
-      }
+      flat = foldNote(others, noteText(EXCERPT_MARK, excerptSummary(groups[dropAt])), limit);
     }
   }
+  if (jsonSize(flat) > limit) flat = shrinkSystems(flat, limit);
+  flat = normalizeTranscript(flat);
   if (jsonSize(flat) > limit) flat = shrinkSystems(flat, limit);
   if (!Array.isArray(flat) || flat.length === 0 || jsonSize(flat) > limit) throw httpError(413, 'context_too_large');
   return flat;
@@ -299,10 +352,10 @@ export async function compactMessages(messages, options = {}) {
   }
   const { old, tail } = splitTail(atomicGroups(rest), options.tailChars ?? 90_000);
   const blocks = chunkGroups(old, options.blockChars ?? 80_000);
-  const summaries = [];
+  const notes = [];
   const clock = options.now ?? Date.now;
   const started = clock();
-  const budgetMs = options.budgetMs ?? 180_000;
+  const budgetMs = options.budgetMs ?? DEFAULT_COMPACTION_BUDGET_MS;
   const attemptMs = options.attemptMs ?? 90_000;
   const signal = options.signal;
   const gemini = options.gemini?.key && typeof options.gemini.fetch === 'function' ? options.gemini : null;
@@ -315,7 +368,7 @@ export async function compactMessages(messages, options = {}) {
     const remaining = budgetMs - elapsed;
     if (!gemini || remaining <= 0) {
       excerptBlocks += 1;
-      summaries.push(excerptMessage(flat));
+      notes.push(noteText(EXCERPT_MARK, excerptSummary(flat)));
       continue;
     }
     try {
@@ -326,7 +379,7 @@ export async function compactMessages(messages, options = {}) {
         signal,
       });
       geminiBlocks += 1;
-      summaries.push({ role: 'system', content: `${SUMMARY_MARK}\n${text}` });
+      notes.push(noteText(SUMMARY_MARK, text));
     } catch (error) {
       if (signal?.aborted) throw signal.reason ?? error;
       excerptBlocks += 1;
@@ -334,11 +387,18 @@ export async function compactMessages(messages, options = {}) {
       options.log?.(
         `Compactação: resumo indisponível status=${status} modelo=${gemini.model ?? '-'}; pedido segue com excerto`
       );
-      summaries.push(excerptMessage(flat));
+      notes.push(noteText(EXCERPT_MARK, excerptSummary(flat)));
     }
   }
 
-  const result = clampToSend([...systems, ...summaries, ...tail.flat()], ceilingChars);
+  const systemParts = [];
+  for (const message of systems) {
+    const text = typeof message.content === 'string' ? message.content : textOf(message.content);
+    if (text) systemParts.push(text);
+  }
+  for (const note of notes) if (note) systemParts.push(note);
+  const head = systemParts.length > 0 ? [{ role: 'system', content: systemParts.join('\n\n') }] : [];
+  const result = clampToSend([...head, ...tail.flat()], ceilingChars);
   options.log?.(
     `Compactação: tokens~${estimateTokens(messages)} para tokens~${estimateTokens(result)} gemini=${geminiBlocks} excerto=${excerptBlocks}`
   );

@@ -675,7 +675,77 @@ test('provider 413 is forwarded as 413 with the upstream reason and does not ope
   assert.equal(logs.join('\n').includes(UPSTREAM_KEY), false);
 });
 
-test('an upstream 400 after MiniMax is down stops the chain before Gemini', async (t) => {
+test('OpenRouter and Gemini 400 or 413 continue until the next provider', async (t) => {
+  const logs = [];
+  const calls = [];
+  const recovered = await startControl(t, {
+    log: (line) => logs.push(line),
+    openRouterKey: OPENROUTER_KEY,
+    geminiKey: GEMINI_KEY,
+    upstreamFetch: async (url) => {
+      calls.push(url);
+      if (url === MINIMAX_URL) return new Response('down', { status: 503 });
+      if (url === OPENROUTER_URL) {
+        return new Response(JSON.stringify({ error: { message: 'bad tools' } }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return Response.json({ choices: [{ message: { content: 'gemini-ok' } }] });
+    },
+  });
+  const owner = await recovered.login();
+  const response = await recovered.request('/v1/chat/completions', {
+    method: 'POST',
+    token: owner.token,
+    body: { messages: [{ role: 'user', content: 'Olá' }] },
+  });
+  assert.equal(response.status, 200);
+  assert.match(await response.text(), /gemini-ok/);
+  assert.equal(response.headers.get('x-jr-provider'), 'gemini');
+  assert.deepEqual(calls, [MINIMAX_URL, OPENROUTER_URL, GEMINI_URL]);
+  assert.match(logs.join('\n'), /Erro upstream: status=400 modelo=openrouter\/free tokens~\d+ motivo=.*seguinte/);
+
+  for (const status of [400, 413]) {
+    const chain = [];
+    const app = await startControl(t, {
+      log: () => {},
+      openRouterKey: OPENROUTER_KEY,
+      openRouterModels: 'deepseek/deepseek-chat:free',
+      geminiKey: GEMINI_KEY,
+      upstreamFetch: async (url, options) => {
+        const model = JSON.parse(options.body).model;
+        chain.push({ url, model });
+        if (url === MINIMAX_URL) return new Response('down', { status: 503 });
+        if (url === OPENROUTER_URL) {
+          return new Response(JSON.stringify({ error: { message: `openrouter-${status}` } }), {
+            status,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        return Response.json({ choices: [{ message: { content: `depois-${status}` } }] });
+      },
+    });
+    const session = await app.login();
+    const next = await app.request('/v1/chat/completions', {
+      method: 'POST',
+      token: session.token,
+      body: { messages: [{ role: 'user', content: 'Olá' }] },
+    });
+    assert.equal(next.status, 200);
+    assert.match(await next.text(), new RegExp(`depois-${status}`));
+    assert.deepEqual(
+      chain.map((call) => call.url),
+      [MINIMAX_URL, OPENROUTER_URL, OPENROUTER_URL, GEMINI_URL]
+    );
+    assert.deepEqual(
+      chain.map((call) => call.model),
+      [MODEL, 'openrouter/free', 'deepseek/deepseek-chat:free', 'gemini-3.8-flash']
+    );
+  }
+});
+
+test('the last fallback provider returns its own 400 or 413', async (t) => {
   const calls = [];
   const app = await startControl(t, {
     log: () => {},
@@ -690,7 +760,10 @@ test('an upstream 400 after MiniMax is down stops the chain before Gemini', asyn
           headers: { 'Content-Type': 'application/json' },
         });
       }
-      throw new Error('gemini should not be called');
+      return new Response(JSON.stringify({ error: { message: `gemini recusou ${GEMINI_KEY}` } }), {
+        status: 413,
+        headers: { 'Content-Type': 'application/json' },
+      });
     },
   });
   const owner = await app.login();
@@ -699,9 +772,36 @@ test('an upstream 400 after MiniMax is down stops the chain before Gemini', asyn
     token: owner.token,
     body: { messages: [{ role: 'user', content: 'Olá' }] },
   });
-  assert.equal(response.status, 400);
-  assert.match(await response.text(), /bad tools/);
-  assert.deepEqual(calls, [MINIMAX_URL, OPENROUTER_URL]);
+  const text = await response.text();
+  assert.equal(response.status, 413);
+  assert.match(text, /gemini recusou/);
+  assert.equal(text.includes(GEMINI_KEY), false);
+  assert.equal(response.headers.get('x-jr-provider'), 'gemini');
+  assert.deepEqual(calls, [MINIMAX_URL, OPENROUTER_URL, GEMINI_URL]);
+
+  const onlyRouter = [];
+  const router = await startControl(t, {
+    log: () => {},
+    openRouterKey: OPENROUTER_KEY,
+    upstreamFetch: async (url) => {
+      onlyRouter.push(url);
+      if (url === MINIMAX_URL) return new Response('down', { status: 503 });
+      return new Response(JSON.stringify({ error: { message: 'ultimo-free' } }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    },
+  });
+  const second = await router.login();
+  const last = await router.request('/v1/chat/completions', {
+    method: 'POST',
+    token: second.token,
+    body: { messages: [{ role: 'user', content: 'Olá' }] },
+  });
+  assert.equal(last.status, 400);
+  assert.match(await last.text(), /ultimo-free/);
+  assert.equal(last.headers.get('x-jr-provider'), 'openrouter');
+  assert.deepEqual(onlyRouter, [MINIMAX_URL, OPENROUTER_URL]);
 });
 
 test('repeated MiniMax 400 responses stay on MiniMax', async (t) => {
@@ -833,6 +933,15 @@ test('the attempt timeout stops at the headers and does not cut an open stream',
   assert.deepEqual(calls, [MINIMAX_URL]);
 });
 
+function assertCompactShape(messages) {
+  const systems = messages.filter((message) => message.role === 'system');
+  assert.ok(systems.length <= 1);
+  if (systems.length === 1) assert.equal(messages[0].role, 'system');
+  for (let index = 1; index < messages.length; index += 1) {
+    assert.notEqual(messages[index].role, messages[index - 1].role);
+  }
+}
+
 function longContext() {
   const messages = [{ role: 'system', content: 'Regras fixas.' }];
   for (let index = 0; index < 8; index += 1) {
@@ -880,6 +989,7 @@ test('context over 140k tokens is excerpted without Gemini when no key is config
   assert.match(sent, /português do Brasil/);
   assert.equal(sent.includes('MEIO-UNICO-0'), false);
   assert.match(sent, /contexto compactado/);
+  assertCompactShape(forwarded.messages);
 });
 
 test('a long context uses Gemini summaries and still sends the recent tool pair', async (t) => {
@@ -916,6 +1026,7 @@ test('a long context uses Gemini summaries and still sends the recent tool pair'
   assert.equal(sent.includes('MEIO-UNICO-0'), false);
   assert.ok(Math.ceil(sent.length / 3) <= 130_000);
   assert.equal(JSON.stringify(forwarded).includes(GEMINI_KEY), false);
+  assertCompactShape(forwarded.messages);
 });
 
 test('Gemini 400 and 413 while summarizing still deliver the original request', async (t) => {
@@ -942,6 +1053,7 @@ test('Gemini 400 and 413 while summarizing still deliver the original request', 
     assert.match(sent, /contexto compactado/);
     assert.match(sent, /ULTIMA-MENSAGEM/);
     assert.equal(sent.includes('MEIO-UNICO-0'), false);
+    assertCompactShape(forwarded.messages);
   }
 });
 
@@ -971,6 +1083,7 @@ test('a hung Gemini summary falls back to an excerpt and the user request succee
   assert.equal((await response.json()).choices[0].message.content, 'depois do resumo');
   assert.match(JSON.stringify(forwarded.messages), /contexto compactado/);
   assert.match(JSON.stringify(forwarded.messages), /ULTIMA-MENSAGEM/);
+  assertCompactShape(forwarded.messages);
 });
 
 test('a system prompt over the ceiling is truncated and the latest user turn is kept', async (t) => {

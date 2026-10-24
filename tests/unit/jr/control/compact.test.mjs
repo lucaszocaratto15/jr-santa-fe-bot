@@ -48,6 +48,8 @@ test('ATTEMPT_MS defaults to 90000 and GEMINI_MODEL defaults to gemini-3.8-flash
   const config = validateConfiguration(baseConfig);
   assert.equal(config.attemptMs, 90_000);
   assert.equal(config.attemptMs, DEFAULT_ATTEMPT_MS);
+  assert.equal(DEFAULT_COMPACTION_BUDGET_MS, 60_000);
+  assert.equal(config.compactionBudgetMs, 60_000);
   assert.equal(config.compactionBudgetMs, DEFAULT_COMPACTION_BUDGET_MS);
   assert.equal(config.compactionEnabled, true);
   const gemini = validateConfiguration({ ...baseConfig, geminiKey: 'gemini-test-key-not-real-xx' });
@@ -71,6 +73,82 @@ test('ATTEMPT_MS defaults to 90000 and GEMINI_MODEL defaults to gemini-3.8-flash
     () => validateConfiguration({ ...baseConfig, geminiKey: 'gemini-test-key-not-real-xx', geminiModel: 'bad model' }),
     /invalid_configuration/
   );
+});
+
+function assertCompactShape(messages) {
+  const systems = messages.filter((message) => message.role === 'system');
+  assert.ok(systems.length <= 1);
+  if (systems.length === 1) assert.equal(messages[0].role, 'system');
+  for (let index = 1; index < messages.length; index += 1) {
+    assert.notEqual(messages[index].role, messages[index - 1].role);
+  }
+}
+
+test('compacted messages keep one leading system and never repeat a role', async () => {
+  const messages = [
+    { role: 'system', content: 'REGRAS-A' },
+    { role: 'system', content: 'REGRAS-B' },
+    { role: 'user', content: `ANTIGO-1 ${'a'.repeat(4_000)}` },
+    { role: 'user', content: `ANTIGO-2 ${'b'.repeat(4_000)}` },
+    {
+      role: 'assistant',
+      content: null,
+      tool_calls: [{ id: 'call_new', type: 'function', function: { name: 'save', arguments: '{}' } }],
+    },
+    { role: 'tool', tool_call_id: 'call_new', content: 'ok-salvo' },
+    { role: 'user', content: 'C-RECENT' },
+    { role: 'user', content: 'D-RECENT' },
+  ];
+  const excerpted = await compactMessages(messages, {
+    ceilingTokens: 2_500,
+    tailChars: 900,
+    blockChars: 5_000,
+    gemini: {
+      key: '',
+      fetch: async () => {
+        throw new Error('sem chave');
+      },
+    },
+  });
+  assertCompactShape(excerpted);
+  assert.match(excerpted[0].content, /REGRAS-A/);
+  assert.match(excerpted[0].content, /REGRAS-B/);
+  assert.match(excerpted[0].content, /contexto compactado/);
+  assert.equal(excerpted.filter((message) => message.role === 'system').length, 1);
+  assert.match(JSON.stringify(excerpted), /C-RECENT/);
+  assert.match(JSON.stringify(excerpted), /D-RECENT/);
+  const assistant = excerpted.findIndex((message) => message.tool_calls?.some((call) => call.id === 'call_new'));
+  assert.equal(excerpted[assistant].role, 'assistant');
+  assert.equal(excerpted[assistant + 1].role, 'tool');
+  assert.equal(excerpted[assistant + 1].tool_call_id, 'call_new');
+  assert.equal(excerpted[assistant + 1].content, 'ok-salvo');
+
+  let summaries = 0;
+  const summarized = await compactMessages(messages, {
+    ceilingTokens: 2_500,
+    tailChars: 900,
+    blockChars: 5_000,
+    budgetMs: 60_000,
+    gemini: {
+      key: 'k'.repeat(20),
+      model: 'gemini-3.8-flash',
+      url: 'https://example.test/gemini',
+      fetch: async () => {
+        summaries += 1;
+        return Response.json({ choices: [{ message: { content: `RESUMO-${summaries}` } }] });
+      },
+    },
+  });
+  assert.ok(summaries >= 1);
+  assertCompactShape(summarized);
+  assert.match(summarized[0].content, /REGRAS-A/);
+  assert.match(summarized[0].content, /RESUMO-1/);
+  assert.equal(summarized.filter((message) => message.role === 'system').length, 1);
+  assert.equal(summarized.some((message, index) => index > 0 && message.role === 'system'), false);
+  const kept = summarized.findIndex((message) => message.tool_calls?.some((call) => call.id === 'call_new'));
+  assert.equal(summarized[kept + 1].tool_call_id, 'call_new');
+  assert.match(JSON.stringify(summarized), /C-RECENT/);
+  assert.match(JSON.stringify(summarized), /D-RECENT/);
 });
 
 test('a short conversation is not summarized', async () => {

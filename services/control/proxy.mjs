@@ -285,7 +285,7 @@ export function createModelProxy({
         };
         // The attempt timer aborts only while headers are pending. It is cleared before any body read,
         // so an in-progress SSE stream is not cut at ATTEMPT_MS.
-        const fetchProvider = async (provider) => {
+        const fetchProvider = async (provider, hasNext) => {
           if (controller.signal.aborted) throw controller.signal.reason;
           const attempt = new AbortController();
           const abortAttempt = () => attempt.abort(controller.signal.reason);
@@ -323,7 +323,6 @@ export function createModelProxy({
               };
             }
             if (PASSTHROUGH_STATUS.has(upstream.status)) {
-              disarmHeaderDeadline();
               let text = '';
               try {
                 text = await readLimitedText(upstream, 1024 * 1024);
@@ -332,13 +331,26 @@ export function createModelProxy({
                 text = '';
               }
               const bodyText = redactText(text);
+              const reason = oneLine(reasonFromBody(bodyText));
+              // Only the primary provider stops the chain. A fallback 400/413 tries the next provider.
+              if (provider.id !== 'minimax' && hasNext) {
+                return {
+                  failover: true,
+                  failure: false,
+                  skippedStatus: true,
+                  status: upstream.status,
+                  model: provider.model,
+                  reason,
+                };
+              }
+              disarmHeaderDeadline();
               return {
                 passthrough: true,
                 status: upstream.status,
                 model: provider.model,
                 body: bodyText,
                 contentType: publicContentType(upstream.headers.get('content-type'), 'text/plain; charset=utf-8'),
-                reason: oneLine(reasonFromBody(bodyText)),
+                reason,
               };
             }
             const failover = canFailOver(upstream.status);
@@ -406,9 +418,10 @@ export function createModelProxy({
         };
         let accepted = null;
         let lastError = httpError(502, 'upstream_unavailable');
-        for (const provider of providers) {
+        for (let index = 0; index < providers.length; index += 1) {
+          const provider = providers[index];
           if (controller.signal.aborted) throw controller.signal.reason;
-          const attempt = await fetchProvider(provider);
+          const attempt = await fetchProvider(provider, index < providers.length - 1);
           if (attempt.aborted) throw attempt.reason;
           if (attempt.passthrough) {
             upstreamStatus = attempt.status;
@@ -429,7 +442,12 @@ export function createModelProxy({
             return;
           }
           if (!attempt.response) {
-            lastError = attempt.error;
+            if (attempt.skippedStatus) {
+              safeLog(
+                `Erro upstream: status=${attempt.status} modelo=${attempt.model} tokens~${estimateTokens(payload)} motivo=${attempt.reason || 'erro_upstream'}; seguinte`
+              );
+            }
+            lastError = attempt.error ?? lastError;
             upstreamStatus = attempt.status ?? upstreamStatus;
             if (provider.id === 'minimax' && attempt.failure) notePrimaryFailure(now());
             if (!attempt.failover) throw attempt.error;
