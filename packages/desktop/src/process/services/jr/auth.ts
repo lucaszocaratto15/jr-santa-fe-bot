@@ -42,6 +42,8 @@ type ControllerOptions = {
   request?: typeof fetch;
   pilot?: boolean;
   beforeFirstLogin?: () => Promise<void>;
+  /** Rewrite MiniMax windows in opencode.json. Must not throw into the session flow. */
+  syncModels?: () => Promise<void>;
 };
 
 function fail(code: string): never {
@@ -274,6 +276,14 @@ export class JrAccessController {
     this.options.onChange(this.state);
     return this.state;
   }
+  private async syncModels(): Promise<void> {
+    if (!this.options.syncModels) return;
+    try {
+      await this.options.syncModels();
+    } catch {
+      this.report('JR_MODEL_LIMIT_UNAVAILABLE');
+    }
+  }
   private report(cause: string): void {
     if (this.reported === cause) return;
     this.reported = cause;
@@ -350,6 +360,7 @@ export class JrAccessController {
     });
   }
   async initialize(): Promise<JrAccessState> {
+    await this.syncModels();
     if (this.options.pilot) return this.publish('pilot');
     if (!this.options.url) {
       this.report('JR_ACCESS_UNCONFIGURED url');
@@ -426,7 +437,11 @@ export class JrAccessController {
     const token = this.saved.token;
     this.refreshing = (async () => {
       try {
+        // Start the session request in this turn. A later await would let logout
+        // consume the in-flight check and restore a session that already ended.
+        const syncing = this.syncModels();
         const response = await this.remote('/auth/session', {}, token);
+        await syncing;
         if (epoch !== this.generation) return this.state;
         if (response.status === 401) return this.rejectSession(token);
         if (response.status === 403) {
@@ -462,6 +477,7 @@ export class JrAccessController {
     return this.refreshing;
   }
   async login(input: { code: string }): Promise<JrAccessState> {
+    await this.syncModels();
     if (
       this.authenticating ||
       this.blockingTransitions > 0 ||
@@ -575,6 +591,7 @@ export class JrAccessController {
    * must be able to rewrite the provider without asking for the invite.
    */
   async ensureGateway(): Promise<void> {
+    await this.syncModels();
     if (this.options.pilot) {
       await this.options.ensurePilot?.();
       return;
@@ -804,6 +821,7 @@ export class JrAccessController {
     accessStart: string | null;
     accessEnd: string | null;
   }): Promise<{ tokenLimit: number | null; accessStart: string | null; accessEnd: string | null }> {
+    await this.syncModels();
     if (
       !validId(input?.employeeId) ||
       (input.tokenLimit !== null && (!Number.isSafeInteger(input.tokenLimit) || input.tokenLimit < 0)) ||

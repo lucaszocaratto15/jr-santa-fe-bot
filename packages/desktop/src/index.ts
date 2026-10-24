@@ -34,6 +34,7 @@ import {
 } from './process/services/jr/auth';
 import { startJrAuthProxy } from './process/services/jr/authProxy';
 import { appendJrOpenLog } from './process/services/jr/openLog';
+import { syncJrOpencodeModels } from './process/services/jr/modelLimit';
 import { assertStartupArchitectureCompatible } from './process/startup/architectureCompatibility';
 import { classifyBackendStartupFailure } from './process/startup/backendStartupFailure';
 import { installQuitCleanup } from './process/startup/quitCleanup';
@@ -941,6 +942,9 @@ const handleAppReady = async (): Promise<void> => {
       void appendJrOpenLog(app.getPath('userData'), { message: cause }).catch(() => {});
     },
     stopCore: stopJrRuntime,
+    syncModels: async () => {
+      await syncJrOpencodeModels();
+    },
     ensurePilot: () =>
       serializeRuntime(async () => {
         if (!backendStartedOk || !backendManager.port) return;
