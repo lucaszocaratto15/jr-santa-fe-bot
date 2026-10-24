@@ -4,23 +4,23 @@ Serviço separado do aplicativo. Executa em Node.js 24, usa SQLite e não possui
 
 ## Configuração
 
-| Variável                     | Uso                                                                                                                             |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `JR_ADMIN_CODE`              | Código exclusivo do administrador, entre 32 e 256 caracteres, sem espaços. Gere um valor aleatório seguro; não use senha comum. |
-| `JR_UPSTREAM_KEY`            | Chave real do provedor, disponível somente neste serviço.                                                                       |
-| `JR_UPSTREAM_URL`            | Endereço HTTPS do provedor terminando em `/v1`. Para JR: `https://jrsantafe.stratacerta.com.br/mmx/v1`.                         |
-| `JR_MODEL`                   | Modelo permitido. Padrão da entrada executável: `MiniMax-M3.1-Flash`.                                                           |
-| `JR_CONTROL_DATA_DIR`        | Diretório persistente privado. Padrão local: `./data`. No contêiner: `/data`.                                                   |
-| `JR_CONTROL_HOST`            | Padrão local: `127.0.0.1`. No contêiner: `0.0.0.0`, com publicação somente em `127.0.0.1`.                                      |
-| `JR_CONTROL_PORT`            | Porta do serviço. Padrão: `8787`.                                                                                               |
-| `OPENROUTER_API_KEY`         | Chave do OpenRouter. Sem ela, esse provedor não é chamado.                                                                      |
-| `OPENROUTER_FALLBACK_MODELS` | Modelos gratuitos separados por vírgula, cada um terminando em `:free`. O roteador `openrouter/free` vem sempre primeiro.       |
-| `GEMINI_API_KEY`             | Chave do AI Studio. Sem ela, o Gemini não entra no fallback nem resume histórico.                                               |
-| `GEMINI_MODEL`               | Opcional. Padrão: `gemini-3.8-flash`. Vale para o fallback e para o resumo.                                                     |
-| `FALLBACK_ENABLED`           | `true` ou `false`. Se omitida, o fallback fica ligado somente quando existe uma das chaves acima.                               |
-| `ATTEMPT_MS`                 | Tempo máximo até os headers de cada provedor, em milissegundos. Padrão: `90000`. Não corta um stream já iniciado.               |
+| Variável                     | Uso                                                                                                                                |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `JR_ADMIN_CODE`              | Código exclusivo do administrador, entre 32 e 256 caracteres, sem espaços. Gere um valor aleatório seguro; não use senha comum.    |
+| `JR_UPSTREAM_KEY`            | Chave real do provedor, disponível somente neste serviço.                                                                          |
+| `JR_UPSTREAM_URL`            | Endereço HTTPS do provedor terminando em `/v1`. Para JR: `https://jrsantafe.stratacerta.com.br/mmx/v1`.                            |
+| `JR_MODEL`                   | Modelo permitido. Padrão da entrada executável: `MiniMax-M3.1-Flash`.                                                              |
+| `JR_CONTROL_DATA_DIR`        | Diretório persistente privado. Padrão local: `./data`. No contêiner: `/data`.                                                      |
+| `JR_CONTROL_HOST`            | Padrão local: `127.0.0.1`. No contêiner: `0.0.0.0`, com publicação somente em `127.0.0.1`.                                         |
+| `JR_CONTROL_PORT`            | Porta do serviço. Padrão: `8787`.                                                                                                  |
+| `OPENROUTER_API_KEY`         | Chave do OpenRouter. Sem ela, esse provedor não é chamado.                                                                         |
+| `OPENROUTER_FALLBACK_MODELS` | Modelos gratuitos separados por vírgula, cada um terminando em `:free`. O roteador `openrouter/free` vem sempre primeiro.          |
+| `GEMINI_API_KEY`             | Chave do AI Studio. Sem ela, o Gemini não entra no fallback nem resume histórico.                                                  |
+| `GEMINI_MODEL`               | Opcional. Padrão: `gemini-3.8-flash`. Vale para o fallback e para o resumo.                                                        |
+| `FALLBACK_ENABLED`           | `true` ou `false`. Se omitida, o fallback fica ligado somente quando existe uma das chaves acima.                                  |
+| `ATTEMPT_MS`                 | Tempo máximo até os headers de cada provedor, em milissegundos. Padrão: `90000`. Não corta um stream já iniciado.                  |
 | `COMPACTION_BUDGET_MS`       | Teto somado das tentativas de resumo. Padrão: `60000`. Cada bloco usa no máximo `ATTEMPT_MS`. Estourou, o resto não vai ao Gemini. |
-| `COMPACTION_ENABLED`         | `true` ou `false`. Se omitida, a compactação fica ligada. `false` desliga só o resumo; 400/413 e o fallback continuam.          |
+| `COMPACTION_ENABLED`         | `true` ou `false`. Se omitida, a compactação fica ligada. `false` desliga só o resumo; 400/413 e o fallback continuam.             |
 
 O processo encerra se faltarem credenciais válidas. Não existe código de administrador padrão. Não grave credenciais no código, no histórico de comandos ou em arquivo versionado. O serviço não lê configurações do OpenCode.
 
