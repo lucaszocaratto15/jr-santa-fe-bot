@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
+import { resolveJrModelLimit } from './modelLimit';
 
 type RelayEnvironment = Record<string, string | undefined>;
 export type JrRelayConfig = { url: string; token: string; model: string };
@@ -153,14 +154,15 @@ export async function bootstrapJrConnection(
 ): Promise<void> {
   const config = getJrRelayConfig(env);
   if (!config) return;
-  await configureJrProvider(port, config, request);
+  await configureJrProvider(port, config, request, env);
 }
 
 /** Configure the local core with a revocable local proxy capability. */
 export async function configureJrProvider(
   port: number,
   config: JrRelayConfig,
-  request: typeof fetch = fetch
+  request: typeof fetch = fetch,
+  env: RelayEnvironment = process.env
 ): Promise<void> {
   config = validateLocalConnection(config);
   if (!Number.isInteger(port) || port <= 0 || port > 65535) throw new Error('Invalid local backend port');
@@ -177,7 +179,8 @@ export async function configureJrProvider(
     models: [config.model],
     enabled: true,
     capabilities: [{ type: 'text' }, { type: 'function_calling' }],
-    context_limit: 65536,
+    // Stored on the provider row. AionCore v0.2.2 does not pass this into aionrs.
+    context_limit: resolveJrModelLimit(env).context,
     model_settings: { [config.model]: { openai_api_mode: 'chat_completions' } },
   };
   const response = await request(existing ? `${base}/${encodeURIComponent(existing.id)}` : base, {

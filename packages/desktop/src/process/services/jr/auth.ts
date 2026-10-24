@@ -443,7 +443,6 @@ export class JrAccessController {
         const response = await this.remote('/auth/session', {}, token);
         await syncing;
         if (epoch !== this.generation) return this.state;
-        if (epoch !== this.generation) return this.state;
         if (response.status === 401) return this.rejectSession(token);
         if (response.status === 403) {
           const restriction = restrictionStatus((await responseCode(response)) ?? '');

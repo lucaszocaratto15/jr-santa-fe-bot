@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { chmod, lstat, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -72,8 +72,27 @@ test('replaces a stored 1 million MiniMax window and leaves other models alone',
     output: limit.output,
     input: 1_000,
   });
-  assert.equal(config.provider.minimax.models['MiniMax-M3'].limit.context, limit.context);
+  assert.equal(config.provider.minimax.models['MiniMax-M3'], undefined);
   assert.equal(config.provider.anthropic.models['claude-opus'].limit.context, 1_000_000);
+});
+
+test('does not create a minimax provider or model that is not already there', () => {
+  const empty = applyJrModels({}, limit);
+  assert.equal(empty.changed, false);
+  assert.deepEqual(empty.config, {});
+
+  const other = applyJrModels(
+    { provider: { anthropic: { models: { 'claude-opus': { limit: { context: 1_000_000, output: 64_000 } } } } } },
+    limit
+  );
+  assert.equal(other.changed, false);
+  assert.equal(other.config.provider.minimax, undefined);
+  assert.equal(other.config.provider.anthropic.models['claude-opus'].limit.context, 1_000_000);
+
+  const bare = applyJrModels({ provider: { minimax: { options: { apiKey: 'secret-key' } } } }, limit);
+  assert.equal(bare.changed, false);
+  assert.equal(bare.config.provider.minimax.models, undefined);
+  assert.equal(bare.config.provider.minimax.options.apiKey, 'secret-key');
 });
 
 test('a second application of the same window does not report a change', () => {
@@ -117,16 +136,12 @@ test('rewrites an existing opencode.json on disk and refuses a symlink', async (
   }
 });
 
-test('creates a private opencode.json when the employee does not have one yet', async () => {
+test('leaves a missing opencode.json absent instead of creating a minimax provider', async () => {
   const root = await mkdtemp(join(tmpdir(), 'jr-model-limit-new-'));
   try {
     const file = join(root, 'nested', 'opencode.json');
-    assert.equal(await syncJrOpencodeModels({ path: file, env: { JR_MODEL_CONTEXT: '170000' } }), true);
-    const written = JSON.parse(await readFile(file, 'utf8'));
-    assert.equal(written.provider.minimax.models['MiniMax-M3.1-Flash'].limit.context, 170_000);
-    assert.equal(written.provider.minimax.models['MiniMax-M3.1-Flash'].limit.output, JR_MODEL_OUTPUT_DEFAULT);
-    if (process.platform !== 'win32') assert.equal((await lstat(file)).mode & 0o777, 0o600);
-    await chmod(file, 0o600);
+    assert.equal(await syncJrOpencodeModels({ path: file, env: { JR_MODEL_CONTEXT: '170000' } }), false);
+    await assert.rejects(access(file));
   } finally {
     await rm(root, { recursive: true, force: true });
   }

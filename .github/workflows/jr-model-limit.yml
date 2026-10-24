@@ -1,7 +1,16 @@
 name: JR model limit
 
 on:
+  push:
+    paths:
+      - 'packages/desktop/src/process/services/jr/**'
+      - 'tests/unit/jr/**'
+      - '.github/workflows/jr-model-limit.yml'
   pull_request:
+    paths:
+      - 'packages/desktop/src/process/services/jr/**'
+      - 'tests/unit/jr/**'
+      - '.github/workflows/jr-model-limit.yml'
   workflow_dispatch:
 
 permissions:

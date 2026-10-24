@@ -40,6 +40,7 @@ it('registers the fixed JR provider with only the temporary token', async () => 
     api_key: env.JR_RELAY_TOKEN,
     models: ['MiniMax-M3.1-Flash'],
     enabled: true,
+    context_limit: 160_000,
   });
   expect(request.mock.calls[1][0]).toBe('http://127.0.0.1:8000/api/providers');
 });
@@ -52,11 +53,26 @@ it('reenables an existing JR provider instead of leaving it disabled', async () 
   await configureJrProvider(
     8000,
     { url: env.JR_RELAY_URL, token: env.JR_RELAY_TOKEN, model: env.JR_MINIMAX_MODEL },
-    request
+    request,
+    {}
   );
   expect(request.mock.calls[1][0]).toBe('http://127.0.0.1:8000/api/providers/provider-1');
   expect(request.mock.calls[1][1].method).toBe('PUT');
   expect(JSON.parse(request.mock.calls[1][1].body).enabled).toBe(true);
+  expect(JSON.parse(request.mock.calls[1][1].body).context_limit).toBe(160_000);
+});
+
+it('sends a valid context override and falls back when the override is above 190000', async () => {
+  const request = vi
+    .fn()
+    .mockResolvedValueOnce(Response.json({ success: true, data: [] }))
+    .mockResolvedValueOnce(Response.json({ success: true, data: { id: 'provider' } }))
+    .mockResolvedValueOnce(Response.json({ success: true, data: [] }))
+    .mockResolvedValueOnce(Response.json({ success: true, data: { id: 'provider' } }));
+  await bootstrapJrConnection(8000, { ...env, JR_MODEL_CONTEXT: '180000', JR_MODEL_OUTPUT: '8000' }, request);
+  expect(JSON.parse(request.mock.calls[1][1].body).context_limit).toBe(180_000);
+  await bootstrapJrConnection(8000, { ...env, JR_MODEL_CONTEXT: '1000000' }, request);
+  expect(JSON.parse(request.mock.calls[3][1].body).context_limit).toBe(160_000);
 });
 
 it('reads a provider row without copying its key into the renderer list', async () => {

@@ -17,6 +17,7 @@ import {
   stopProcessGroup,
   summarizeTurnTiming,
 } from './pilot-support.mjs';
+import { resolveJrModelLimit } from '../../packages/desktop/src/process/services/jr/modelLimit.ts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const runDir = join(root, '.local-pilot', new Date().toISOString().replace(/[:.]/g, '-'));
@@ -264,7 +265,7 @@ try {
     api_key: relay.token,
     models: [provider.model],
     enabled: true,
-    context_limit: 65536,
+    context_limit: resolveJrModelLimit(process.env).context,
     model_settings: { [provider.model]: { openai_api_mode: 'chat_completions' } },
     capabilities: [{ type: 'text' }, { type: 'function_calling' }],
   });

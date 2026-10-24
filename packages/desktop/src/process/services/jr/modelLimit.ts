@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
-import { chmod, lstat, mkdir, open, rename, unlink } from 'node:fs/promises';
+import { lstat, mkdir, open, rename, unlink } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join } from 'node:path';
 
@@ -9,9 +9,6 @@ export const JR_MODEL_CONTEXT_DEFAULT = 160_000;
 export const JR_MODEL_OUTPUT_DEFAULT = 32_000;
 /** MiniMax rejects requests near 200k. Values above this are not applied. */
 export const JR_MODEL_CONTEXT_MAX = 190_000;
-/** Models the company client must cap even when opencode.json only inherited the 1M catalog. */
-export const JR_DECLARED_MINIMAX_MODELS = ['MiniMax-M3.1-Flash', 'MiniMax-M3'] as const;
-
 export type JrModelLimit = { context: number; output: number };
 type Env = Record<string, string | undefined>;
 
@@ -42,9 +39,10 @@ function parseTokenSetting(value: string | undefined): 'missing' | 'invalid' | n
 }
 
 /**
- * Resolve the MiniMax window written into opencode.json.
+ * Resolve the MiniMax window.
  * Invalid context, context above {@link JR_MODEL_CONTEXT_MAX}, or an output that is not
  * strictly smaller than context falls back to the defaults. The defaults always satisfy both locks.
+ * Callers that only have a context field, such as AionCore `context_limit`, use `context`.
  */
 export function resolveJrModelLimit(env: Env = process.env): JrModelLimit {
   const contextSetting = parseTokenSetting(env.JR_MODEL_CONTEXT);
@@ -70,54 +68,26 @@ function assignLimit(model: Record<string, unknown>, limit: JrModelLimit): boole
   return true;
 }
 
-function ensureDeclaredModels(entry: Record<string, unknown>, limit: JrModelLimit): boolean {
-  if (entry.models === undefined) entry.models = {};
-  if (!isRecord(entry.models)) return false;
-  let changed = false;
-  for (const modelId of JR_DECLARED_MINIMAX_MODELS) {
-    const model = entry.models[modelId];
-    if (model === undefined) {
-      entry.models[modelId] = { limit: { context: limit.context, output: limit.output } };
-      changed = true;
-      continue;
-    }
-    if (!isRecord(model)) continue;
-    if (assignLimit(model, limit)) changed = true;
-  }
-  return changed;
-}
-
 /**
- * Write `limit: { context, output }` onto every MiniMax model and onto the declared
- * company models of every MiniMax provider. A config with no MiniMax provider gains a
- * `minimax` override so an inherited 1_000_000 window is replaced on the next read.
- * Other providers, including models that legitimately advertise 1_000_000, are left alone.
+ * Write `limit: { context, output }` onto MiniMax models that are already present.
+ * A missing provider or model stays absent. Other providers stay untouched,
+ * including models that legitimately advertise 1_000_000.
  */
 export function applyJrModels(config: unknown, limit: JrModelLimit): { config: unknown; changed: boolean } {
-  if (!isRecord(config)) return { config, changed: false };
+  if (!isRecord(config) || !isRecord(config.provider)) return { config, changed: false };
   const next = structuredClone(config);
-  let changed = false;
-  if (next.provider === undefined) {
-    next.provider = {};
-    changed = true;
-  }
-  if (!isRecord(next.provider)) return { config, changed: false };
   const provider = next.provider;
+  if (!isRecord(provider)) return { config, changed: false };
+  let changed = false;
   for (const [providerId, entry] of Object.entries(provider)) {
-    if (!isRecord(entry)) continue;
-    if (isRecord(entry.models)) {
-      for (const [modelId, model] of Object.entries(entry.models)) {
-        if (!MINIMAX_MODEL_ID.test(modelId) || !isRecord(model)) continue;
-        if (assignLimit(model, limit)) changed = true;
-      }
+    if (!isRecord(entry) || !isRecord(entry.models)) continue;
+    const providerIsMinimax = MINIMAX_PROVIDER_ID.test(providerId);
+    for (const [modelId, model] of Object.entries(entry.models)) {
+      if (!isRecord(model)) continue;
+      if (!providerIsMinimax && !MINIMAX_MODEL_ID.test(modelId)) continue;
+      if (assignLimit(model, limit)) changed = true;
     }
-    if (MINIMAX_PROVIDER_ID.test(providerId) && ensureDeclaredModels(entry, limit)) changed = true;
   }
-  if (provider.minimax === undefined) {
-    provider.minimax = {};
-    changed = true;
-  }
-  if (isRecord(provider.minimax) && ensureDeclaredModels(provider.minimax, limit)) changed = true;
   return { config: next, changed };
 }
 
@@ -130,7 +100,7 @@ export function jrOpencodeConfigPath(env: Env = process.env, home: string = home
 
 /**
  * Replace MiniMax context windows already stored in opencode.json.
- * A missing file is created with the override. A symlink or invalid JSON is left untouched.
+ * A missing file is left absent. A symlink or invalid JSON is left untouched.
  * @returns whether the file was rewritten
  */
 export async function syncJrOpencodeModels(
@@ -141,8 +111,7 @@ export async function syncJrOpencodeModels(
   if (!isAbsolute(filePath)) throw new Error(MODEL_LIMIT_ERROR);
   const limit = resolveJrModelLimit(env);
   const directory = dirname(filePath);
-  let existed = true;
-  let text = '{}';
+  let text = '';
   try {
     const info = await lstat(filePath);
     if (info.isSymbolicLink() || !info.isFile() || info.size > 1_048_576) throw new Error(MODEL_LIMIT_ERROR);
@@ -153,13 +122,9 @@ export async function syncJrOpencodeModels(
       await handle.close();
     }
   } catch (error) {
-    if (nodeCode(error) === 'ENOENT') {
-      existed = false;
-    } else if (error instanceof Error && error.message === MODEL_LIMIT_ERROR) {
-      throw error;
-    } else {
-      throw new Error(MODEL_LIMIT_ERROR, { cause: error });
-    }
+    if (nodeCode(error) === 'ENOENT') return false;
+    if (error instanceof Error && error.message === MODEL_LIMIT_ERROR) throw error;
+    throw new Error(MODEL_LIMIT_ERROR, { cause: error });
   }
   let parsed: unknown;
   try {
@@ -187,7 +152,6 @@ export async function syncJrOpencodeModels(
     });
     if (destination?.isSymbolicLink()) throw new Error(MODEL_LIMIT_ERROR);
     await rename(temporary, filePath);
-    if (!existed) await chmod(filePath, 0o600);
     return true;
   } catch (error) {
     if (error instanceof Error && error.message === MODEL_LIMIT_ERROR) throw error;
