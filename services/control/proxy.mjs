@@ -36,11 +36,14 @@ const HEADER_SKIP = new Set([
 ]);
 
 function oneLine(text) {
-  return String(text ?? '')
-    .replace(/[\u0000-\u001f\u007f]+/gu, ' ')
-    .replace(/\s+/gu, ' ')
-    .trim()
-    .slice(0, 180);
+  return (
+    String(text ?? '')
+      // eslint-disable-next-line no-control-regex -- Remove control bytes from untrusted upstream text.
+      .replace(/[\u0000-\u001f\u007f]+/gu, ' ')
+      .replace(/\s+/gu, ' ')
+      .trim()
+      .slice(0, 180)
+  );
 }
 
 function reasonFromBody(text) {
@@ -101,7 +104,8 @@ export function createModelProxy({
     typeof geminiKey === 'string' && geminiKey.length >= 16
       ? {
           key: geminiKey,
-          model: geminiProvider?.model || (typeof geminiModel === 'string' && geminiModel.trim()) || DEFAULT_GEMINI_MODEL,
+          model:
+            geminiProvider?.model || (typeof geminiModel === 'string' && geminiModel.trim()) || DEFAULT_GEMINI_MODEL,
           url: geminiProvider?.url || GEMINI_URL,
           fetch: upstreamFetch,
         }
@@ -487,10 +491,7 @@ export function createModelProxy({
         if (stream) {
           // Headers go out before the body is consumed. Frames are flushed as they complete;
           // the upstream SSE bytes are not buffered into a JSON document.
-          response.writeHead(
-            200,
-            clientHeaders(accepted.response, served.id, 'text/event-stream; charset=utf-8')
-          );
+          response.writeHead(200, clientHeaders(accepted.response, served.id, 'text/event-stream; charset=utf-8'));
         }
         const forwardSse = async (chunk, final = false) => {
           const parsed = sseReader.push(chunk, final);
@@ -527,10 +528,7 @@ export function createModelProxy({
         if (stream) await forwardSse(undefined, true);
         else {
           usage = accepted.jsonBody.usage;
-          response.writeHead(
-            200,
-            clientHeaders(accepted.response, served.id, 'application/json; charset=utf-8')
-          );
+          response.writeHead(200, clientHeaders(accepted.response, served.id, 'application/json; charset=utf-8'));
           response.write(accepted.jsonBody.text);
         }
         status = 'completed';
