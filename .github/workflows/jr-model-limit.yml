@@ -1,0 +1,25 @@
+name: JR model limit
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  model-limit:
+    name: MiniMax context limit
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Test the MiniMax window
+        run: node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test tests/unit/jr/model-limit.test.mjs
