@@ -1,4 +1,4 @@
-import { mkdtemp, stat, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, stat, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, expect, it, vi } from 'vitest';
@@ -6,6 +6,7 @@ import {
   bootstrapJrConnection,
   getJrRelayConfig,
   createJrWorkspace,
+  configureJrWorkspaceContext,
   configureJrProvider,
   providersFromList,
   readLoopbackProviders,
@@ -131,8 +132,25 @@ it('creates separate private workspaces inside the application profile', async (
     expect(first).not.toBe(second);
     expect(first.startsWith(join(root, 'jr-workspaces') + '/')).toBe(true);
     expect((await stat(first)).isDirectory()).toBe(true);
+    expect(await readFile(join(first, '.aionrs.toml'), 'utf8')).toContain('autocompact_threshold_pct = 55');
+    if (process.platform !== 'win32') expect((await stat(join(first, '.aionrs.toml'))).mode & 0o777).toBe(0o600);
     if (process.platform !== 'win32') expect((await stat(first)).mode & 0o777).toBe(0o700);
     await expect(createJrWorkspace('relative')).rejects.toThrow();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it('preserves a workspace-owned AionRS config and rejects workspaces outside the app profile', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'jr-workspace-config-'));
+  const workspace = join(root, 'jr-workspaces', 'bot-one');
+  const original = '[compact]\ncontext_window = 160000\n';
+  try {
+    await mkdir(workspace, { recursive: true });
+    await writeFile(join(workspace, '.aionrs.toml'), original);
+    await configureJrWorkspaceContext(root, workspace);
+    expect(await readFile(join(workspace, '.aionrs.toml'), 'utf8')).toBe(original);
+    await expect(configureJrWorkspaceContext(root, root)).rejects.toThrow('Invalid local workspace path');
   } finally {
     await rm(root, { recursive: true, force: true });
   }

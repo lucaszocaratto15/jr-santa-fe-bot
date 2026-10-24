@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
   createMcp: vi.fn(),
   toggleMcp: vi.fn(),
   ensure: vi.fn(),
+  configureWorkspace: vi.fn(),
   readProviders: vi.fn(),
   report: vi.fn(),
 }));
@@ -43,6 +44,7 @@ vi.mock('@/common', () => ({
     mode: { listProviders: { invoke: mocks.providers } },
     jr: {
       ensureGateway: { invoke: mocks.ensure },
+      configureWorkspace: { invoke: mocks.configureWorkspace },
       readProviders: { invoke: mocks.readProviders },
       reportOpenError: { invoke: mocks.report },
     },
@@ -104,7 +106,12 @@ beforeEach(() => {
   mocks.updateConversation.mockResolvedValue(true);
   mocks.providers.mockResolvedValue([provider]);
   mocks.ensure.mockResolvedValue(undefined);
-  mocks.get.mockResolvedValue({ source: 'user', engine: { agent: { type: 'aionrs' } } });
+  mocks.configureWorkspace.mockResolvedValue(undefined);
+  mocks.get.mockResolvedValue({
+    source: 'user',
+    engine: { agent: { type: 'aionrs' } },
+    rules: { content: 'Regras anteriores' },
+  });
   mocks.readProviders.mockResolvedValue([]);
   mocks.report.mockResolvedValue(undefined);
   mocks.mcps.mockResolvedValue([]);
@@ -147,8 +154,9 @@ describe('JR bot persistence', () => {
     expect(mocks.writeRules).toHaveBeenCalledWith({
       assistant_id: 'jr-bot',
       locale: 'pt-BR',
-      content: input.instructions,
+      content: expect.stringContaining(input.instructions),
     });
+    expect(mocks.writeRules.mock.calls[0][0].content).toContain('## Memória entre conversas deste bot');
     expect(mocks.writeSetting).toHaveBeenCalledWith('jr.botWorkspaces', {
       'jr-bot': {
         workspace: input.workspace,
@@ -414,7 +422,7 @@ it('does not attach pending official Gmail connections to a new model conversati
   );
 });
 
-describe('one persistent conversation per JR bot', () => {
+describe('JR bot conversations', () => {
   const bot = { id: 'jr-bot', ...input };
   const conversation = {
     id: 'existing-chat',
@@ -431,6 +439,24 @@ describe('one persistent conversation per JR bot', () => {
     expect(mocks.conversation).not.toHaveBeenCalled();
     expect(mocks.conversations).not.toHaveBeenCalled();
     expect(mocks.updateConversation).not.toHaveBeenCalled();
+  });
+
+  it('starts a fresh chat for the same bot and keeps its shared project workspace', async () => {
+    mocks.readSetting.mockResolvedValue({ [bot.id]: { workspace: bot.workspace, conversationId: conversation.id } });
+    mocks.getConversation.mockResolvedValue(conversation);
+    await expect(startJrConversation(bot, { newConversation: true })).resolves.toEqual({ id: 'real-conversation' });
+    expect(mocks.conversations).not.toHaveBeenCalled();
+    expect(mocks.conversation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        assistant: expect.objectContaining({ id: bot.id }),
+        extra: expect.objectContaining({ workspace: bot.workspace }),
+      })
+    );
+    expect(mocks.writeSetting).toHaveBeenCalledWith(
+      'jr.botWorkspaces',
+      expect.objectContaining({ [bot.id]: expect.objectContaining({ conversationId: 'real-conversation' }) })
+    );
+    expect(mocks.removeConversation).not.toHaveBeenCalled();
   });
 
   it('reuses a bound conversation that is missing skills or Chrome without patching it', async () => {
@@ -574,9 +600,10 @@ describe('one persistent conversation per JR bot', () => {
     await saveJrBot(trained);
     expect(mocks.writeRules).toHaveBeenCalledWith(
       expect.objectContaining({
-        content: `${input.instructions}\n\n## Aprendizados deste bot\n${trained.learning}`,
+        content: expect.stringContaining(`${input.instructions}\n\n## Aprendizados deste bot\n${trained.learning}`),
       })
     );
+    expect(mocks.writeRules.mock.calls[0][0].content).toContain('## Memória entre conversas deste bot');
     expect(mocks.writeSetting).toHaveBeenCalledWith(
       'jr.botWorkspaces',
       expect.objectContaining({
@@ -606,8 +633,8 @@ describe('one persistent conversation per JR bot', () => {
     mocks.readSetting.mockResolvedValue({
       ours: { workspace: '/tmp/ours', skillIds: ['planilhas'], useChrome: false },
     });
-    const [bot] = await listJrBots();
-    expect(bot).toMatchObject({ id: 'ours', skillIds: ['pesquisa-jr', 'planilhas'], useChrome: true });
+    const [loadedBot] = await listJrBots();
+    expect(loadedBot).toMatchObject({ id: 'ours', skillIds: ['pesquisa-jr', 'planilhas'], useChrome: true });
     expect(mocks.update).toHaveBeenCalledWith({
       id: 'ours',
       defaults: { skills: { mode: 'fixed', value: ['pesquisa-jr', 'planilhas'] } },

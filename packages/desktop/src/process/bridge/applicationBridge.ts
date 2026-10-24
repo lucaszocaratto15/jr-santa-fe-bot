@@ -17,7 +17,7 @@ import { initApplicationBridgeCore } from './applicationBridgeCore';
 import type { IStartOnBootStatus } from '@/common/adapter/ipcBridge';
 import { restartApplication } from './restartApplication';
 import { getJrConnectionStatus } from '@process/services/jr/usage';
-import { createJrWorkspace, readLoopbackProviders } from '@process/services/jr/bootstrap';
+import { configureJrWorkspaceContext, createJrWorkspace, readLoopbackProviders } from '@process/services/jr/bootstrap';
 import { getJrAccessController } from '@process/services/jr/auth';
 import { appendJrOpenLog } from '@process/services/jr/openLog';
 
@@ -114,6 +114,11 @@ export function initApplicationBridge(): void {
     if (!['authenticated', 'pilot'].includes(getJrAccessController().state.status))
       throw new Error('JR_ACCESS_REQUIRED');
     return createJrWorkspace(app.getPath('userData'));
+  });
+  ipcBridge.jr.configureWorkspace.provider(({ workspace }) => {
+    if (!['authenticated', 'pilot'].includes(getJrAccessController().state.status))
+      throw new Error('JR_ACCESS_REQUIRED');
+    return configureJrWorkspaceContext(app.getPath('userData'), workspace);
   });
   ipcBridge.jr.accessStatus.provider(() => getJrAccessController().accessStatus());
   ipcBridge.jr.login.provider((input) => getJrAccessController().login(input));

@@ -52,9 +52,10 @@ const BotRow: React.FC<{
   preview: string;
   active: boolean;
   onOpen: () => void;
+  onNewConversation: () => void;
   onEdit: () => void;
   onDelete: () => void;
-}> = ({ bot, preview, active, onOpen, onEdit, onDelete }) => {
+}> = ({ bot, preview, active, onOpen, onNewConversation, onEdit, onDelete }) => {
   const { t } = useTranslation();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: bot.id });
   return (
@@ -66,10 +67,12 @@ const BotRow: React.FC<{
         <Menu
           className={styles.contextMenu}
           onClickMenuItem={(key) => {
+            if (key === 'new-chat') onNewConversation();
             if (key === 'edit') onEdit();
             if (key === 'delete') onDelete();
           }}
         >
+          <Menu.Item key='new-chat'>{t('common.tray.newChat')}</Menu.Item>
           <Menu.Item key='edit'>{t('common.jr.contextEdit')}</Menu.Item>
           <Menu.Item key='delete' className={styles.contextDelete}>
             {t('common.jr.contextDelete')}
@@ -199,6 +202,8 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
 
   const openBot = (bot: JrBot) => open(`/guid?bot=${encodeURIComponent(bot.id)}`);
 
+  const openNewBotConversation = (bot: JrBot) => open(`/guid?bot=${encodeURIComponent(bot.id)}&new=1`);
+
   const editBot = (bot: JrBot) => open(`/guid?bot=${encodeURIComponent(bot.id)}&edit=1`);
 
   const confirmDeleteBot = (bot: JrBot) => {
@@ -288,6 +293,7 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
                   preview={previews[bot.id] ?? ''}
                   active={activeBot === bot.id}
                   onOpen={() => openBot(bot)}
+                  onNewConversation={() => openNewBotConversation(bot)}
                   onEdit={() => editBot(bot)}
                   onDelete={() => confirmDeleteBot(bot)}
                 />
@@ -304,6 +310,7 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
                 preview={previews[bot.id] ?? ''}
                 active={activeBot === bot.id}
                 onOpen={() => openBot(bot)}
+                onNewConversation={() => openNewBotConversation(bot)}
                 onEdit={() => editBot(bot)}
                 onDelete={() => confirmDeleteBot(bot)}
               />
@@ -339,6 +346,7 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
                           preview={previews[bot.id] ?? ''}
                           active={activeBot === bot.id}
                           onOpen={() => openBot(bot)}
+                          onNewConversation={() => openNewBotConversation(bot)}
                           onEdit={() => editBot(bot)}
                           onDelete={() => confirmDeleteBot(bot)}
                         />
