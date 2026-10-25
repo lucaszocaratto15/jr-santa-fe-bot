@@ -144,7 +144,10 @@ test('compacted messages keep one leading system and never repeat a role', async
   assert.match(summarized[0].content, /REGRAS-A/);
   assert.match(summarized[0].content, /RESUMO-1/);
   assert.equal(summarized.filter((message) => message.role === 'system').length, 1);
-  assert.equal(summarized.some((message, index) => index > 0 && message.role === 'system'), false);
+  assert.equal(
+    summarized.some((message, index) => index > 0 && message.role === 'system'),
+    false
+  );
   const kept = summarized.findIndex((message) => message.tool_calls?.some((call) => call.id === 'call_new'));
   assert.equal(summarized[kept + 1].tool_call_id, 'call_new');
   assert.match(JSON.stringify(summarized), /C-RECENT/);
@@ -301,7 +304,10 @@ test('Gemini 400, 413 and timeout become excerpts instead of failing the request
 test('a system prompt that alone exceeds the ceiling is truncated without a loop or an empty result', () => {
   const started = Date.now();
   const result = clampToSend(
-    [{ role: 'system', content: `INICIO-${'S'.repeat(500_000)}-FIM` }, { role: 'user', content: 'ping' }],
+    [
+      { role: 'system', content: `INICIO-${'S'.repeat(500_000)}-FIM` },
+      { role: 'user', content: 'ping' },
+    ],
     CHAR_CEILING
   );
   assert.ok(Date.now() - started < 1_000);

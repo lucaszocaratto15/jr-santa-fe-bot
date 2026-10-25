@@ -14,6 +14,8 @@ name: Distribute Release Assets
 #   - AWS_REGION
 #   - AWS_ROLE_ARN
 #   - AWS_S3_BUCKET
+# Windows feed publishing additionally uses repository variables and secrets
+# documented in services/control/README.md.
 # Do NOT hardcode these values in this file.
 
 on:
@@ -98,6 +100,7 @@ jobs:
             --dir dist \
             --pattern "*.dmg" \
             --pattern "*.exe" \
+            --pattern "*.blockmap" \
             --pattern "*.msi" \
             --pattern "*.deb" \
             --pattern "*.zip" \
@@ -186,3 +189,59 @@ jobs:
               [ -n "$file" ] && echo "- \`${S3_RELEASE_PREFIX}/$file\`"
             done <<< "$FILES"
           } >> $GITHUB_STEP_SUMMARY
+
+  publish-jr-windows-feed:
+    name: Publish JR Bot Windows update feed
+    runs-on: ubuntu-latest
+    if: vars.PUBLISH_RELEASE == 'true' && vars.PUBLISH_JR_UPDATES == 'true' && (github.event_name == 'workflow_dispatch' || github.event.release.prerelease == false)
+    permissions:
+      contents: read
+    steps:
+      - name: Resolve stable release
+        id: release
+        env:
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          TAG="${EVENT_TAG:-$INPUT_TAG}"
+          if [[ ! "$TAG" =~ ^v?([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            echo "::error::Expected a stable version tag such as v2.2.5."
+            exit 1
+          fi
+          VERSION="${TAG#v}"
+          RELEASE=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName,isDraft,isPrerelease)
+          if ! jq -e --arg tag "$TAG" '.tagName == $tag and .isDraft == false and .isPrerelease == false' <<< "$RELEASE" >/dev/null; then
+            echo "::error::Only a published, stable GitHub Release can update the employee feed."
+            exit 1
+          fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Download Windows updater assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/jr-windows-release"
+          gh release download "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir "$RUNNER_TEMP/jr-windows-release" \
+            --pattern "latest.yml" \
+            --pattern "*.exe" \
+            --pattern "*.blockmap"
+
+      - name: Validate and publish Windows update feed
+        env:
+          JR_UPDATES_SSH_HOST: ${{ vars.JR_UPDATES_SSH_HOST }}
+          JR_UPDATES_SSH_USER: ${{ vars.JR_UPDATES_SSH_USER }}
+          JR_UPDATES_SSH_PRIVATE_KEY: ${{ secrets.JR_UPDATES_SSH_PRIVATE_KEY }}
+          JR_UPDATES_SSH_KNOWN_HOSTS: ${{ secrets.JR_UPDATES_SSH_KNOWN_HOSTS }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          bash services/control/deploy/publish-windows-feed.sh "$RUNNER_TEMP/jr-windows-release" "$VERSION"

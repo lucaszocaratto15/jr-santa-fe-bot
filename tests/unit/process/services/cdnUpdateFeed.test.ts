@@ -53,9 +53,7 @@ describe('CdnGenericProvider', () => {
       releaseDate: '2026-10-23T00:00:00.000Z',
     } satisfies UpdateInfo);
 
-    expect(files[0]?.url.href).toBe(
-      'https://jrsantafe.stratacerta.com.br/mmx/updates/JR-Santa-Fe-Bot-Setup-2.2.3.exe'
-    );
+    expect(files[0]?.url.href).toBe('https://jrsantafe.stratacerta.com.br/mmx/updates/JR-Santa-Fe-Bot-Setup-2.2.3.exe');
   });
 
   it('requests Windows metadata from the company feed root', async () => {

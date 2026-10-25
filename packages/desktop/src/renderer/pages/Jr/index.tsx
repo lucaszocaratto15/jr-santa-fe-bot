@@ -23,6 +23,7 @@ const JrWorkspace: React.FC = () => {
   } = useSWR(selectedId ? ['jr.bot', selectedId] : null, () => getJrBot(selectedId!));
   const creating = params.get('create') === '1';
   const editing = params.get('edit') === '1';
+  const newConversation = params.get('new') === '1';
   const dialogVisible = creating || editing;
   const [openError, setOpenError] = useState<string | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -33,19 +34,22 @@ const JrWorkspace: React.FC = () => {
     let cancelled = false;
     setOpenError(null);
     setDetailOpen(false);
-    void startJrConversation(bot).then(
+    const opening = newConversation ? startJrConversation(bot, { newConversation: true }) : startJrConversation(bot);
+    void opening.then(
       (conversation) => {
-        if (!cancelled)
+        if (!cancelled) {
+          if (newConversation) void mutate(JR_BOTS_KEY);
           void navigate(`/conversation/${conversation.id}?bot=${encodeURIComponent(bot.id)}`, { replace: true });
+        }
       },
-      (error: unknown) => {
-        if (!cancelled) setOpenError(reportJrOpenError(error));
+      (openFailure: unknown) => {
+        if (!cancelled) setOpenError(reportJrOpenError(openFailure));
       }
     );
     return () => {
       cancelled = true;
     };
-  }, [bot, dialogVisible, navigate, retry]);
+  }, [bot, dialogVisible, navigate, newConversation, retry]);
 
   const closeDialog = () => setParams(bot ? { bot: bot.id } : {});
   const onSaved = async (saved: JrBot) => {

@@ -41,6 +41,14 @@ function instructionWithLearning(instructions: string, learning: string): string
   return learning ? `${instructions.trim()}\n\n## Aprendizados deste bot\n${learning}` : instructions;
 }
 
+function instructionWithMemory(instructions: string, learning: string): string {
+  return [
+    instructionWithLearning(instructions, learning),
+    '## Memória entre conversas deste bot',
+    'Use a memória persistente do projeto AionRS para guardar decisões, preferências, procedimentos e pendências úteis em conversas futuras. Consulte-a ao retomar um assunto. Não salve credenciais, dados pessoais sensíveis ou documentos completos. Só confirme que algo foi memorizado depois de gravar a informação.',
+  ].join('\n\n');
+}
+
 export function validateJrBot(input: JrBotInput): 'name' | 'instructions' | 'learning' | 'workspace' | null {
   if (!input.name.trim() || input.name.trim().length > 80) return 'name';
   if (!input.instructions.trim() || input.instructions.length > 12000) return 'instructions';
@@ -195,7 +203,7 @@ export async function saveJrBot(input: JrBotInput, id?: string): Promise<JrBot> 
     const written = await ipcBridge.fs.writeAssistantRule.invoke({
       assistant_id: id,
       locale: 'pt-BR',
-      content: instructionWithLearning(input.instructions, learning),
+      content: instructionWithMemory(input.instructions, learning),
     });
     if (!written) throw new Error('Bot instructions were not saved');
     if (previous)
@@ -390,18 +398,29 @@ async function recreateBotAssistant(bot: JrBot, skillIds: readonly string[]): Pr
   const written = await ipcBridge.fs.writeAssistantRule.invoke({
     assistant_id: bot.id,
     locale: 'pt-BR',
-    content: instructionWithLearning(bot.instructions, bot.learning ?? ''),
+    content: instructionWithMemory(bot.instructions, bot.learning ?? ''),
   });
   if (!written) throw new Error('Bot instructions were not saved');
 }
 
 /** Recreate the assistant row when the workspace record survived and the assistant did not. */
 async function ensureBotAssistant(bot: JrBot, skillIds: readonly string[]): Promise<void> {
+  let detail: Awaited<ReturnType<typeof ipcBridge.assistants.get.invoke>> | undefined;
   try {
-    const detail = await ipcBridge.assistants.get.invoke({ id: bot.id, locale: 'pt-BR' });
-    if (detail.source === 'user' && detail.engine?.agent?.type === 'aionrs') return;
+    detail = await ipcBridge.assistants.get.invoke({ id: bot.id, locale: 'pt-BR' });
   } catch {
     // The row is missing. Create it again with the same id.
+  }
+  if (detail?.source === 'user' && detail.engine?.agent?.type === 'aionrs') {
+    if (!detail.rules.content.includes('## Memória entre conversas deste bot')) {
+      const written = await ipcBridge.fs.writeAssistantRule.invoke({
+        assistant_id: bot.id,
+        locale: 'pt-BR',
+        content: instructionWithMemory(bot.instructions, bot.learning ?? ''),
+      });
+      if (!written) throw new Error('Bot instructions were not saved');
+    }
+    return;
   }
   await recreateBotAssistant(bot, skillIds);
 }
@@ -444,23 +463,29 @@ const openingConversations = new Map<string, Promise<TChatConversation>>();
 let conversationQueue: Promise<unknown> = Promise.resolve();
 
 /** Open the bot's durable conversation, coalescing concurrent navigation requests. */
-export function startJrConversation(bot: JrBot): Promise<TChatConversation> {
-  const pending = openingConversations.get(bot.id);
+export function startJrConversation(
+  bot: JrBot,
+  options: { newConversation?: boolean } = {}
+): Promise<TChatConversation> {
+  const newConversation = options.newConversation === true;
+  const openingKey = newConversation ? `${bot.id}:new` : bot.id;
+  const pending = openingConversations.get(openingKey);
   if (pending) return pending;
   // Serialize whole-map writes so opening different bots cannot discard each other's bindings.
-  const operation = conversationQueue.then(() => resolveJrConversation(bot));
+  const operation = conversationQueue.then(() => resolveJrConversation(bot, newConversation));
   conversationQueue = operation.catch((): undefined => undefined);
-  openingConversations.set(bot.id, operation);
+  openingConversations.set(openingKey, operation);
   void operation.then(
-    () => openingConversations.delete(bot.id),
-    () => openingConversations.delete(bot.id)
+    () => openingConversations.delete(openingKey),
+    () => openingConversations.delete(openingKey)
   );
   return operation;
 }
 
-async function resolveJrConversation(bot: JrBot): Promise<TChatConversation> {
+async function resolveJrConversation(bot: JrBot, newConversation: boolean): Promise<TChatConversation> {
   if (validateJrBot(bot) === 'instructions') bot = { ...bot, instructions: JR_DEFAULT_INSTRUCTIONS };
   if (validateJrBot(bot)) throw new Error('Bot configuration is incomplete');
+  await ipcBridge.jr.configureWorkspace.invoke({ workspace: bot.workspace });
   const matchesBot = (conversation: TChatConversation) => {
     const extra = conversation.extra as
       | { workspace?: string; assistant_id?: string; preset_assistant_id?: string }
@@ -480,7 +505,7 @@ async function resolveJrConversation(bot: JrBot): Promise<TChatConversation> {
   }
   const workspaces = (await getClientBusinessSetting('jr.botWorkspaces')) || {};
   const boundId = workspaces[bot.id]?.conversationId;
-  if (boundId) {
+  if (!newConversation && boundId) {
     const bound = await getConversationOrNull(boundId);
     if (bound && matchesBot(bound)) return reuseStoredConversation(bound);
   }
@@ -493,12 +518,14 @@ async function resolveJrConversation(bot: JrBot): Promise<TChatConversation> {
     return conversation;
   };
   // shortcut: legacy recovery uses the existing 10,000-row window; paginate before supporting larger histories.
-  const history = await ipcBridge.database.getUserConversations.invoke({ limit: 10000 });
-  const previous = history.items
-    .filter(matchesBot)
-    .toSorted((a, b) => b.modified_at - a.modified_at || b.created_at - a.created_at)[0];
-  if (previous) return reuseStoredConversation(await bind(previous));
-  if (history.has_more) throw new Error('Conversation history is incomplete');
+  if (!newConversation) {
+    const history = await ipcBridge.database.getUserConversations.invoke({ limit: 10000 });
+    const previous = history.items
+      .filter(matchesBot)
+      .toSorted((a, b) => b.modified_at - a.modified_at || b.created_at - a.created_at)[0];
+    if (previous) return reuseStoredConversation(await bind(previous));
+    if (history.has_more) throw new Error('Conversation history is incomplete');
+  }
   let gatewayError: unknown;
   try {
     await ensureJrGateway();

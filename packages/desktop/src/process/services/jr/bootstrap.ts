@@ -1,14 +1,59 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir } from 'node:fs/promises';
-import { isAbsolute, join } from 'node:path';
+import { mkdir, open, realpath, unlink } from 'node:fs/promises';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 type RelayEnvironment = Record<string, string | undefined>;
 export type JrRelayConfig = { url: string; token: string; model: string };
+
+const JR_AIONRS_CONFIG = `# Gerenciado pelo JR Bot: compacte o contexto antes do limite do provedor.
+[compact]
+enabled = true
+context_window = 200000
+autocompact_threshold_pct = 55
+`;
+
+function isWithin(parent: string, candidate: string): boolean {
+  const path = relative(parent, candidate);
+  return path.length > 0 && path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path);
+}
+
+function hasErrorCode(error: unknown, code: string): boolean {
+  return Boolean(error && typeof error === 'object' && 'code' in error && error.code === code);
+}
+
+/** Add JR compaction defaults without overwriting a workspace-owned AionRS config. */
+export async function configureJrWorkspaceContext(userDataPath: string, workspace: string): Promise<void> {
+  if (!isAbsolute(userDataPath) || !isAbsolute(workspace)) throw new Error('Invalid local workspace root');
+  const userData = await realpath(userDataPath);
+  const workspaceRoot = join(resolve(userDataPath), 'jr-workspaces');
+  await mkdir(workspaceRoot, { recursive: true, mode: 0o700 });
+  const realRoot = await realpath(workspaceRoot);
+  if (dirname(realRoot) !== userData) throw new Error('Invalid local workspace root');
+  const candidate = resolve(workspace);
+  if (!isWithin(workspaceRoot, candidate)) throw new Error('Invalid local workspace path');
+  const realWorkspace = await realpath(candidate);
+  if (!isWithin(realRoot, realWorkspace) || dirname(realWorkspace) !== realRoot)
+    throw new Error('Invalid local workspace path');
+
+  const configPath = join(realWorkspace, '.aionrs.toml');
+  let file: Awaited<ReturnType<typeof open>> | undefined;
+  try {
+    file = await open(configPath, 'wx', 0o600);
+    await file.writeFile(JR_AIONRS_CONFIG, 'utf8');
+    await file.close();
+  } catch (error) {
+    await file?.close().catch((): void => undefined);
+    if (file) await unlink(configPath).catch((): void => undefined);
+    if (hasErrorCode(error, 'EEXIST')) return;
+    throw error;
+  }
+}
 
 export async function createJrWorkspace(userDataPath: string): Promise<string> {
   if (!isAbsolute(userDataPath)) throw new Error('Invalid local workspace root');
   const directory = join(userDataPath, 'jr-workspaces', randomUUID());
   await mkdir(directory, { recursive: true, mode: 0o700 });
+  await configureJrWorkspaceContext(userDataPath, directory);
   return directory;
 }
 

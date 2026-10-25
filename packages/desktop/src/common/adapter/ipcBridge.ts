@@ -166,6 +166,7 @@ export const shell = {
 export const jr = {
   status: bridge.buildProvider<JrConnectionStatus, void>('jr-status'),
   createWorkspace: bridge.buildProvider<string, void>('jr-create-workspace'),
+  configureWorkspace: bridge.buildProvider<void, { workspace: string }>('jr-configure-workspace'),
   accessStatus: bridge.buildProvider<JrAccessState, void>('jr-access-status'),
   login: bridge.buildProvider<JrAccessState, { code: string }>('jr-access-login'),
   logout: bridge.buildProvider<JrAccessState, void>('jr-access-logout'),

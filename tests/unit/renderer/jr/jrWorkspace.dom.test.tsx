@@ -10,14 +10,15 @@ const mocks = vi.hoisted(() => ({
   report: vi.fn((error: unknown) => (error instanceof Error ? error.message : String(error))),
   search: vi.fn(),
   refresh: vi.fn(),
+  route: '?bot=bot-1',
   user: { id: 'owner', name: 'Lucas', role: 'admin' as const },
   bot: { id: 'bot-1', name: 'Compras', workspace: '/tmp/compras', appearance: { shape: 'cloud', color: 'red' } },
 }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('react-router-dom', () => ({
   useNavigate: () => mocks.navigate,
-  useLocation: () => ({ pathname: '/guid', search: '?bot=bot-1' }),
-  useSearchParams: () => [new URLSearchParams('bot=bot-1'), vi.fn()],
+  useLocation: () => ({ pathname: '/guid', search: mocks.route }),
+  useSearchParams: () => [new URLSearchParams(mocks.route), vi.fn()],
 }));
 vi.mock('swr', () => ({
   default: (key: string | string[]) => ({
@@ -70,6 +71,7 @@ beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
   mocks.user = { id: 'owner', name: 'Lucas', role: 'admin' };
+  mocks.route = '?bot=bot-1';
   mocks.start.mockResolvedValue({ id: 'conversation-1' });
 });
 
@@ -80,6 +82,15 @@ it('opens the selected bot conversation directly without a second composer', asy
   );
   expect(mocks.start).toHaveBeenCalledWith(mocks.bot);
   expect(screen.queryByLabelText('common.jr.taskTitle')).not.toBeInTheDocument();
+});
+
+it('opens a fresh conversation while staying inside the selected bot', async () => {
+  mocks.route = '?bot=bot-1&new=1';
+  render(<JrWorkspace />);
+  await waitFor(() =>
+    expect(mocks.navigate).toHaveBeenCalledWith('/conversation/conversation-1?bot=bot-1', { replace: true })
+  );
+  expect(mocks.start).toHaveBeenCalledWith(mocks.bot, { newConversation: true });
 });
 
 it('loads bot details before opening its conversation from a summary in the sidebar', () => {

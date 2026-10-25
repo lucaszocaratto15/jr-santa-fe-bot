@@ -54,7 +54,8 @@ function messagePlain(message) {
       chunks.push(`tool_call ${name} ${textOf(args)}`);
     }
   }
-  if (typeof message?.tool_call_id === 'string' && message.tool_call_id) chunks.push(`tool_call_id ${message.tool_call_id}`);
+  if (typeof message?.tool_call_id === 'string' && message.tool_call_id)
+    chunks.push(`tool_call_id ${message.tool_call_id}`);
   return chunks.join('\n');
 }
 
@@ -292,7 +293,10 @@ async function summarizeWithGemini(messages, gemini) {
     else userSignal.addEventListener('abort', abortFromUser, { once: true });
   }
   try {
-    const plain = messages.map((message) => messagePlain(message)).join('\n---\n').slice(0, 100_000);
+    const plain = messages
+      .map((message) => messagePlain(message))
+      .join('\n---\n')
+      .slice(0, 100_000);
     const response = await gemini.fetch(gemini.url, {
       method: 'POST',
       headers: {

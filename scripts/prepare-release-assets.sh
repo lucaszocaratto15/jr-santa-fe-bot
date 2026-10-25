@@ -28,6 +28,7 @@ while IFS= read -r file; do
   DISTRIBUTABLES+=("$file")
 done < <(find "$ARTIFACTS_DIR" -type f \( \
   -name "*.exe" -o \
+  -name "*.blockmap" -o \
   -name "*.msi" -o \
   -name "*.dmg" -o \
   -name "*.deb" -o \
