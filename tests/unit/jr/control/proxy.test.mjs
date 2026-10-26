@@ -380,6 +380,33 @@ test('company presentation policy stays Portuguese while preserving tool and fil
   assert.deepEqual(forwarded.messages[1], messages[1]);
 });
 
+test('AionRS compaction asks for disabled thinking, which MiniMax rejects, so the field is dropped', async (t) => {
+  let forwarded;
+  const app = await startControl(t, {
+    upstreamFetch: async (_url, options) => {
+      forwarded = JSON.parse(options.body);
+      return Response.json({ choices: [{ message: { content: '<summary>ok</summary>' } }] });
+    },
+  });
+  const owner = await app.login();
+  const response = await app.request('/v1/chat/completions', {
+    method: 'POST',
+    token: owner.token,
+    body: {
+      model: MODEL,
+      messages: [{ role: 'user', content: 'Respond with TEXT ONLY.' }],
+      thinking: { type: 'disabled' },
+      reasoning_effort: 'none',
+      max_tokens: 20000,
+    },
+  });
+  await response.text();
+  assert.equal(response.status, 200);
+  assert.equal('thinking' in forwarded, false);
+  assert.equal('reasoning_effort' in forwarded, false);
+  assert.equal(forwarded.max_tokens, 20000);
+});
+
 const OPENROUTER_KEY = 'openrouter-test-key-not-real';
 const GEMINI_KEY = 'gemini-test-key-not-real-xx';
 const MINIMAX_URL = 'https://jrsantafe.stratacerta.com.br/mmx/v1/chat/completions';

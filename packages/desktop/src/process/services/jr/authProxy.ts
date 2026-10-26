@@ -7,29 +7,41 @@ import type { JrRelayConfig } from './bootstrap';
 
 type JrAuthProxy = { connection: JrRelayConfig; close: () => Promise<void> };
 
-async function readDenialCode(response: Response): Promise<string | null> {
+/** Provider rejections the agent must see as-is: 413 and context-length 400 trigger its compaction retry. */
+const PASSTHROUGH_STATUS = new Set([400, 413]);
+const ERROR_BODY_LIMIT = 64 * 1024;
+// ponytail: control can take compaction (60s) plus its header deadline (180s) before answering.
+const HEADERS_TIMEOUT_MS = 300_000;
+
+/** Null when the body is larger than the limit. */
+async function readErrorBody(response: Response): Promise<string | null> {
   const declared = Number(response.headers.get('content-length') ?? 0);
-  if (declared > 4096) {
+  if (declared > ERROR_BODY_LIMIT) {
     await response.body?.cancel();
     return null;
   }
   const reader = response.body?.getReader();
-  if (!reader) return null;
+  if (!reader) return '';
   const chunks: Uint8Array[] = [];
   let size = 0;
   try {
-    while (size <= 4096) {
+    while (size <= ERROR_BODY_LIMIT) {
       const next = await reader.read();
       if (next.done) break;
       size += next.value.byteLength;
-      if (size > 4096) return null;
+      if (size > ERROR_BODY_LIMIT) return null;
       chunks.push(next.value);
     }
   } finally {
     await reader.cancel().catch(() => {});
   }
+  return Buffer.concat(chunks).toString('utf8');
+}
+
+function denialCode(text: string | null): string | null {
+  if (!text) return null;
   try {
-    const value: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    const value: unknown = JSON.parse(text);
     if (!value || typeof value !== 'object' || !('error' in value)) return null;
     const error = (value as { error?: { code?: unknown } }).error;
     return error && typeof error.code === 'string' ? error.code : null;
@@ -95,23 +107,46 @@ export async function startJrAuthProxy(
           return;
         }
       }
-      const response = await request(`${remote.url}${route.slice(3)}`, {
-        method: incoming.method,
-        headers: { Authorization: `Bearer ${remote.token}`, 'Content-Type': 'application/json' },
-        body,
-        redirect: 'error',
-        signal: AbortSignal.any([abort.signal, AbortSignal.timeout(120000)]),
-      });
+      // The deadline covers only the wait for headers. A stream that already started is never cut.
+      const headersDeadline = setTimeout(() => abort.abort(), HEADERS_TIMEOUT_MS);
+      let response: Response;
+      try {
+        response = await request(`${remote.url}${route.slice(3)}`, {
+          method: incoming.method,
+          headers: { Authorization: `Bearer ${remote.token}`, 'Content-Type': 'application/json' },
+          body,
+          redirect: 'error',
+          signal: abort.signal,
+        });
+      } finally {
+        clearTimeout(headersDeadline);
+      }
       if (abort.signal.aborted) {
         await response.body?.cancel();
         return;
       }
       if (!response.ok) {
-        const code = await readDenialCode(response);
+        const text = await readErrorBody(response);
+        const code = denialCode(text);
         const restriction = response.status === 403 && (code === 'employee_blocked' || code === 'outside_access_hours');
         const revoked = response.status === 401;
-        outgoing.writeHead(revoked || restriction ? response.status : 502).end();
-        if (revoked || restriction) onDenied({ status: response.status, code });
+        if (revoked || restriction) {
+          outgoing.writeHead(response.status).end();
+          onDenied({ status: response.status, code });
+          return;
+        }
+        if (PASSTHROUGH_STATUS.has(response.status) && text !== null) {
+          outgoing
+            .writeHead(response.status, {
+              'Content-Type': response.headers.get('Content-Type')?.includes('json')
+                ? 'application/json'
+                : 'text/plain; charset=utf-8',
+              'Cache-Control': 'no-store',
+            })
+            .end(text.split(remote.token).join('[redacted]'));
+          return;
+        }
+        outgoing.writeHead(502).end();
         return;
       }
       const provider = response.headers.get('x-jr-provider');

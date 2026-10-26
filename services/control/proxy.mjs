@@ -187,6 +187,10 @@ export function createModelProxy({
         ) {
           throw httpError(400, 'invalid_request');
         }
+        // AionRS autocompact always sends thinking disabled. MiniMax-M3.1 requires adaptive
+        // thinking and answers 400 (2013), so every summary failed and the history kept growing.
+        if (body.thinking?.type === 'disabled') delete body.thinking;
+        if (body.reasoning_effort === 'none') delete body.reasoning_effort;
         const tokenPolicy = store.tokenPolicy(session.user.id);
         if (tokenPolicy) {
           if ([...active.values()].filter((entry) => entry.userId === session.user.id).length > 1)

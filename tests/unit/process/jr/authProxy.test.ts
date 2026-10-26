@@ -92,6 +92,32 @@ it('keeps an ordinary upstream failure local and does not clear the session', as
   expect(denied).not.toHaveBeenCalled();
 });
 
+it('returns provider 400 and 413 with their reason so the agent can compact instead of retrying a 502', async () => {
+  const denied = vi.fn();
+  const reason = (status: number) =>
+    JSON.stringify({ error: { message: `context length exceeded ${status} ${secret}` } });
+  const request = vi
+    .fn()
+    .mockResolvedValueOnce(new Response(reason(400), { status: 400, headers: { 'Content-Type': 'application/json' } }))
+    .mockResolvedValueOnce(new Response(reason(413), { status: 413 }));
+  const proxy = await startJrAuthProxy(
+    { url: 'https://company.example/bot/v1', token: secret, model: 'MiniMax-M3.1-Flash' },
+    denied,
+    request
+  );
+  closers.push(proxy.close);
+  const headers = { Authorization: `Bearer ${proxy.connection.token}`, 'Content-Type': 'application/json' };
+  const body = JSON.stringify({ model: 'MiniMax-M3.1-Flash', messages: [{ role: 'user', content: 'Olá' }] });
+  for (const status of [400, 413]) {
+    const response = await fetch(`${proxy.connection.url}/chat/completions`, { method: 'POST', headers, body });
+    expect(response.status).toBe(status);
+    const text = await response.text();
+    expect(text).toContain(`context length exceeded ${status}`);
+    expect(text).not.toContain(secret);
+  }
+  expect(denied).not.toHaveBeenCalled();
+});
+
 it('notifies revocation on upstream 401 and never returns its response body', async () => {
   const revoked = vi.fn();
   const request = vi.fn(async () => new Response(`server leaked ${secret}`, { status: 401 }));
