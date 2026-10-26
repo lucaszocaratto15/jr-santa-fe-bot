@@ -43,7 +43,8 @@ describe('release packaging configuration', () => {
     const workflow = readProjectFile('.github/workflows/_build-reusable.yml');
     const version = JSON.parse(readProjectFile('package.json')).version as string;
 
-    expect(version).toBe('2.2.4');
+    // The JR feed publisher accepts only stable numeric versions.
+    expect(version).toMatch(/^\d+\.\d+\.\d+$/);
     expect(config).toContain('artifactName: JR-Bot-${version}-${os}-${arch}.${ext}');
     expect(config).toContain('url: https://jrsantafe.stratacerta.com.br/mmx/updates');
     expect(workflow).toContain('out/*.blockmap');

@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.2.5](https://github.com/lucaszocaratto15/jr-santa-fe-bot/compare/a3f7e00...v2.2.5) (2026-10-26)
+
+### Desktop
+
+#### Features
+
+- **jr-updates:** publish Windows updates to the JR feed automatically (#12)
+- **control:** compact long context and pass upstream 400/413 through (#10)
+- **jr:** fall back to free models when MiniMax fails (#7)
+
+#### Bug Fixes
+
+- **jr:** unblock AionRS compaction on MiniMax and surface provider errors (#13)
+
+---
+
 ## [2.2.2](https://github.com/iOfficeAI/AionUi/compare/v2.2.1...v2.2.2) (2026-09-09)
 
 ### Desktop
