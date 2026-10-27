@@ -667,7 +667,7 @@ jobs:
             out/*.dmg
             out/*.deb
             out/*.blockmap
-            out/AionUi-*-mac-*.zip
+            out/*-mac-*.zip
             out/*.yml
           if-no-files-found: warn
           retention-days: 7

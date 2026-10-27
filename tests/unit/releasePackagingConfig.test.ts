@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
@@ -54,7 +54,8 @@ describe('release packaging configuration', () => {
   it('uploads mac zip artifacts without a stale Windows zip glob', () => {
     const workflow = readProjectFile('.github/workflows/_build-reusable.yml');
 
-    expect(workflow).toContain('out/AionUi-*-mac-*.zip');
+    // The fork's mac artifacts are named after productName ("JR Bot-..."), not "AionUi-".
+    expect(workflow).toContain('out/*-mac-*.zip');
     expect(workflow).not.toContain('out/AionUi-*-win32-*.zip');
   });
 
@@ -116,6 +117,40 @@ describe('release packaging configuration', () => {
 
       expect(prepareResult.status).not.toBe(0);
       expect(`${prepareResult.stdout}\n${prepareResult.stderr}`).toContain('Missing macOS zip artifact');
+    } finally {
+      rmSync(tempDir, { force: true, recursive: true });
+    }
+  });
+
+  itWithBash('accepts macOS assets named after the JR Bot product', () => {
+    const tempDir = mkdtempSync(resolve(tmpdir(), 'aionui-release-assets-'));
+    const artifactsDir = resolve(tempDir, 'build-artifacts');
+    const outputDir = resolve(tempDir, 'release-assets');
+
+    try {
+      const env = { ...process.env, MOCK_VERSION: '1.0.0' };
+      const createResult = spawnSync('bash', ['scripts/create-mock-release-artifacts.sh', artifactsDir], {
+        cwd: projectRoot,
+        env,
+        encoding: 'utf8',
+      });
+      expect(createResult.status).toBe(0);
+
+      for (const arch of ['x64', 'arm64']) {
+        for (const ext of ['dmg', 'zip']) {
+          const dir = resolve(artifactsDir, `macos-build-${arch}`);
+          renameSync(resolve(dir, `AionUi-1.0.0-mac-${arch}.${ext}`), resolve(dir, `JR Bot-1.0.0-mac-${arch}.${ext}`));
+        }
+      }
+
+      const prepareResult = spawnSync('bash', ['scripts/prepare-release-assets.sh', artifactsDir, outputDir], {
+        cwd: projectRoot,
+        env,
+        encoding: 'utf8',
+      });
+
+      expect(prepareResult.status).toBe(0);
+      expect(readFileSync(resolve(outputDir, 'JR Bot-1.0.0-mac-arm64.zip'), 'utf8')).toBe('');
     } finally {
       rmSync(tempDir, { force: true, recursive: true });
     }
