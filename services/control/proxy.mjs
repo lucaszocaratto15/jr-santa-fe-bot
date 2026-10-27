@@ -189,7 +189,8 @@ export function createModelProxy({
         }
         // AionRS autocompact always sends thinking disabled. MiniMax-M3.1 requires adaptive
         // thinking and answers 400 (2013), so every summary failed and the history kept growing.
-        if (body.thinking?.type === 'disabled') delete body.thinking;
+        const summaryRequest = body.thinking?.type === 'disabled';
+        if (summaryRequest) delete body.thinking;
         if (body.reasoning_effort === 'none') delete body.reasoning_effort;
         const tokenPolicy = store.tokenPolicy(session.user.id);
         if (tokenPolicy) {
@@ -206,7 +207,11 @@ export function createModelProxy({
           if (body.max_completion_tokens !== undefined) body.max_completion_tokens = outputLimit;
         }
         const policy =
-          'Responda sempre em português do Brasil, inclusive nas mensagens de andamento. Seja claro e breve. Não apresente raciocínio interno. Preserve literalmente arquivos, comandos, parâmetros, endereços e resultados das ferramentas. Mantenha todas as regras de confirmação e segurança anteriores.';
+          'Responda sempre em português do Brasil, inclusive nas mensagens de andamento. Seja claro e breve. Não apresente raciocínio interno. Preserve literalmente arquivos, comandos, parâmetros, endereços e resultados das ferramentas. Mantenha todas as regras de confirmação e segurança anteriores.' +
+          // Employees are not technical. Compaction summaries skip this so they keep every detail.
+          (summaryRequest
+            ? ''
+            : ' Quem lê não é da área técnica: escreva como para um colega de escritório, com frases curtas e palavras do dia a dia, sem jargão nem siglas sem explicar. Comece pelo resultado. Mostre caminhos de arquivo, comandos, códigos de erro e nomes de processos só quando a pessoa precisar deles para agir ou pedir. Se a pessoa tiver de decidir ou fazer algo, termine com uma pergunta simples.');
         const system = body.messages.find(
           (message) => message?.role === 'system' && typeof message.content === 'string'
         );
