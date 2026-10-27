@@ -224,16 +224,19 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [[ "${{ matrix.platform }}" == "linux-x64" ]]; then
+          # Forks without Sentry credentials (the JR fork) skip the upload instead of failing.
+          if [[ "${{ matrix.platform }}" == "linux-x64" && -n "${SENTRY_AUTH_TOKEN:-}" ]]; then
             echo "SENTRY_UPLOAD_SOURCE_MAPS=true" >> "$GITHUB_ENV"
             echo "Sentry source maps will be uploaded by linux-x64"
           else
             echo "SENTRY_UPLOAD_SOURCE_MAPS=false" >> "$GITHUB_ENV"
             echo "Sentry source map upload skipped for ${{ matrix.platform }}"
           fi
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
 
       - name: Validate Sentry source map upload configuration
-        if: matrix.platform == 'linux-x64'
+        if: env.SENTRY_UPLOAD_SOURCE_MAPS == 'true'
         shell: bash
         run: |
           set -euo pipefail
