@@ -25,6 +25,29 @@ const AdminContent: React.FC = () => {
     refreshInterval: 15000,
     shouldRetryOnError: false,
   });
+  const { state } = useJrAccess();
+  const { data: own } = useSWR(['jr.admin.self', state.user?.id], () => ipcBridge.jr.personalUsage.invoke(), {
+    refreshInterval: 15000,
+    shouldRetryOnError: false,
+  });
+  const self: JrAdminEmployee | undefined =
+    state.user && own?.usage
+      ? {
+          id: state.user.id,
+          name: state.user.name,
+          role: state.user.role,
+          revoked: false,
+          createdAt: own.usage.startedAt,
+          revokedAt: null,
+          blocked: false,
+          blockedAt: null,
+          tokenLimit: null,
+          accessStart: null,
+          accessEnd: null,
+          devices: [],
+          usage: own.usage,
+        }
+      : undefined;
   const [name, setName] = useState('');
   const [title, setTitle] = useState('');
   const [creating, setCreating] = useState(false);
@@ -134,7 +157,7 @@ const AdminContent: React.FC = () => {
         <p className={styles.hint}>{t('common.jr.access.noPeople')}</p>
       ) : (
         <>
-          <TeamUsage people={people} />
+          <TeamUsage people={people} self={self} />
           <div className={styles.list}>
             {people.map((person) => (
               <article key={person.id} className={styles.row}>

@@ -65,3 +65,8 @@
   color: var(--jr-accent);
   font-weight: 600;
 }
+
+.table :global(.arco-table-th),
+.table :global(.arco-table-td) {
+  white-space: nowrap;
+}

@@ -26,10 +26,10 @@ export function teamUsageRows(people: JrAdminEmployee[], days: UsagePeriodDays):
     .sort((a, b) => (b.period.tokens ?? -1) - (a.period.tokens ?? -1));
 }
 
-const TeamUsage: React.FC<{ people: JrAdminEmployee[] }> = ({ people }) => {
+const TeamUsage: React.FC<{ people: JrAdminEmployee[]; self?: JrAdminEmployee }> = ({ people, self }) => {
   const { t, i18n } = useTranslation();
   const [days, setDays] = useState<UsagePeriodDays>(7);
-  const rows = teamUsageRows(people, days);
+  const rows = teamUsageRows(self ? [self, ...people] : people, days);
   const tokens = (value: number | null) => (value == null ? '—' : compactTokens(value, i18n.language));
   const active = rows.filter((row) => (row.period.requests ?? 0) > 0);
   const teamTokens = rows.reduce((sum, row) => sum + (row.period.tokens ?? 0), 0);
@@ -82,10 +82,13 @@ const TeamUsage: React.FC<{ people: JrAdminEmployee[] }> = ({ people }) => {
         )}
       </div>
       <Table
+        className={usageStyles.table}
         rowKey='id'
         data={rows}
         pagination={false}
         border={false}
+        tableLayoutFixed={false}
+        scroll={{ x: 760 }}
         expandedRowRender={(row: Row) => <UsageDailyBars daily={row.period.daily} />}
         columns={[
           { title: t('common.jr.usageStats.employee'), dataIndex: 'name' },
