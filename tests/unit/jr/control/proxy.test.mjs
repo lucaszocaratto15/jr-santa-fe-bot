@@ -380,6 +380,7 @@ test('company presentation policy stays Portuguese while preserving tool and fil
   assert.equal(response.status, 200);
   assert.match(forwarded.messages[0].content, /português do Brasil/);
   assert.match(forwarded.messages[0].content, /Keep approvals enabled/);
+  assert.match(forwarded.messages[0].content, /não é da área técnica/);
   assert.deepEqual(forwarded.messages[1], messages[1]);
 });
 
@@ -408,6 +409,8 @@ test('AionRS compaction asks for disabled thinking, which MiniMax rejects, so th
   assert.equal('thinking' in forwarded, false);
   assert.equal('reasoning_effort' in forwarded, false);
   assert.equal(forwarded.max_tokens, 20000);
+  // The summary keeps paths and technical detail; the plain-language rule is for employees.
+  assert.doesNotMatch(forwarded.messages[0].content, /não é da área técnica/);
 });
 
 const OPENROUTER_KEY = 'openrouter-test-key-not-real';
