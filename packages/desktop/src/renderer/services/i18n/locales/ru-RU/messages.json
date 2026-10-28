@@ -103,6 +103,9 @@
     "pending": "Непрочитано"
   },
   "toolSteps": "Показать шаги",
+  "stepsCompleted": "Выполнено шагов: {{count}}",
+  "stepsCompleted_one": "Выполнено шагов: {{count}}",
+  "stepsCompleted_other": "Выполнено шагов: {{count}}",
   "toolInput": "Ввод",
   "toolOutput": "Вывод",
   "toolLoading": "Загрузка...",

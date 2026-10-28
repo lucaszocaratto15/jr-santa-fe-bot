@@ -99,6 +99,9 @@
     "pending": "Unread"
   },
   "toolSteps": "View steps",
+  "stepsCompleted": "{{count}} steps completed",
+  "stepsCompleted_one": "{{count}} step completed",
+  "stepsCompleted_other": "{{count}} steps completed",
   "toolInput": "Input",
   "toolOutput": "Output",
   "toolLoading": "Loading...",

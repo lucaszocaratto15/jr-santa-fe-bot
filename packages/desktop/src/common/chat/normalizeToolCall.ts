@@ -234,17 +234,15 @@ export function normalizeToolMessages(messages: ToolMessage[]): NormalizedToolCa
     .filter((item): item is NormalizedToolCall => item !== undefined);
 }
 
-export function hasRunningToolMessages(messages: ToolMessage[]): boolean {
-  return messages.some((m) => {
-    if (m.type === 'tool_group') {
-      return Array.isArray(m.content) && m.content.some((t) => normalizeToolGroupStatus(t.status) === 'running');
-    }
-    if (m.type === 'acp_tool_call') {
-      return m.content?.update && normalizeAcpStatus(m.content.update.status) === 'running';
-    }
-    if (m.type === 'tool_call') {
-      return normalizeToolCallStatus(m.content?.status) === 'running';
-    }
-    return false;
-  });
+/**
+ * Splits a step group into how many steps are finished and the step running now,
+ * so the transcript can show one collapsed row plus a single live line.
+ */
+export function summarizeToolProgress(tools: NormalizedToolCall[]): {
+  doneCount: number;
+  current?: NormalizedToolCall;
+} {
+  const running = tools.filter((tool) => tool.status === 'running');
+  const doneCount = tools.filter((tool) => ['completed', 'error', 'canceled'].includes(tool.status)).length;
+  return { doneCount, current: running[running.length - 1] };
 }

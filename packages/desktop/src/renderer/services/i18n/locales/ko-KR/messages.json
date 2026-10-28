@@ -99,6 +99,9 @@
     "pending": "읽지 않음"
   },
   "toolSteps": "단계 보기",
+  "stepsCompleted": "{{count}}단계 완료",
+  "stepsCompleted_one": "{{count}}단계 완료",
+  "stepsCompleted_other": "{{count}}단계 완료",
   "toolInput": "입력",
   "toolOutput": "출력",
   "toolLoading": "불러오는 중...",

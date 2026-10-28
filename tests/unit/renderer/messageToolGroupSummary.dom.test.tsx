@@ -20,14 +20,17 @@ vi.mock('@/common', () => ({
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string) =>
-      key
-        .split('.')
-        .slice(1)
-        .reduce<unknown>(
-          (value, part) => (value && typeof value === 'object' ? (value as Record<string, unknown>)[part] : undefined),
-          ptMessages
-        ) ?? key,
+    t: (key: string, options?: { count?: number }) =>
+      String(
+        key
+          .split('.')
+          .slice(1)
+          .reduce<unknown>(
+            (value, part) =>
+              value && typeof value === 'object' ? (value as Record<string, unknown>)[part] : undefined,
+            ptMessages
+          ) ?? key
+      ).replace('{{count}}', String(options?.count)),
   }),
 }));
 
@@ -79,7 +82,7 @@ describe('MessageToolGroupSummary', () => {
       />
     );
 
-    fireEvent.click(screen.getByText('Ver etapas · 1'));
+    fireEvent.click(screen.getByText('1 passos concluídos'));
     fireEvent.click(screen.getByText('rg'));
 
     await waitFor(() => {
@@ -106,12 +109,13 @@ describe('Portuguese tool presentation', () => {
               name: 'ExecCommand',
               args: { command: 'node "Read file.mjs"' },
               output: 'stdout ENGLISH payload',
-              status: 'running',
+              status: 'completed',
             },
           } as ToolMessage,
         ]}
       />
     );
+    fireEvent.click(screen.getByText('1 passos concluídos'));
     fireEvent.click(screen.getByText('Executar comando'));
 
     expect(screen.getByText('Entrada')).toBeInTheDocument();
@@ -166,9 +170,34 @@ describe('Portuguese tool presentation', () => {
         ]}
       />
     );
-    fireEvent.click(screen.getByText('Ver etapas · 1'));
+    fireEvent.click(screen.getByText('1 passos concluídos'));
     fireEvent.click(screen.getByText('Ler arquivo'));
 
     expect(await screen.findByText('Não foi possível carregar a saída completa')).toBeInTheDocument();
+  });
+
+  it('stays collapsed while running and shows only a live line for the current step', () => {
+    render(
+      <MessageToolGroupSummary
+        messages={[
+          {
+            id: 'done-1',
+            conversation_id: 'conversation-1',
+            type: 'tool_call',
+            content: { call_id: 'done-1', name: 'Write', status: 'completed' },
+          } as ToolMessage,
+          {
+            id: 'run-1',
+            conversation_id: 'conversation-1',
+            type: 'tool_call',
+            content: { call_id: 'run-1', name: 'ExecCommand', status: 'running' },
+          } as ToolMessage,
+        ]}
+      />
+    );
+
+    expect(screen.getByText('1 passos concluídos')).toBeInTheDocument();
+    expect(screen.getByTestId('tool-group-live-step')).toHaveTextContent('Executar comando…');
+    expect(screen.queryByText('Gravar arquivo')).not.toBeInTheDocument();
   });
 });

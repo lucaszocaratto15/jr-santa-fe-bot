@@ -440,7 +440,15 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
       // A plan renders in ConversationPlanBar, never in the stream. Filtered
       // here rather than rendered as null: a null row still occupies a slot.
       if (message.type === 'plan') continue;
+      // Thinking between two tool calls is one more step: keep the run in a single
+      // collapsed row instead of splitting it into several.
+      if (message.type === 'thinking' && toolList.length > 0) continue;
       if (message.type === 'tool_group') {
+        // A tool waiting for the user's approval must stay visible, never folded away.
+        if (message.content.some((item) => item.status === 'Confirming')) {
+          pushStandaloneMessage(message);
+          continue;
+        }
         const writeFileResults = message.content.flatMap((item) =>
           item.name === 'WriteFile' && isWriteFileResult(item.result_display) ? [item.result_display] : []
         );

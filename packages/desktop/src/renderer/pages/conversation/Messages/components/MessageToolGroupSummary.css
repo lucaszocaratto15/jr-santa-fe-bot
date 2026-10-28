@@ -31,21 +31,7 @@
   color: var(--aou-7);
 }
 
-.tool-group-summary__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 14px;
-  height: 14px;
-  color: var(--aou-5);
-}
-
-.tool-group-summary__header:hover .tool-group-summary__icon {
-  color: var(--aou-6);
-}
-
-.tool-group-summary__label {
+.tool-group-summary__header:hover .tool-group-summary__label {
   white-space: nowrap;
 }
 
@@ -105,4 +91,14 @@
   word-break: break-all;
   max-height: 200px;
   overflow-y: auto;
+}
+
+.tool-group-summary__live {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--color-text-2);
 }
