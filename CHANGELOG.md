@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.2.6](https://github.com/lucaszocaratto15/jr-santa-fe-bot/compare/v2.2.5...v2.2.6) (2026-10-28)
+
+### Desktop
+
+#### Features
+
+- **conversation:** collapse agent steps into one row with a live status line (#18)
+- **jr-settings:** restyle settings modal with soft cards (#19)
+- **jr:** show per-employee usage history for a future 5-hour limit (#20)
+
+---
+
 ## [2.2.5](https://github.com/lucaszocaratto15/jr-santa-fe-bot/compare/a3f7e00...v2.2.5) (2026-10-26)
 
 ### Desktop
