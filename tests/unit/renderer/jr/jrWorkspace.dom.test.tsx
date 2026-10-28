@@ -200,15 +200,13 @@ it('leaves connectors and route traffic out of settings', async () => {
   expect(screen.queryByText('common.jr.look.routeTraffic')).not.toBeInTheDocument();
 });
 
-it('shows example usage bars instead of an unreported placeholder', async () => {
+it('shows plain usage figures without a fake ceiling or an unreported placeholder', async () => {
   render(<JrSidebar />);
   await openSettingsFromUserMenu();
   fireEvent.click(screen.getByRole('button', { name: 'common.jr.look.tabs.usage' }));
-  const bars = await screen.findAllByRole('progressbar');
-  expect(bars.map((bar) => bar.getAttribute('aria-valuemax'))).toEqual(['50000000', '50000000']);
-  expect(bars.map((bar) => bar.getAttribute('aria-valuenow'))).toEqual(['0', '0']);
+  expect(await screen.findByRole('heading', { name: 'common.jr.look.usageTitle' })).toBeInTheDocument();
+  expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
   expect(screen.queryByText('common.jr.access.unreported')).not.toBeInTheDocument();
-  expect(screen.getByRole('heading', { name: 'common.jr.look.usedTotal' })).toBeInTheDocument();
 });
 
 it('shows the update status beside the check button', async () => {

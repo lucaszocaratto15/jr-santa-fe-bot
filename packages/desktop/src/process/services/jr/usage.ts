@@ -68,6 +68,38 @@ export function parseJrConnectionStatus(value: unknown): JrConnectionStatus {
       throw new Error('Invalid reported usage');
     usage.lastRequestAt = raw.lastRequestAt as string | null;
   }
+  if (raw.daily !== undefined) {
+    if (
+      !Array.isArray(raw.daily) ||
+      raw.daily.length > 31 ||
+      !raw.daily.every(
+        (day) =>
+          record(day) &&
+          typeof day.date === 'string' &&
+          /^\d{4}-\d{2}-\d{2}$/.test(day.date) &&
+          counter(day.tokens) &&
+          counter(day.requests)
+      )
+    )
+      throw new Error('Invalid reported usage');
+    usage.daily = raw.daily.map((day) => ({ date: day.date, tokens: day.tokens, requests: day.requests }));
+  }
+  if (raw.peak5h !== undefined) {
+    if (
+      !Array.isArray(raw.peak5h) ||
+      raw.peak5h.length > 3 ||
+      !raw.peak5h.every(
+        (peak) =>
+          record(peak) &&
+          counter(peak.days) &&
+          counter(peak.tokens) &&
+          (peak.startedAt === null ||
+            (typeof peak.startedAt === 'string' && Number.isFinite(Date.parse(peak.startedAt))))
+      )
+    )
+      throw new Error('Invalid reported usage');
+    usage.peak5h = raw.peak5h.map((peak) => ({ days: peak.days, tokens: peak.tokens, startedAt: peak.startedAt }));
+  }
   return withFallback(value, { connected: true, model: value.model, usage });
 }
 

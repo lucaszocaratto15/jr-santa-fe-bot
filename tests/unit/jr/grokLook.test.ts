@@ -9,14 +9,14 @@ import {
 import { readSpellcheck, type KeyValueStore } from '@/renderer/pages/Jr/JrSidebar/preferences';
 import { readFileSync } from 'node:fs';
 import {
-  EXAMPLE_USAGE_WINDOW_TOKENS,
+  compactTokens,
   readUsageConsumption,
   reportedTokenUse,
-  USAGE_WINDOW_5H_MS,
-  usageBarsFromSnapshot,
   usageMeterFromSnapshot,
-  usageResetIn,
-} from '@/renderer/pages/Jr/JrSidebar/usageMeter';
+  usagePeriod,
+} from '@/renderer/pages/Jr/JrSidebar/Usage/usageMeter';
+import { teamUsageRows } from '@/renderer/pages/Jr/Access/TeamUsage';
+import type { JrAdminEmployee, JrUsageSnapshot } from '@/common/config/clientSettings';
 
 const memoryStore = (): KeyValueStore => {
   const values = new Map<string, string>();
@@ -150,57 +150,59 @@ describe('teamChatsForBots', () => {
   });
 });
 
-describe('usage bars', () => {
-  const now = USAGE_WINDOW_5H_MS + 90 * 60 * 1000;
-
-  it('fills both windows from reported usage against the example ceiling', () => {
-    const bars = usageBarsFromSnapshot(
-      {
-        promptTokens: 10,
-        completionTokens: 5,
-        totalTokens: 15,
-        tokensLast5h: 25_000_000,
-        tokensThisWeek: 10_000_000,
-        cachedPromptTokens: 0,
-        modelRequests: 1,
-        startedAt: '2026-10-22T14:00:00.000Z',
-      },
-      now
-    );
-    expect(bars.last5h).toMatchObject({ used: 25_000_000, limit: EXAMPLE_USAGE_WINDOW_TOKENS, percent: 50 });
-    expect(bars.week).toMatchObject({ used: 10_000_000, limit: EXAMPLE_USAGE_WINDOW_TOKENS, percent: 20 });
-    expect(bars.total).toBe(15);
-    expect(bars.last5h.reset).toEqual({ hours: 3, minutes: 30 });
+describe('usage periods', () => {
+  const day = (date: string, tokens: number, requests = 1) => ({ date, tokens, requests });
+  const snapshot = (startedAt: string): JrUsageSnapshot => ({
+    startedAt,
+    promptTokens: 0,
+    completionTokens: 0,
+    cachedPromptTokens: 0,
+    modelRequests: 4,
+    // Contiguous days like the control service sends; the 21st falls outside the last 7.
+    daily: [
+      day('2026-10-21', 900),
+      ...['22', '23', '24', '25', '26'].map((date) => day(`2026-10-${date}`, 0, 0)),
+      day('2026-10-27', 300),
+      day('2026-10-28', 100, 2),
+    ],
+    peak5h: [
+      { days: 1, tokens: 100, startedAt: '2026-10-28T12:00:00.000Z' },
+      { days: 7, tokens: 300, startedAt: '2026-10-27T12:00:00.000Z' },
+    ],
   });
 
-  it('draws a missing window as empty and caps the bar at 100 percent', () => {
-    const bars = usageBarsFromSnapshot(
-      {
-        promptTokens: 4,
-        completionTokens: 6,
-        totalTokens: null,
-        tokensLast5h: null,
-        tokensThisWeek: EXAMPLE_USAGE_WINDOW_TOKENS + 1,
-        cachedPromptTokens: 0,
-        modelRequests: 1,
-        startedAt: '2026-10-22T14:00:00.000Z',
-      },
-      now
-    );
-    expect(bars.last5h.used).toBe(0);
-    expect(bars.last5h.percent).toBe(0);
-    expect(bars.week.percent).toBe(100);
-    expect(bars.week.used).toBe(EXAMPLE_USAGE_WINDOW_TOKENS + 1);
+  it('sums the last N days and averages only over days the person already had access', () => {
+    const week = usagePeriod(snapshot('2026-10-27T10:00:00.000Z'), 7);
+    expect(week).toMatchObject({ tokens: 400, requests: 3, averagePerDay: 200, peak5h: 300 });
+    const veteran = usagePeriod(snapshot('2026-09-01T10:00:00.000Z'), 7);
+    expect(veteran.averagePerDay).toBe(57);
+    expect(usagePeriod(snapshot('2026-09-01T10:00:00.000Z'), 30).peak5h).toBeNull();
   });
 
-  it('reads a bad clock as zero remaining and keeps enforcement off', () => {
-    expect(usageResetIn(Number.NaN, USAGE_WINDOW_5H_MS)).toEqual({ hours: 0, minutes: 0 });
-    expect(usageResetIn(-1, USAGE_WINDOW_5H_MS)).toEqual({ hours: 0, minutes: 0 });
-    const source = readFileSync('services/control/store.mjs', 'utf8');
-    expect(source).toContain('export const TOKEN_LIMITS_ENFORCED = false');
-    expect(
-      readFileSync('packages/desktop/src/renderer/pages/Jr/JrSidebar/usageMeter.ts', 'utf8').match(/50_000_000/g)
-    ).toEqual(['50_000_000']);
+  it('reports unknown figures for an old control server without history', () => {
+    const old = usagePeriod({ ...snapshot('2026-10-27T10:00:00.000Z'), daily: undefined }, 7);
+    expect(old).toMatchObject({ tokens: null, averagePerDay: null, daily: [] });
+  });
+
+  it('lists active employees by period usage, biggest first', () => {
+    const person = (id: string, usage: JrUsageSnapshot | null, revoked = false) =>
+      ({ id, name: id, revoked, usage }) as JrAdminEmployee;
+    const light = { ...snapshot('2026-10-27T10:00:00.000Z'), daily: [day('2026-10-28', 5)] };
+    const rows = teamUsageRows(
+      [
+        person('light', light),
+        person('heavy', snapshot('2026-10-27T10:00:00.000Z')),
+        person('gone', null, true),
+        person('new', null),
+      ],
+      7
+    );
+    expect(rows.map((row) => row.id)).toEqual(['heavy', 'light', 'new']);
+  });
+
+  it('formats token counts compactly and keeps enforcement off', () => {
+    expect(compactTokens(21_199_175, 'pt-BR')).toMatch(/^21,2\smi$/);
+    expect(readFileSync('services/control/store.mjs', 'utf8')).toContain('export const TOKEN_LIMITS_ENFORCED = false');
   });
 });
 

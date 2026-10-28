@@ -37,6 +37,9 @@ test('model proxy uses only configured credentials and records real non-stream u
   assert.equal(usage.cachedPromptTokens, 10);
   assert.equal(usage.tokensLast5h, 32);
   assert.equal(usage.tokensThisWeek, 32);
+  assert.equal(usage.daily.at(-1).tokens, 32);
+  assert.equal(usage.daily.at(-1).requests, 1);
+  assert.equal(usage.peak5h.find((peak) => peak.days === 7).tokens, 32);
   assert.equal((await (await app.request('/usage', { token: owner.token })).json()).usage, null);
 });
 

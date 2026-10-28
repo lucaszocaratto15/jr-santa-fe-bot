@@ -166,7 +166,7 @@ it('shows consumed usage and does not offer a token limit to save', async () => 
     },
   ]);
   show('admin', 'owner');
-  expect(await screen.findByText('Ana')).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: 'Ana' })).toBeInTheDocument();
   expect(screen.getByText('common.jr.access.activeStatus')).toBeInTheDocument();
   expect(screen.queryByLabelText('common.jr.access.tokenLimit')).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'common.jr.access.savePolicy' })).not.toBeInTheDocument();
@@ -181,5 +181,5 @@ it('reports a block failure and keeps the employee on the list', async () => {
   fireEvent.click(await screen.findByRole('button', { name: 'common.jr.access.blockAction' }));
   expect(await screen.findByText('common.jr.access.actionError')).toBeInTheDocument();
   expect(mocks.setBlocked).toHaveBeenCalledWith({ employeeId: 'person-1', blocked: true });
-  expect(screen.getByText('Ana')).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Ana' })).toBeInTheDocument();
 });
