@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.2.7](https://github.com/lucaszocaratto15/jr-santa-fe-bot/compare/v2.2.6...v2.2.7) (2026-10-28)
+
+### Desktop
+
+#### Bug Fixes
+
+- **jr:** stop team usage columns from wrapping and list the owner's own usage (#22)
+
+---
+
 ## [2.2.6](https://github.com/lucaszocaratto15/jr-santa-fe-bot/compare/v2.2.5...v2.2.6) (2026-10-28)
 
 ### Desktop
