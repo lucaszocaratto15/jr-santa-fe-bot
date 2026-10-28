@@ -53,7 +53,14 @@ export const GeneralPanel: React.FC = () => {
       : themeValue === DARK_THEME_ID
         ? t('common.jr.look.themeDark')
         : t('common.jr.look.themeLight');
-  const profileName = sidebarProfile(state.user).name || t('common.jr.companyShortName');
+  const profile = sidebarProfile(state.user);
+  const profileName = profile.name || t('common.jr.companyShortName');
+  const roleLabel =
+    profile.role === 'admin'
+      ? t('common.jr.access.roleAdmin')
+      : profile.role === 'employee'
+        ? t('common.jr.access.roleEmployee')
+        : null;
   const chooseTheme = (key: string) => {
     if (key === LIGHT_THEME_ID || key === DARK_THEME_ID) {
       void setTheme(key);
@@ -65,35 +72,32 @@ export const GeneralPanel: React.FC = () => {
   return (
     <div>
       <h1 className={styles.pageTitle}>{t('common.jr.look.generalTitle')}</h1>
-      <section className={styles.card} aria-labelledby='jr-account-heading'>
-        <h2 id='jr-account-heading' className={styles.cardTitle}>
-          {t('common.jr.look.account')}
-        </h2>
-        <div className={styles.row}>
-          <div>
-            <strong>{profileName}</strong>
-            <p className={styles.muted}>{t('common.jr.companyName')}</p>
-          </div>
-          <div className={styles.rowActions}>
-            {isJrAdmin(state.user) && (
-              <Button type='outline' onClick={() => void navigate('/admin')}>
-                {t('common.jr.access.adminTitle')}
-              </Button>
-            )}
-            {state.status === 'pilot' ? (
-              <span className={styles.muted}>{t('common.jr.access.pilot')}</span>
-            ) : (
-              <Button type='outline' onClick={() => void logout()}>
-                {t('common.jr.access.signOut')}
-              </Button>
-            )}
-          </div>
+      <section className={`${styles.card} ${styles.cardRow}`} aria-label={t('common.jr.look.account')}>
+        <span className={styles.avatar40} aria-hidden='true'>
+          {profile.initial}
+        </span>
+        <div className={styles.rowCopy}>
+          <strong>{profileName}</strong>
+          <p className={styles.muted}>
+            {roleLabel ? `${roleLabel} · ${t('common.jr.companyName')}` : t('common.jr.companyName')}
+          </p>
+        </div>
+        <div className={styles.rowActions}>
+          {isJrAdmin(state.user) && (
+            <Button type='secondary' className={styles.softButton} onClick={() => void navigate('/admin')}>
+              {t('common.jr.access.adminTitle')}
+            </Button>
+          )}
+          {state.status === 'pilot' ? (
+            <span className={styles.muted}>{t('common.jr.access.pilot')}</span>
+          ) : (
+            <Button type='secondary' className={styles.softButton} onClick={() => void logout()}>
+              {t('common.jr.access.signOut')}
+            </Button>
+          )}
         </div>
       </section>
-      <section className={styles.card} aria-labelledby='jr-appearance-heading'>
-        <h2 id='jr-appearance-heading' className={styles.cardTitle}>
-          {t('common.jr.look.appearance')}
-        </h2>
+      <section className={`${styles.card} ${styles.cardList}`} aria-label={t('common.jr.look.appearance')}>
         <div className={styles.row}>
           <span>{t('common.jr.look.theme')}</span>
           <Dropdown
@@ -107,13 +111,12 @@ export const GeneralPanel: React.FC = () => {
               </Menu>
             }
           >
-            <Button type='outline' aria-label={t('common.jr.look.theme')}>
+            <Button type='secondary' size='small' className={styles.softButton} aria-label={t('common.jr.look.theme')}>
               {themeLabel}
-              <Down size={14} />
+              <Down size={12} />
             </Button>
           </Dropdown>
         </div>
-        <div className={styles.divider} />
         <div className={styles.row}>
           <span>{t('common.jr.look.accent')}</span>
           <span className={styles.accentValue}>
@@ -121,17 +124,22 @@ export const GeneralPanel: React.FC = () => {
             {t('common.jr.look.accentBot')}
           </span>
         </div>
-        <div className={styles.divider} />
         <div className={styles.row}>
           <span>{t('common.jr.look.language')}</span>
-          <Select value='pt-BR' style={{ width: 200 }} triggerProps={{ autoAlignPopupWidth: false }}>
+          <Select
+            size='small'
+            value='pt-BR'
+            className={styles.softSelect}
+            style={{ width: 160 }}
+            triggerProps={{ autoAlignPopupWidth: false }}
+          >
             <Select.Option value='pt-BR'>{t('common.jr.look.languagePt')}</Select.Option>
           </Select>
         </div>
-        <div className={styles.divider} />
         <div className={styles.row}>
           <span>{t('common.jr.look.spellcheck')}</span>
           <Switch
+            size='small'
             className={styles.accentSwitch}
             checked={spellcheck}
             aria-label={t('common.jr.look.spellcheck')}
@@ -155,14 +163,18 @@ export const ComputerPanel: React.FC = () => {
   return (
     <div>
       <h1 className={styles.pageTitle}>{t('common.jr.look.computerTitle')}</h1>
-      <div className={styles.identityRow}>
-        <span className={styles.muted}>{t('common.jr.look.yourComputer')}</span>
-        <strong>{identity.hostname || t('common.jr.look.computerMock')}</strong>
-      </div>
-      <section className={styles.card}>
+      <section className={`${styles.card} ${styles.cardList}`}>
+        {identity.hostname ? (
+          <div className={styles.row}>
+            <div className={styles.rowCopy}>
+              <p className={styles.rowTitle}>{t('common.jr.look.yourComputer')}</p>
+              <p className={styles.muted}>{identity.hostname}</p>
+            </div>
+          </div>
+        ) : null}
         <div className={styles.row}>
           <div className={styles.rowCopy}>
-            <h2 className={styles.cardTitle}>{t('common.jr.look.execution')}</h2>
+            <h2 className={styles.rowTitle}>{t('common.jr.look.execution')}</h2>
             <p className={styles.muted}>{t('common.jr.look.executionHint')}</p>
           </div>
           <Dropdown
@@ -181,20 +193,28 @@ export const ComputerPanel: React.FC = () => {
               </Menu>
             }
           >
-            <Button type='outline' aria-label={t('common.jr.look.execution')}>
+            <Button
+              type='secondary'
+              size='small'
+              className={styles.softButton}
+              aria-label={t('common.jr.look.execution')}
+            >
               {executionLabel}
-              <Down size={14} />
+              <Down size={12} />
             </Button>
           </Dropdown>
         </div>
       </section>
-      <h2 className={styles.sectionLabel}>{t('common.jr.look.botComputer')}</h2>
-      <section className={styles.card}>
-        <h2 className={styles.cardTitle}>{t('common.jr.look.updateBotComputer')}</h2>
-        <p className={styles.muted}>{t('common.jr.look.updateBotComputerHint')}</p>
-        <div className={styles.banner}>
-          <CheckOne size={18} />
-          <span>{t('common.jr.look.upToDateBanner')}</span>
+      <section className={`${styles.card} ${styles.cardList}`}>
+        <div className={styles.row}>
+          <div className={styles.rowCopy}>
+            <h2 className={styles.rowTitle}>{t('common.jr.look.botComputer')}</h2>
+            <p className={styles.muted}>{t('common.jr.look.updateBotComputerHint')}</p>
+          </div>
+          <span className={styles.okText}>
+            <CheckOne size={14} />
+            {t('common.jr.look.upToDateBanner')}
+          </span>
         </div>
       </section>
     </div>
@@ -360,41 +380,49 @@ export const UpdatesPanel: React.FC = () => {
           ? t('update.availableTitle')
           : t('update.upToDateTitle');
 
+  const upToDate = phase === 'ready' && outcome?.kind !== 'error' && outcome?.kind !== 'available';
+  const canDownload = outcome?.kind === 'available' && phase === 'ready';
+
   return (
     <div>
       <h1 className={styles.pageTitle}>{t('common.jr.look.updatesTitle')}</h1>
-      <section className={`${styles.card} ${styles.updateCard}`}>
-        <JrLogo height={28} />
-        <div className={styles.updateRow}>
-          <div className={styles.updateStatus}>
-            <p className={styles.muted}>{t('common.jr.look.versionLabel', { version })}</p>
-            <p className={styles.updateStatusTitle}>
-              {phase !== 'checking' && outcome?.kind !== 'error' && outcome?.kind !== 'available' ? (
-                <CheckOne size={18} />
-              ) : null}
-              <span>{status}</span>
-            </p>
-          </div>
-          <div className={styles.rowActions}>
-            {outcome?.kind === 'available' && phase === 'ready' ? (
-              <Button
-                type='primary'
-                onClick={() => {
-                  window.dispatchEvent(new CustomEvent('aionui-open-update-modal', { detail: { source: 'settings' } }));
-                }}
-              >
-                {t('update.downloadButton')}
-              </Button>
-            ) : null}
+      <section className={`${styles.card} ${styles.cardRow}`}>
+        <span className={styles.appMark}>
+          <JrLogo mark height={20} />
+        </span>
+        <div className={styles.rowCopy}>
+          <strong>{t('common.jr.look.versionLabel', { version })}</strong>
+          <p className={styles.muted}>
+            {upToDate ? (
+              <span className={styles.okText}>
+                <CheckOne size={14} />
+                {status}
+              </span>
+            ) : (
+              status
+            )}
+          </p>
+        </div>
+        <div className={styles.rowActions}>
+          {canDownload ? (
             <Button
-              type={outcome?.kind === 'available' && phase === 'ready' ? 'outline' : 'primary'}
-              onClick={check}
-              disabled={phase === 'checking'}
-              aria-label={t('common.jr.look.checkUpdates')}
+              type='primary'
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent('aionui-open-update-modal', { detail: { source: 'settings' } }));
+              }}
             >
-              {t('common.jr.look.checkUpdates')}
+              {t('update.downloadButton')}
             </Button>
-          </div>
+          ) : null}
+          <Button
+            type='secondary'
+            className={styles.softButton}
+            onClick={check}
+            loading={phase === 'checking'}
+            aria-label={t('common.jr.look.checkUpdates')}
+          >
+            {t('common.jr.look.checkUpdates')}
+          </Button>
         </div>
       </section>
     </div>
