@@ -547,7 +547,7 @@
       "days": "{{count}} días",
       "teamTotal": "Todo el equipo",
       "averagePerPerson": "Promedio por persona / día",
-      "activePeople": "{{count}} personas activas",
+      "activePeople": "Activos: {{count}}",
       "biggestPeak": "Mayor pico en 5 h",
       "employee": "Empleado",
       "last5h": "Últimas 5 horas",
