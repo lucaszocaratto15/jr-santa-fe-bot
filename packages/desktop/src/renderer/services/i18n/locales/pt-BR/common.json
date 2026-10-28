@@ -542,6 +542,31 @@
     "skillsSelectAll": "Selecionar todas",
     "skillsSelectNone": "Limpar seleção",
     "chromeEnabled": "Chrome",
-    "chromeEnabledHint": "O Chrome começa ligado neste bot. Desmarque para criar a conversa sem ele."
+    "chromeEnabledHint": "O Chrome começa ligado neste bot. Desmarque para criar a conversa sem ele.",
+    "usageStats": {
+      "teamTitle": "Uso da equipe",
+      "today": "Hoje",
+      "days": "{{count}} dias",
+      "teamTotal": "Equipe toda",
+      "averagePerPerson": "Média por pessoa / dia",
+      "activePeople": "{{count}} pessoas ativas",
+      "biggestPeak": "Maior pico em 5h",
+      "employee": "Funcionário",
+      "last5h": "Últimas 5 horas",
+      "last7d": "Últimos 7 dias",
+      "last30d": "Últimos 30 dias",
+      "averagePerDay": "Média por dia",
+      "peak5h": "Pico em 5h",
+      "periodTotal": "Total no período",
+      "requests": "Pedidos ao bot",
+      "total": "Total",
+      "tokens": "tokens",
+      "last7dHint": "nos últimos 7 dias",
+      "sinceStart": "desde o início",
+      "chartLabel": "Uso por dia",
+      "dayTooltip": "{{date}}: {{tokens}} tokens, {{requests}} pedidos",
+      "noLimitYet": "Ainda não há limite de uso. Estes números servem para definir um limite justo mais adiante.",
+      "adminHint": "Clique na seta de uma linha para ver o uso dia a dia. Use a coluna Pico em 5h para escolher o limite de 5 horas."
+    }
   }
 }

@@ -25,7 +25,6 @@ import {
   type ExecutionPreference,
 } from './preferences';
 import { sidebarProfile } from './sidebarProfile';
-import { usageBarsFromSnapshot, usageMeterFromSnapshot } from './usageMeter';
 import styles from './JrSidebar.module.css';
 
 declare const __APP_VERSION__: string;
@@ -197,121 +196,6 @@ export const ComputerPanel: React.FC = () => {
           <span>{t('common.jr.look.upToDateBanner')}</span>
         </div>
       </section>
-    </div>
-  );
-};
-
-export const UsagePanel: React.FC = () => {
-  const { t, i18n } = useTranslation();
-  const { state } = useJrAccess();
-  const { data, error, isLoading, mutate } = useSWR(
-    ['jr.connection', state.user?.id ?? 'anon'],
-    () => (state.status === 'pilot' ? ipcBridge.jr.status.invoke() : ipcBridge.jr.personalUsage.invoke()),
-    { refreshInterval: 15000, shouldRetryOnError: false }
-  );
-  const status = isConnectionStatus(data) ? data : null;
-  const meter = usageMeterFromSnapshot(status?.usage);
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
-    return () => window.clearInterval(timer);
-  }, []);
-  const bars = usageBarsFromSnapshot(status?.usage, now);
-  const number = new Intl.NumberFormat(i18n?.language);
-  const totalTokens =
-    meter.inputTokens == null && meter.outputTokens == null
-      ? null
-      : (meter.inputTokens ?? 0) + (meter.outputTokens ?? 0);
-
-  const usageBar = (id: string, title: string, bar: (typeof bars)['last5h']) => (
-    <section key={id} className={`${styles.card} ${styles.usageCard}`} aria-labelledby={id}>
-      <div className={styles.usageHead}>
-        <h2 id={id} className={styles.usageTitle}>
-          {title}
-        </h2>
-        <span className={styles.usagePercent}>{t('common.jr.look.percentUsed', { percent: bar.percent })}</span>
-      </div>
-      <div
-        className={styles.usageTrack}
-        role='progressbar'
-        aria-valuemin={0}
-        aria-valuemax={bar.limit}
-        aria-valuenow={bar.used}
-        aria-valuetext={t('common.jr.look.percentUsed', { percent: bar.percent })}
-        aria-labelledby={id}
-      >
-        <span className={styles.usageFill} style={{ width: `${bar.percent}%` }} />
-      </div>
-      <p className={styles.usageFigures}>
-        {t('common.jr.look.usageAmount', { used: number.format(bar.used), limit: number.format(bar.limit) })}
-      </p>
-      <p className={styles.muted}>
-        {t('common.jr.look.renewHours', { hours: bar.reset.hours, minutes: bar.reset.minutes })}
-      </p>
-    </section>
-  );
-
-  return (
-    <div>
-      <h1 className={styles.pageTitle}>{t('common.jr.look.usageTitle')}</h1>
-      {status?.fallback ? <p className={styles.muted}>{t('common.jr.fallbackNotice')}</p> : null}
-      {isLoading ? (
-        <Spin aria-label={t('common.loading')} />
-      ) : (
-        <>
-          {error || (status && !status.connected) ? (
-            <div className={styles.stack}>
-              <Alert type='warning' content={t('common.jr.connectionError')} />
-              <Button onClick={() => void mutate()}>{t('common.jr.retry')}</Button>
-            </div>
-          ) : null}
-          <div className={styles.quotaGrid}>
-            {usageBar('jr-used-5h', t('common.jr.look.usedLast5h'), bars.last5h)}
-            {usageBar('jr-used-week', t('common.jr.look.usedThisWeek'), bars.week)}
-          </div>
-          <section className={styles.card} aria-labelledby='jr-used-total'>
-            <h2 id='jr-used-total' className={styles.usageTitle}>
-              {t('common.jr.look.usedTotal')}
-            </h2>
-            <p className={styles.meterLine}>
-              <strong className={styles.meterValue}>{number.format(bars.total)}</strong>
-              <span>{t('common.jr.look.tokensLabel')}</span>
-            </p>
-          </section>
-          <p className={styles.muted}>{t('common.jr.look.usageCaption')}</p>
-          <section className={styles.card} aria-labelledby='jr-usage-heading'>
-            <h2 id='jr-usage-heading' className={styles.cardTitle}>
-              {t('common.jr.look.sessionUsage')}
-            </h2>
-            {totalTokens == null && meter.requests === 0 ? (
-              <p className={styles.muted}>{t('common.jr.look.noUsage')}</p>
-            ) : (
-              <>
-                <p className={styles.meterLine}>
-                  <strong className={styles.meterValue}>{number.format(totalTokens ?? meter.requests)}</strong>
-                  <span>
-                    {totalTokens == null ? t('common.jr.look.requestsLabel') : t('common.jr.look.tokensLabel')}
-                  </span>
-                </p>
-                <p className={styles.muted}>
-                  {t('common.jr.look.inputShare', { percent: meter.inputSharePercent ?? 0 })}
-                  {' · '}
-                  {t('common.jr.look.outputShare', {
-                    percent: meter.inputSharePercent == null ? 0 : 100 - meter.inputSharePercent,
-                  })}
-                  {' · '}
-                  {t('common.jr.look.requestsLabel')}: {number.format(meter.requests)}
-                </p>
-                {meter.startedAt && (
-                  <p className={styles.muted}>
-                    {t('common.jr.usageSince', { date: new Date(meter.startedAt).toLocaleString(i18n?.language) })}
-                  </p>
-                )}
-              </>
-            )}
-          </section>
-        </>
-      )}
     </div>
   );
 };

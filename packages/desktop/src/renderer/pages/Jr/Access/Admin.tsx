@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import useSWR from 'swr';
 import { isJrAdmin, useJrAccess } from './context';
 import styles from './Access.module.css';
+import TeamUsage from './TeamUsage';
 
 const statusKey = (person: JrAdminEmployee) => {
   if (person.revoked) return 'common.jr.access.revokedStatus';
@@ -132,55 +133,58 @@ const AdminContent: React.FC = () => {
       ) : !people.length ? (
         <p className={styles.hint}>{t('common.jr.access.noPeople')}</p>
       ) : (
-        <div className={styles.list}>
-          {people.map((person) => (
-            <article key={person.id} className={styles.row}>
-              <div className={styles.rowMain}>
-                <h2 className={styles.rowName}>{person.name}</h2>
-                {person.title ? <p className={styles.rowMeta}>{person.title}</p> : null}
-              </div>
-              <span
-                className={styles.status}
-                data-state={person.revoked ? 'revoked' : person.blocked ? 'blocked' : 'active'}
-              >
-                {t(statusKey(person))}
-              </span>
-              {person.role === 'employee' && !person.revoked && (
-                <div className={styles.rowActions}>
-                  <Button
-                    type='text'
-                    className={styles.quiet}
-                    disabled={Boolean(pending)}
-                    loading={pending === person.id}
-                    onClick={() => void setBlocked(person)}
-                  >
-                    {t(person.blocked ? 'common.jr.access.unblockAction' : 'common.jr.access.blockAction')}
-                  </Button>
-                  <Button
-                    type='text'
-                    className={styles.quiet}
-                    disabled={Boolean(pending)}
-                    loading={pending === person.id}
-                    onClick={() => void generate(person.id)}
-                  >
-                    {t('common.jr.access.newCode')}
-                  </Button>
-                  <Button
-                    type='text'
-                    className={styles.dangerQuiet}
-                    disabled={Boolean(pending)}
-                    onClick={() => {
-                      setFailed(false);
-                      setToRevoke(person);
-                    }}
-                  >
-                    {t('common.jr.access.revokeAction')}
-                  </Button>
+        <>
+          <TeamUsage people={people} />
+          <div className={styles.list}>
+            {people.map((person) => (
+              <article key={person.id} className={styles.row}>
+                <div className={styles.rowMain}>
+                  <h2 className={styles.rowName}>{person.name}</h2>
+                  {person.title ? <p className={styles.rowMeta}>{person.title}</p> : null}
                 </div>
-              )}
-            </article>
-          ))}
-        </div>
+                <span
+                  className={styles.status}
+                  data-state={person.revoked ? 'revoked' : person.blocked ? 'blocked' : 'active'}
+                >
+                  {t(statusKey(person))}
+                </span>
+                {person.role === 'employee' && !person.revoked && (
+                  <div className={styles.rowActions}>
+                    <Button
+                      type='text'
+                      className={styles.quiet}
+                      disabled={Boolean(pending)}
+                      loading={pending === person.id}
+                      onClick={() => void setBlocked(person)}
+                    >
+                      {t(person.blocked ? 'common.jr.access.unblockAction' : 'common.jr.access.blockAction')}
+                    </Button>
+                    <Button
+                      type='text'
+                      className={styles.quiet}
+                      disabled={Boolean(pending)}
+                      loading={pending === person.id}
+                      onClick={() => void generate(person.id)}
+                    >
+                      {t('common.jr.access.newCode')}
+                    </Button>
+                    <Button
+                      type='text'
+                      className={styles.dangerQuiet}
+                      disabled={Boolean(pending)}
+                      onClick={() => {
+                        setFailed(false);
+                        setToRevoke(person);
+                      }}
+                    >
+                      {t('common.jr.access.revokeAction')}
+                    </Button>
+                  </div>
+                )}
+              </article>
+            ))}
+          </div>
+        </>
       )}
       <Modal
         visible={creating}

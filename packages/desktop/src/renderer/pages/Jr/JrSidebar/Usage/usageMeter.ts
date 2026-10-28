@@ -1,4 +1,4 @@
-import type { JrUsageSnapshot } from '@/common/config/clientSettings';
+import type { JrUsageDay, JrUsageSnapshot } from '@/common/config/clientSettings';
 
 export type UsageMeter = {
   inputTokens: number | null;
@@ -51,55 +51,8 @@ function reportedWindow(value: number | null | undefined): number | null {
 }
 
 /**
- * Display-only example ceiling for both usage bars.
- * Not a quota: `TOKEN_LIMITS_ENFORCED` in services/control stays false, and nothing blocks.
- */
-export const EXAMPLE_USAGE_WINDOW_TOKENS = 50_000_000;
-
-export const USAGE_WINDOW_5H_MS = 5 * 60 * 60 * 1000;
-export const USAGE_WINDOW_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
-
-export type UsageReset = { hours: number; minutes: number };
-
-export type UsageWindowView = {
-  used: number;
-  limit: number;
-  percent: number;
-  reset: UsageReset;
-};
-
-/** Time until the next fixed window boundary. A bad clock reads as 0h 0m. */
-export function usageResetIn(nowMs: number, windowMs: number): UsageReset {
-  if (!Number.isFinite(nowMs) || nowMs < 0 || !Number.isFinite(windowMs) || windowMs <= 0) {
-    return { hours: 0, minutes: 0 };
-  }
-  const elapsed = ((nowMs % windowMs) + windowMs) % windowMs;
-  const remainingMs = elapsed === 0 ? windowMs : windowMs - elapsed;
-  const totalMinutes = Math.floor(remainingMs / 60_000);
-  return { hours: Math.floor(totalMinutes / 60), minutes: totalMinutes % 60 };
-}
-
-function displayUsed(value: number | null | undefined): number {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return 0;
-  return value;
-}
-
-/** Fill against the example ceiling. Missing or invalid usage draws as an empty bar. */
-export function usageWindowView(
-  used: number | null | undefined,
-  windowMs: number,
-  nowMs: number,
-  limit = EXAMPLE_USAGE_WINDOW_TOKENS
-): UsageWindowView {
-  const safeUsed = displayUsed(used);
-  const safeLimit = displayUsed(limit);
-  const percent = safeLimit <= 0 ? 0 : Math.min(100, Math.round((safeUsed / safeLimit) * 100));
-  return { used: safeUsed, limit: safeLimit, percent, reset: usageResetIn(nowMs, windowMs) };
-}
-
-/**
  * Consumed tokens only. Windows come from the control service.
- * A missing window stays null here; the bars map that to an empty example fill.
+ * A missing window stays null here.
  */
 export function readUsageConsumption(snapshot: JrUsageSnapshot | null | undefined): UsageConsumption {
   if (!snapshot) return { last5h: 0, thisWeek: 0, total: 0 };
@@ -114,18 +67,52 @@ export function readUsageConsumption(snapshot: JrUsageSnapshot | null | undefine
   };
 }
 
-export type UsageBars = {
-  last5h: UsageWindowView;
-  week: UsageWindowView;
-  total: number;
+export type UsagePeriodDays = 1 | 7 | 30;
+
+export type UsagePeriod = {
+  days: UsagePeriodDays;
+  /** Null when the control server is too old to send daily history. */
+  tokens: number | null;
+  requests: number | null;
+  /** Tokens per day over the days the person already had access inside the period. */
+  averagePerDay: number | null;
+  peak5h: number | null;
+  peakStartedAt: string | null;
+  daily: JrUsageDay[];
 };
 
-/** Both bars share the example ceiling. The total stays the reported figure, or zero when it is absent. */
-export function usageBarsFromSnapshot(snapshot: JrUsageSnapshot | null | undefined, nowMs: number): UsageBars {
-  const consumption = readUsageConsumption(snapshot);
-  return {
-    last5h: usageWindowView(consumption.last5h, USAGE_WINDOW_5H_MS, nowMs),
-    week: usageWindowView(consumption.thisWeek, USAGE_WINDOW_WEEK_MS, nowMs),
-    total: consumption.total ?? 0,
+// São Paulo calendar day of an instant, matching the control service buckets.
+const localDate = (iso: string): string => new Date(Date.parse(iso) - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+/** Totals, daily average and busiest 5-hour window for the last `days` local days. */
+export function usagePeriod(snapshot: JrUsageSnapshot | null | undefined, days: UsagePeriodDays): UsagePeriod {
+  const empty: Omit<UsagePeriod, 'daily'> = {
+    days,
+    tokens: null,
+    requests: null,
+    averagePerDay: null,
+    peak5h: null,
+    peakStartedAt: null,
   };
+  if (!snapshot?.daily) return { ...empty, daily: [] };
+  const daily = snapshot.daily.slice(-days);
+  const tokens = daily.reduce((sum, day) => sum + day.tokens, 0);
+  const requests = daily.reduce((sum, day) => sum + day.requests, 0);
+  const started = Number.isFinite(Date.parse(snapshot.startedAt)) ? localDate(snapshot.startedAt) : '';
+  const activeDays = daily.filter((day) => day.date >= started).length;
+  const peak = snapshot.peak5h?.find((entry) => entry.days === days);
+  return {
+    days,
+    tokens,
+    requests,
+    averagePerDay: activeDays > 0 ? Math.round(tokens / activeDays) : null,
+    peak5h: peak?.tokens ?? null,
+    peakStartedAt: peak?.startedAt ?? null,
+    daily,
+  };
+}
+
+/** "3,4 mi" style token counts for tables and tiles. */
+export function compactTokens(value: number, locale?: string): string {
+  return new Intl.NumberFormat(locale, { notation: 'compact', maximumFractionDigits: 1 }).format(value);
 }

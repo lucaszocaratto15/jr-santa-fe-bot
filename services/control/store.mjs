@@ -90,6 +90,44 @@ const OWNER_PROFILE_NAME = 'Lucas Zocaratto';
 
 const FIVE_HOURS_MS = 5 * 60 * 60 * 1000;
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+export const HISTORY_DAYS = 30;
+const PEAK_PERIOD_DAYS = [1, 7, 30];
+// ponytail: fixed São Paulo offset; Brazil has had no daylight saving since 2019.
+const LOCAL_OFFSET_MS = -3 * 60 * 60 * 1000;
+
+/**
+ * Daily totals and the busiest rolling 5-hour window for the last HISTORY_DAYS local days.
+ * `rows` are `{ at, tokens }` sorted by `at`; `tokens` is null when the provider sent no counts.
+ */
+export function usageHistory(rows, timestamp) {
+  const local = timestamp + LOCAL_OFFSET_MS;
+  const todayStart = timestamp - (((local % DAY) + DAY) % DAY);
+  const since = todayStart - (HISTORY_DAYS - 1) * DAY;
+  const daily = Array.from({ length: HISTORY_DAYS }, (_, index) => ({
+    date: new Date(since + index * DAY + LOCAL_OFFSET_MS).toISOString().slice(0, 10),
+    tokens: 0,
+    requests: 0,
+  }));
+  const recent = rows.filter((row) => row.at >= since && row.at <= timestamp);
+  for (const row of recent) {
+    const day = daily[Math.floor((row.at - since) / DAY)];
+    day.requests += 1;
+    day.tokens += row.tokens ?? 0;
+  }
+  const peak5h = PEAK_PERIOD_DAYS.map((days) => {
+    const metered = recent.filter((row) => row.tokens !== null && row.at >= todayStart - (days - 1) * DAY);
+    let best = { tokens: 0, startedAt: null };
+    let sum = 0;
+    let end = 0;
+    for (const row of metered) {
+      while (end < metered.length && metered[end].at < row.at + FIVE_HOURS_MS) sum += metered[end++].tokens;
+      if (sum > best.tokens) best = { tokens: sum, startedAt: new Date(row.at).toISOString() };
+      sum -= row.tokens;
+    }
+    return { days, ...best };
+  });
+  return { daily, peak5h };
+}
 
 /** Open the private control database; only hashes and aggregate usage are persisted. */
 export function createStore({ databasePath, adminCode, model, now = Date.now }) {
@@ -186,7 +224,18 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
       FROM requests WHERE user_id = ?`)
       .get(since5h, since5h, sinceWeek, sinceWeek, userId);
     if (row.requests === 0) return null;
+    const history = usageHistory(
+      db
+        .prepare(
+          `SELECT started_at AS at, CASE WHEN prompt_tokens IS NOT NULL AND completion_tokens IS NOT NULL
+          THEN prompt_tokens + completion_tokens END AS tokens
+          FROM requests WHERE user_id = ? AND started_at >= ? ORDER BY started_at`
+        )
+        .all(userId, timestamp - (HISTORY_DAYS + 1) * DAY),
+      timestamp
+    );
     return {
+      ...history,
       startedAt: iso(row.first_request),
       model,
       modelRequests: row.requests,

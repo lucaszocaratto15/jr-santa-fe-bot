@@ -96,7 +96,14 @@ export type JrUsageSnapshot = {
   averageLatencyMs?: number | null;
   averageFirstByteMs?: number | null;
   lastRequestAt?: string | null;
+  /** Last 30 São Paulo days, oldest first. Absent on older control servers. */
+  daily?: JrUsageDay[];
+  /** Busiest rolling 5-hour window inside the last 1, 7 and 30 days. Absent on older control servers. */
+  peak5h?: JrUsagePeak[];
 };
+
+export type JrUsageDay = { date: string; tokens: number; requests: number };
+export type JrUsagePeak = { days: number; tokens: number; startedAt: string | null };
 
 export type JrAccessUser = { id: string; name: string; role: 'admin' | 'employee' };
 

@@ -4,7 +4,8 @@ import React, { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { isMacOS } from '@/renderer/utils/platform';
-import { ComputerPanel, GeneralPanel, UpdatesPanel, UsagePanel } from './panels';
+import { ComputerPanel, GeneralPanel, UpdatesPanel } from './panels';
+import UsagePanel from './Usage/UsagePanel';
 import styles from './JrSidebar.module.css';
 
 export const SETTINGS_TABS = ['general', 'computer', 'usage', 'updates'] as const;
