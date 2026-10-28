@@ -751,4 +751,45 @@ describe('MessageList', () => {
     expect(screen.queryByTestId('file-changes')).not.toBeInTheDocument();
     expect(screen.queryByTestId('tool-group')).not.toBeInTheDocument();
   });
+
+  it('folds thinking between tool calls into one collapsed steps row', () => {
+    const tool = (id: string, status: IMessageToolGroup['content'][0]['status']) =>
+      createToolGroup([{ call_id: id, description: id, name: 'Shell', render_output_as_markdown: false, status }], id);
+    const thinking = {
+      id: 'thinking-1',
+      conversation_id: 'conversation-1',
+      type: 'thinking',
+      position: 'left',
+      content: { content: '', status: 'done', duration: 1000 },
+      created_at: 2,
+    } as TMessage;
+
+    render(<MessageList />, {
+      wrapper: ({ children }) => (
+        <Wrapper messages={[tool('a', 'Success'), thinking, tool('b', 'Executing')]}>{children}</Wrapper>
+      ),
+    });
+
+    expect(screen.getAllByTestId('tool-summary')).toHaveLength(1);
+    expect(screen.getByTestId('tool-summary')).toHaveTextContent('a,b');
+    expect(screen.queryByText('thinking')).not.toBeInTheDocument();
+  });
+
+  it('keeps a tool waiting for approval visible outside the collapsed steps', () => {
+    const done = createToolGroup(
+      [{ call_id: 'a', description: 'a', name: 'Shell', render_output_as_markdown: false, status: 'Success' }],
+      'done'
+    );
+    const confirming = createToolGroup(
+      [{ call_id: 'b', description: 'b', name: 'Shell', render_output_as_markdown: false, status: 'Confirming' }],
+      'confirming'
+    );
+
+    render(<MessageList />, {
+      wrapper: ({ children }) => <Wrapper messages={[done, confirming]}>{children}</Wrapper>,
+    });
+
+    expect(screen.getByTestId('tool-summary')).toHaveTextContent('done');
+    expect(screen.getByTestId('tool-group')).toHaveAttribute('data-message-id', 'confirming');
+  });
 });

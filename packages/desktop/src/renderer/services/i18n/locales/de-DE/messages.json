@@ -99,6 +99,9 @@
     "pending": "Ungelesen"
   },
   "toolSteps": "Schritte anzeigen",
+  "stepsCompleted": "{{count}} Schritte erledigt",
+  "stepsCompleted_one": "{{count}} Schritt erledigt",
+  "stepsCompleted_other": "{{count}} Schritte erledigt",
   "toolInput": "Eingabe",
   "toolOutput": "Ausgabe",
   "toolLoading": "Wird geladen...",

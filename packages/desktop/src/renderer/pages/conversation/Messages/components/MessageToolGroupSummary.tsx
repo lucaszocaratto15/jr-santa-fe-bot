@@ -1,13 +1,13 @@
 import type { BadgeProps } from '@arco-design/web-react';
 import { Badge, Button, Message, Spin, Tooltip } from '@arco-design/web-react';
 import { IconDown, IconRight } from '@arco-design/web-react/icon';
-import { Checklist, Download, Right } from '@icon-park/react';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Download, Right } from '@icon-park/react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ipcBridge } from '@/common';
 import { getAcpImageFileName } from '@/common/chat/acpToolCallOutput';
 import type { NormalizedToolCall, NormalizedToolStatus, ToolMessage } from '@/common/chat/normalizeToolCall';
-import { normalizeToolMessages, hasRunningToolMessages } from '@/common/chat/normalizeToolCall';
+import { normalizeToolMessages, summarizeToolProgress } from '@/common/chat/normalizeToolCall';
 import { getToolDescriptionPayload, localizeToolName } from '../acp/toolPresentation';
 import LocalImageView from '@/renderer/components/media/LocalImageView';
 import { downloadFileFromPath } from '@/renderer/utils/file/download';
@@ -148,33 +148,34 @@ const ToolItemDetail: React.FC<{ item: NormalizedToolCall }> = ({ item }) => {
 
 const MessageToolGroupSummary: React.FC<{ messages: ToolMessage[] }> = ({ messages }) => {
   const { t } = useTranslation();
-  const hasRunning = hasRunningToolMessages(messages);
-  const [showMore, setShowMore] = useState(hasRunning);
-
-  useEffect(() => {
-    if (hasRunning) setShowMore(true);
-  }, [hasRunning]);
+  // Collapsed by default, even while running: the live line below says what is happening now.
+  const [showMore, setShowMore] = useState(false);
 
   const tools = useMemo(() => normalizeToolMessages(messages), [messages]);
+  const { doneCount, current } = summarizeToolProgress(tools);
+  const count = current ? doneCount : tools.length;
 
   return (
     <div className='tool-group-summary'>
-      <div className='tool-group-summary__header' onClick={() => setShowMore(!showMore)}>
-        <span className='tool-group-summary__icon'>
-          {hasRunning ? <Spin size={12} /> : <Checklist theme='outline' size='14' />}
-        </span>
-        <span className='tool-group-summary__label'>
-          {t('messages.toolSteps')} {tools.length > 0 ? `· ${tools.length}` : ''}
-        </span>
-        <span className={`tool-group-summary__arrow${showMore ? ' tool-group-summary__arrow--open' : ''}`}>
-          <Right theme='outline' size='12' />
-        </span>
-      </div>
+      {count > 0 && (
+        <div className='tool-group-summary__header' onClick={() => setShowMore(!showMore)}>
+          <span className={`tool-group-summary__arrow${showMore ? ' tool-group-summary__arrow--open' : ''}`}>
+            <Right theme='outline' size='12' />
+          </span>
+          <span className='tool-group-summary__label'>{t('messages.stepsCompleted', { count })}</span>
+        </div>
+      )}
       {showMore && (
         <div className='tool-group-summary__body'>
           {tools.map((item) => (
             <ToolItemDetail key={item.key} item={item} />
           ))}
+        </div>
+      )}
+      {current && (
+        <div className='tool-group-summary__live' data-testid='tool-group-live-step'>
+          <Spin size={12} />
+          <span className='truncate'>{localizeToolName(current.name, t)}…</span>
         </div>
       )}
     </div>

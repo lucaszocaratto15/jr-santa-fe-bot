@@ -99,6 +99,9 @@
     "pending": "خوانده‌نشده"
   },
   "toolSteps": "نمایش مراحل",
+  "stepsCompleted": "{{count}} مرحله انجام شد",
+  "stepsCompleted_one": "{{count}} مرحله انجام شد",
+  "stepsCompleted_other": "{{count}} مرحله انجام شد",
   "toolInput": "ورودی",
   "toolOutput": "خروجی",
   "toolLoading": "در حال بارگذاری...",

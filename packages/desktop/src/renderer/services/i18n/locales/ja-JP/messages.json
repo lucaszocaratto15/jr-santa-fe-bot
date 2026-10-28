@@ -99,6 +99,9 @@
     "pending": "未読"
   },
   "toolSteps": "手順を表示",
+  "stepsCompleted": "{{count}} ステップ完了",
+  "stepsCompleted_one": "{{count}} ステップ完了",
+  "stepsCompleted_other": "{{count}} ステップ完了",
   "toolInput": "入力",
   "toolOutput": "出力",
   "toolLoading": "読み込み中...",

@@ -99,6 +99,9 @@
     "pending": "Okunmadı"
   },
   "toolSteps": "Adımları göster",
+  "stepsCompleted": "{{count}} adım tamamlandı",
+  "stepsCompleted_one": "{{count}} adım tamamlandı",
+  "stepsCompleted_other": "{{count}} adım tamamlandı",
   "toolInput": "Girdi",
   "toolOutput": "Çıktı",
   "toolLoading": "Yükleniyor...",

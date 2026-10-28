@@ -99,6 +99,9 @@
     "pending": "Non lu"
   },
   "toolSteps": "Voir les étapes",
+  "stepsCompleted": "{{count}} étapes terminées",
+  "stepsCompleted_one": "{{count}} étape terminée",
+  "stepsCompleted_other": "{{count}} étapes terminées",
   "toolInput": "Entrée",
   "toolOutput": "Sortie",
   "toolLoading": "Chargement...",

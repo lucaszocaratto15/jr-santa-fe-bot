@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { IMessageAcpToolCall } from '@/common/chat/chatLib';
-import { normalizeAcpToolCall } from '@/common/chat/normalizeToolCall';
+import type { NormalizedToolCall } from '@/common/chat/normalizeToolCall';
+import { normalizeAcpToolCall, summarizeToolProgress } from '@/common/chat/normalizeToolCall';
 
 describe('normalizeToolCall', () => {
   it('normalizes compact snake_case acp tool calls from history responses', () => {
@@ -56,5 +57,29 @@ describe('normalizeToolCall', () => {
     } as unknown as IMessageAcpToolCall);
 
     expect(result?.output).toBe('[diff] /workspace/file.ts');
+  });
+});
+
+describe('summarizeToolProgress', () => {
+  const tool = (key: string, status: NormalizedToolCall['status']): NormalizedToolCall => ({ key, name: key, status });
+
+  it('counts finished steps and picks the latest running step as the live one', () => {
+    const result = summarizeToolProgress([
+      tool('a', 'completed'),
+      tool('b', 'error'),
+      tool('c', 'running'),
+      tool('d', 'running'),
+      tool('e', 'pending'),
+    ]);
+
+    expect(result.doneCount).toBe(2);
+    expect(result.current?.key).toBe('d');
+  });
+
+  it('has no live step once nothing is running', () => {
+    expect(summarizeToolProgress([tool('a', 'completed'), tool('b', 'canceled')])).toEqual({
+      doneCount: 2,
+      current: undefined,
+    });
   });
 });

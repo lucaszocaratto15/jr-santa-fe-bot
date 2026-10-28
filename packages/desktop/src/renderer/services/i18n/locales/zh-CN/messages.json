@@ -99,6 +99,9 @@
     "pending": "未读"
   },
   "toolSteps": "查看步骤",
+  "stepsCompleted": "已完成 {{count}} 个步骤",
+  "stepsCompleted_one": "已完成 {{count}} 个步骤",
+  "stepsCompleted_other": "已完成 {{count}} 个步骤",
   "toolInput": "输入",
   "toolOutput": "输出",
   "toolLoading": "加载中...",

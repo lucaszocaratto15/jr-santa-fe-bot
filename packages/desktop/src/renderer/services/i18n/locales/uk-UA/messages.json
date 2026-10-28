@@ -105,6 +105,9 @@
     "pending": "Непрочитано"
   },
   "toolSteps": "Показати кроки",
+  "stepsCompleted": "Виконано кроків: {{count}}",
+  "stepsCompleted_one": "Виконано кроків: {{count}}",
+  "stepsCompleted_other": "Виконано кроків: {{count}}",
   "toolInput": "Ввід",
   "toolOutput": "Вивід",
   "toolLoading": "Завантаження...",
