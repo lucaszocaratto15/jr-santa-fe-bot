@@ -299,13 +299,12 @@
 
 .app-titlebar__learn-dot {
   position: absolute;
-  top: -1px;
-  right: -2px;
-  width: 6px;
-  height: 6px;
+  top: 0;
+  right: -1px;
+  width: 5px;
+  height: 5px;
   border-radius: 999px;
   background: rgb(var(--success-6));
-  box-shadow: 0 0 0 2px var(--jr-surface, var(--color-bg-1));
 }
 
 .app-titlebar__theme {

@@ -54,7 +54,7 @@ const DescribeCard: React.FC = () => {
       />
       <div className={styles.footnote}>{t('common.jr.teach.describe.hint')}</div>
       <div className={styles.actions}>
-        <Button onClick={cancelDescribe} disabled={busy}>
+        <Button type='text' onClick={cancelDescribe} disabled={busy}>
           {t('common.jr.teach.describe.cancel')}
         </Button>
         <Button type='primary' onClick={() => void start()} disabled={!description.trim()} loading={busy}>

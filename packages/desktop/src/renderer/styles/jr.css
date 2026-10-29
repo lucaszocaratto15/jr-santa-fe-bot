@@ -22,7 +22,7 @@
   --jr-chat: #ffffff;
   --jr-surface-2: #f3f3f3;
   --jr-assistant-bubble: #f3f3f3;
-  --jr-user-bubble: #e6e6e6;
+  --jr-user-bubble: #f2f2f2;
   --jr-quota-amber: #d4a017;
   --jr-hairline: #1c1c1c1f;
   --jr-modal: #ffffff;
@@ -70,7 +70,7 @@ body[arco-theme='dark'] {
   --jr-chat: #111111;
   --jr-surface-2: #202020;
   --jr-assistant-bubble: #202020;
-  --jr-user-bubble: #2a2a2a;
+  --jr-user-bubble: #1f1f1f;
   --jr-hairline: #ffffff1a;
   --jr-modal: #111111;
   --jr-modal-content: #141414;
@@ -123,6 +123,18 @@ body[arco-theme='dark'] {
 .app-titlebar--desktop .app-titlebar__menu,
 .app-titlebar--desktop .app-titlebar__toolbar {
   pointer-events: auto;
+}
+/* Right-hand titlebar icons (🧠, theme) sit centered on the 52px chat header row,
+   which keeps its own actions clear of them. */
+.app-shell > .app-titlebar--desktop .app-titlebar__toolbar {
+  align-self: flex-start;
+  height: 52px;
+  min-height: 52px;
+  gap: 2px;
+  padding-inline-end: 8px;
+}
+.app-shell .chat-layout-header:has(.jr-chat-bot-title) > .chat-layout-header__extra {
+  margin-inline-end: 72px;
 }
 .app-shell .layout-sider > .arco-layout-sider-children {
   overflow: hidden;

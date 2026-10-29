@@ -84,7 +84,7 @@ const LearnIndicator: React.FC = () => {
           className={classNames('app-titlebar__learn', status === 'paused' && 'app-titlebar__learn--paused')}
           icon={
             <span className='app-titlebar__learn-icon'>
-              <Brain theme='outline' size={18} />
+              <Brain theme='outline' size={16} />
               {status === 'active' && <span className='app-titlebar__learn-dot' aria-hidden='true' />}
             </span>
           }

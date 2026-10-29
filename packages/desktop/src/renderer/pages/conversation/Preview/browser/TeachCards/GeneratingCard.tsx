@@ -51,10 +51,14 @@ const GeneratingCard: React.FC = () => {
         <Skeleton animation text={{ rows: 2, width: ['65%', '45%'] }} />
       )}
       <div className={styles.actions}>
-        <Button onClick={() => void discard()} loading={discarding}>
+        <Button type='text' onClick={() => void discard()} loading={discarding}>
           {t('common.jr.teach.review.discard')}
         </Button>
-        <Button onClick={() => prompt && sendToTeachConversation(prompt)} disabled={!prompt || discarding}>
+        <Button
+          type='secondary'
+          onClick={() => prompt && sendToTeachConversation(prompt)}
+          disabled={!prompt || discarding}
+        >
           {t('common.jr.teach.review.askAgain')}
         </Button>
       </div>

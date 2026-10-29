@@ -625,7 +625,7 @@
         "title": "What does this task do?",
         "placeholder": "e.g. Download this month's invoice report from the city hall portal",
         "hint": "Then do the task in the browser as usual. The recording stops at 10 minutes, paused time included.",
-        "start": "Start",
+        "start": "Start recording",
         "cancel": "Cancel",
         "startFailed": "Couldn't start recording. Try again."
       },

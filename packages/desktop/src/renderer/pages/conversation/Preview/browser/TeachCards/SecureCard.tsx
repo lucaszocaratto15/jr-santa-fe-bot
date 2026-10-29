@@ -7,7 +7,7 @@
 import { ipcBridge } from '@/common';
 import type { SecureRequest } from '@/common/adapter/ipcBridge';
 import { Button, Checkbox, Input, Message } from '@arco-design/web-react';
-import { Lock, Protect } from '@icon-park/react';
+import { Close, Lock, Protect } from '@icon-park/react';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import styles from './TeachCards.module.css';
@@ -75,7 +75,18 @@ const SecureCard: React.FC<SecureCardProps> = ({ request, onDone }) => {
     <div className={styles.card} role='dialog' aria-label={title}>
       <div className={styles.title}>
         <Lock theme='outline' size={16} className={styles.icon} />
-        <span>{title}</span>
+        <span className='flex-1'>{title}</span>
+        <Button
+          type='text'
+          shape='circle'
+          size='small'
+          className={styles.close}
+          icon={<Close theme='outline' size={14} />}
+          onClick={() => void answer({ id: request.id, cancelled: true })}
+          disabled={busy}
+        >
+          <span className='sr-only'>{t('common.jr.teach.secure.cancel')}</span>
+        </Button>
       </div>
       {request.label && <div className={styles.label}>{request.label}</div>}
       <div className={styles.row}>
@@ -88,11 +99,8 @@ const SecureCard: React.FC<SecureCardProps> = ({ request, onDone }) => {
           disabled={busy}
           className={`${styles.input} ${styles.code}`}
         />
-        <Button type='primary' onClick={submit} disabled={!value} loading={busy}>
+        <Button type='primary' shape='round' onClick={submit} disabled={!value} loading={busy}>
           {saveOnly ? t('common.jr.teach.secure.saveOnlySubmit') : t('common.jr.teach.secure.send')}
-        </Button>
-        <Button onClick={() => void answer({ id: request.id, cancelled: true })} disabled={busy}>
-          {t('common.jr.teach.secure.cancel')}
         </Button>
       </div>
       <div className={styles.footer}>

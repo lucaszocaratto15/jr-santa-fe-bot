@@ -104,14 +104,13 @@ const ReviewCard: React.FC<ReviewCardProps> = ({ event, prompt }) => {
         aria-label={t('common.jr.teach.review.description')}
       />
       {meta.length > 0 && (
-        <dl className={styles.meta}>
+        <div className={styles.chips}>
           {meta.map((row) => (
-            <React.Fragment key={row.label}>
-              <dt className={styles.metaLabel}>{row.label}</dt>
-              <dd className={styles.metaValue}>{row.values.join('; ')}</dd>
-            </React.Fragment>
+            <span key={row.label} className={styles.chip}>
+              <span className={styles.chipLabel}>{row.label}:</span> <span>{row.values.join('; ')}</span>
+            </span>
           ))}
-        </dl>
+        </div>
       )}
       <ol className={styles.steps}>
         {draft.steps.map((step, index) => (
@@ -139,11 +138,11 @@ const ReviewCard: React.FC<ReviewCardProps> = ({ event, prompt }) => {
           cancelText={t('common.jr.teach.describe.cancel')}
           onOk={() => void discard()}
         >
-          <Button disabled={busy !== null} loading={busy === 'discard'}>
+          <Button type='text' disabled={busy !== null} loading={busy === 'discard'}>
             {t('common.jr.teach.review.discard')}
           </Button>
         </Popconfirm>
-        <Button onClick={testNow} disabled={busy !== null}>
+        <Button type='secondary' onClick={testNow} disabled={busy !== null}>
           {t('common.jr.teach.review.test')}
         </Button>
         <Button

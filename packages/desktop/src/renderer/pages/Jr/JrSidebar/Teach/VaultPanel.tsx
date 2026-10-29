@@ -1,6 +1,6 @@
 import { ipcBridge } from '@/common';
 import type { VaultItemPublic } from '@/common/adapter/ipcBridge';
-import { Alert, Button, Form, Input, Message, Popconfirm, Tooltip } from '@arco-design/web-react';
+import { Alert, Button, Form, Input, Message, Modal, Popconfirm, Tooltip } from '@arco-design/web-react';
 import { Delete, Earth, Edit, Key, Lock, Plus } from '@icon-park/react';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -95,16 +95,38 @@ const VaultPanel: React.FC = () => {
       {available.data === false && <Alert type='warning' content={t('common.jr.vault.unavailable')} />}
       {usable && (
         <>
-          {draft && (
-            <div className={styles.card}>
-              <p className={styles.cardTitle}>
-                {draft.id ? t('common.jr.vault.formEdit') : t('common.jr.vault.formAdd')}
-              </p>
-              <Form layout='vertical' onSubmit={() => void save()}>
-                <Form.Item label={t('common.jr.vault.name')}>
+          <Modal
+            visible={draft !== null}
+            title={draft?.id ? t('common.jr.vault.formEdit') : t('common.jr.vault.formAdd')}
+            onCancel={() => setDraft(null)}
+            unmountOnExit
+            footer={
+              <>
+                <Button type='text' shape='round' onClick={() => setDraft(null)}>
+                  {t('common.jr.vault.cancel')}
+                </Button>
+                <Button
+                  type='primary'
+                  shape='round'
+                  loading={saving}
+                  disabled={!draft?.name.trim()}
+                  onClick={() => void save()}
+                >
+                  {t('common.jr.vault.save')}
+                </Button>
+              </>
+            }
+          >
+            {draft && (
+              <Form
+                layout='vertical'
+                onSubmit={() => void save()}
+                className='grid grid-cols-1 sm:grid-cols-2 gap-x-12px'
+              >
+                <Form.Item label={t('common.jr.vault.name')} className='sm:col-span-2'>
                   <Input value={draft.name} onChange={(name) => set({ name })} />
                 </Form.Item>
-                <Form.Item label={t('common.jr.vault.origins')}>
+                <Form.Item label={t('common.jr.vault.origins')} className='sm:col-span-2'>
                   <Input
                     value={draft.origins}
                     placeholder={t('common.jr.vault.originsPlaceholder')}
@@ -122,20 +144,12 @@ const VaultPanel: React.FC = () => {
                     onChange={(password) => set({ password })}
                   />
                 </Form.Item>
-                <Form.Item label={t('common.jr.vault.hints')}>
+                <Form.Item label={t('common.jr.vault.hints')} className='sm:col-span-2'>
                   <Input value={draft.hints} onChange={(hints) => set({ hints })} />
                 </Form.Item>
-                <div className={styles.rowActions}>
-                  <Button type='primary' htmlType='submit' loading={saving} disabled={!draft.name.trim()}>
-                    {t('common.jr.vault.save')}
-                  </Button>
-                  <Button className={styles.softButton} onClick={() => setDraft(null)}>
-                    {t('common.jr.vault.cancel')}
-                  </Button>
-                </div>
               </Form>
-            </div>
-          )}
+            )}
+          </Modal>
           <div className={`${styles.card} ${styles.cardList}`}>
             {(items.data ?? []).length === 0 && (
               <EmptyState
@@ -153,8 +167,8 @@ const VaultPanel: React.FC = () => {
                   <p className={`${styles.rowTitle} font-500`}>{item.name}</p>
                   <p className={styles.rowMeta}>
                     {[
-                      item.origins.join(', '),
                       item.username,
+                      item.origins.join(', '),
                       item.hasPassword ? t('common.jr.vault.passwordSaved') : '',
                     ]
                       .filter(Boolean)

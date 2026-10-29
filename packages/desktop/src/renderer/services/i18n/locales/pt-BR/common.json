@@ -623,7 +623,7 @@
         "title": "O que essa tarefa faz?",
         "placeholder": "Ex.: Baixar o relatório de NFs do mês no portal da prefeitura",
         "hint": "Depois faça a tarefa no navegador normalmente. A gravação para em 10 minutos, contando o tempo pausado.",
-        "start": "Começar",
+        "start": "Começar a gravar",
         "cancel": "Cancelar",
         "startFailed": "Não foi possível começar a gravação. Tente de novo."
       },
