@@ -97,6 +97,27 @@ async function main() {
     async (args) => callControl('teach_submit_draft', args)
   );
 
+  server.tool(
+    'handbook_lookup',
+    'Lê o Manual da função do cargo cadastrado do funcionário logado: atividades, passo a passo, fluxograma (bloco mermaid) e indicadores do cargo. Use quando alguém perguntar quais são as funções do cargo dele ou como executar uma tarefa do cargo. O cargo considerado é sempre o cargo cadastrado; se a pessoa disser outro cargo, avise qual está cadastrado e responda por ele. Se o resultado disser que não há manual ou que o cargo não está cadastrado, diga isso com clareza e nunca invente funções ou passos. Depois de explicar, siga o quizGuide do resultado.',
+    {
+      query: z.string().max(300).optional().describe('O que a pessoa quer fazer, por exemplo "lançar nota fiscal".'),
+      role: z
+        .string()
+        .max(80)
+        .optional()
+        .describe('Somente para administradores: outro cargo a consultar. Para funcionários é ignorado.'),
+    },
+    async (args) => callControl('handbook_lookup', args)
+  );
+
+  server.tool(
+    'handbook_show',
+    'Mostra ao funcionário, acima do campo de mensagem, o cartão do Manual da função de uma atividade: o fluxograma e a repetição tela a tela dos passos. As telas não são enviadas a você. Use o id de atividade devolvido por handbook_lookup.',
+    { activityId: z.string().max(64).describe('Id da atividade, como aparece em handbook_lookup.') },
+    async (args) => callControl('handbook_show', args)
+  );
+
   await server.connect(new StdioServerTransport());
 }
 

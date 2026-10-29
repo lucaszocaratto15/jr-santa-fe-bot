@@ -18,6 +18,8 @@ export const TEACH_TOOL_NAMES = [
   'secure_input',
   'secure_input_status',
   'teach_submit_draft',
+  'handbook_lookup',
+  'handbook_show',
 ] as const;
 
 export type TeachToolName = (typeof TEACH_TOOL_NAMES)[number];

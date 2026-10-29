@@ -132,3 +132,142 @@ describe('teach control handlers', () => {
     expect(await handlers.teach_submit_draft({})).toEqual({ ok: false, error: 'pedido inválido' });
   });
 });
+
+describe('handbook tools', () => {
+  const ITEM = '11111111-2222-4333-8444-555555555555';
+  const OTHER = '22222222-2222-4333-8444-555555555555';
+  const MEDIA = '66666666-7777-4888-9999-aaaaaaaaaaaa';
+  const activity = (id: string, title: string, description: string, steps: string[]) => ({
+    id,
+    kind: 'activity' as const,
+    source: 'taught' as const,
+    body: {
+      title,
+      description,
+      frequency: 'daily' as const,
+      steps: steps.map((text, index) => (index === 0 ? { text, mediaId: MEDIA } : { text })),
+      confirmBefore: ['Valor da nota'],
+    },
+    approvedAt: 1,
+    updatedAt: 1,
+    media: [MEDIA],
+  });
+  const view = (overrides: Record<string, unknown> = {}) => ({
+    role: { key: 'auxiliar de escritorio', title: 'Auxiliar de escritório' },
+    items: [
+      activity(OTHER, 'Conferir extrato', 'Confere o extrato do banco', ['Abrir o banco', 'Baixar extrato']),
+      activity(ITEM, 'Lançar NF', 'Lança a nota fiscal no portal', ['Abrir o portal [tela 1]', 'Clicar em Emitir']),
+    ],
+    indicators: {
+      activities: [{ title: 'Lançar NF', timesPerWeek: 5, minutesPerRun: 6 }],
+      timePerApp: [{ app: 'Excel', minutesPerDay: 40 }],
+      contributors: 2,
+    },
+    roleFlowchart: 'flowchart TD\n  role(["Auxiliar de escritório"])',
+    flowcharts: {},
+    ...overrides,
+  });
+  const setup = (options: { admin?: boolean; payload?: Record<string, unknown>; unavailable?: boolean } = {}) => {
+    const service = {
+      mine: vi.fn(async () => {
+        if (options.unavailable) throw new Error('unavailable');
+        return view(options.payload);
+      }),
+      adminRole: vi.fn(async () => view({ role: { key: 'financeiro', title: 'Financeiro' }, items: [] })),
+    };
+    const showHandbook = vi.fn();
+    const handlers = buildTeachHandlers({
+      ...makeDeps(),
+      handbook: () => service as never,
+      showHandbook,
+      isAdmin: () => options.admin === true,
+    });
+    return { handlers, service, showHandbook };
+  };
+  const text = (result: unknown) => (result as { result?: string; error?: string }).result ?? '';
+
+  it('lookup for a user without title returns the not-registered text', async () => {
+    const { handlers } = setup({ payload: { role: null, items: [], indicators: null } });
+    expect(await handlers.handbook_lookup({})).toEqual({
+      ok: true,
+      result: 'Seu cargo não está cadastrado no JR Bot. Peça ao administrador para cadastrá-lo.',
+    });
+  });
+
+  it('lookup for an empty role returns the no-handbook text with the role title', async () => {
+    const { handlers } = setup({ payload: { items: [], indicators: null } });
+    expect(text(await handlers.handbook_lookup({ query: 'nota' }))).toBe(
+      'Ainda não existe Manual da função para o cargo Auxiliar de escritório.'
+    );
+  });
+
+  it('lookup in pilot mode or offline returns the unavailable text', async () => {
+    const offline = setup({ unavailable: true });
+    expect(await offline.handlers.handbook_lookup({})).toEqual({
+      ok: false,
+      error: 'O Manual da função só funciona conectado ao servidor da empresa.',
+    });
+    const pilot = buildTeachHandlers({
+      ...makeDeps(),
+      handbook: () => null,
+      showHandbook: vi.fn(),
+      isAdmin: () => false,
+    });
+    expect(await pilot.handbook_lookup({})).toEqual({
+      ok: false,
+      error: 'O Manual da função só funciona conectado ao servidor da empresa.',
+    });
+  });
+
+  it('lookup by an employee ignores role and uses their own', async () => {
+    const { handlers, service } = setup();
+    const result = text(await handlers.handbook_lookup({ role: 'Financeiro' }));
+    expect(service.adminRole).not.toHaveBeenCalled();
+    expect(service.mine).toHaveBeenCalled();
+    expect(result).toContain('Manual da função do cargo Auxiliar de escritório.');
+  });
+
+  it('an admin may ask for another role by its title', async () => {
+    const { handlers, service } = setup({ admin: true });
+    const result = text(await handlers.handbook_lookup({ role: 'Financeiro' }));
+    expect(service.adminRole).toHaveBeenCalledWith('financeiro');
+    expect(result).toBe('Ainda não existe Manual da função para o cargo Financeiro.');
+  });
+
+  it('lookup result has steps and a mermaid fence but no media ids or base64', async () => {
+    const { handlers } = setup();
+    const result = text(await handlers.handbook_lookup({}));
+    expect(result).toContain('1. Abrir o portal');
+    expect(result).not.toContain('[tela');
+    expect(result).toContain('```mermaid\nflowchart TD');
+    expect(result).toContain('Confirmar antes de: Valor da nota');
+    expect(result).toContain('Faça 3 perguntas curtas');
+    expect(result).toContain('média de 2 pessoa(s)');
+    expect(result).not.toMatch(/mediaId|base64|data:image/);
+    expect(result).not.toContain(MEDIA);
+  });
+
+  it('lookup with query "lançar nota fiscal" puts the matching activity steps first', async () => {
+    const { handlers } = setup();
+    const result = text(await handlers.handbook_lookup({ query: 'lançar nota fiscal' }));
+    expect(result.indexOf('### Lançar NF')).toBeGreaterThan(-1);
+    expect(result.indexOf('### Lançar NF')).toBeLessThan(result.indexOf('### Conferir extrato'));
+    const unmatched = text(await handlers.handbook_lookup({ query: 'pagar fornecedor' }));
+    expect(unmatched).toContain('Nenhuma atividade corresponde ao pedido');
+    expect(unmatched.indexOf('### Conferir extrato')).toBeLessThan(unmatched.indexOf('### Lançar NF'));
+  });
+
+  it('show with an unknown activity id returns não encontrado and emits nothing', async () => {
+    const { handlers, showHandbook } = setup();
+    expect(await handlers.handbook_show({ activityId: 'nope' })).toEqual({ ok: false, error: 'não encontrado' });
+    expect(showHandbook).not.toHaveBeenCalled();
+    expect(await handlers.handbook_show({ activityId: ITEM })).toEqual({ ok: true, result: 'mostrado' });
+    expect(showHandbook).toHaveBeenCalledWith(ITEM);
+  });
+
+  it('rejects malformed arguments', async () => {
+    const { handlers } = setup();
+    expect(await handlers.handbook_lookup({ query: 3 })).toEqual({ ok: false, error: 'pedido inválido' });
+    expect(await handlers.handbook_show({})).toEqual({ ok: false, error: 'pedido inválido' });
+  });
+});

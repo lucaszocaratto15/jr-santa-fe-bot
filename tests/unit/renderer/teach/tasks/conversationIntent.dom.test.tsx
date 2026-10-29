@@ -15,6 +15,7 @@ vi.mock('@renderer/pages/conversation/Preview/context/PreviewContext', () => ({
 vi.mock('@/common', () => ({
   ipcBridge: {
     teach: {
+      showHandbook: { on: () => () => {} },
       available: { invoke: async () => true },
       state: { on: () => () => {} },
       draft: { on: () => () => {} },

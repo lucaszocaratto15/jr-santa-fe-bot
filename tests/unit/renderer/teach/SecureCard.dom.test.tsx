@@ -18,6 +18,7 @@ const { invoke, listPending, requestListeners, expiredListeners } = vi.hoisted((
 vi.mock('@/common', () => ({
   ipcBridge: {
     teach: {
+      showHandbook: { on: () => () => {} },
       secureRespond: { invoke },
       secureListPending: { invoke: listPending },
       secureRequest: { on: (fn: (req: unknown) => void) => requestListeners.push(fn) },

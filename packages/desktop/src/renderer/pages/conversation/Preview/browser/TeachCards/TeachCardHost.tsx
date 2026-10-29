@@ -4,10 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import { ipcBridge } from '@/common';
 import { useOptionalPreviewContext } from '../../context/PreviewContext';
 import DescribeCard from './DescribeCard';
 import GeneratingCard from './GeneratingCard';
+import HandbookCard from './HandbookCard';
 import ReviewCard from './ReviewCard';
 import SecureCard from './SecureCard';
 import {
@@ -33,6 +35,9 @@ type TeachCardHostProps = {
 const TeachCardHost: React.FC<TeachCardHostProps> = ({ conversationId }) => {
   const requests = useSecureRequests();
   const teach = useTeachUi();
+  // "Manual da função" card asked for by the bot (handbook_show).
+  const [handbook, setHandbook] = useState<string | null>(null);
+  useEffect(() => ipcBridge.teach.showHandbook.on(({ activityId }) => setHandbook(activityId)), []);
   useEffect(() => {
     void resyncSecureRequests();
   }, []);
@@ -53,6 +58,8 @@ const TeachCardHost: React.FC<TeachCardHostProps> = ({ conversationId }) => {
   if (current) {
     return <SecureCard key={current.id} request={current} onDone={() => dismissSecureRequest(current.id)} />;
   }
+  // A pending secure request (above) always comes first; the handbook card waits behind it.
+  if (handbook) return <HandbookCard key={handbook} activityId={handbook} onClose={() => setHandbook(null)} />;
   const ours = teach.conversationId === null || teach.conversationId === conversationId;
   if (!ours) return null;
   if (teach.phase === 'describing') return <DescribeCard />;

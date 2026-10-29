@@ -4,9 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { HandbookService } from '../handbook/handbookService';
 import type { VaultStore } from '../vault/vault';
 import type { TeachHandlers } from './controlServer';
 import type { FillOptions, FillResult } from './secretFill';
+import { formatHandbookForBot, handbookEmptyText, HANDBOOK_UNAVAILABLE_TEXT } from './handbookForBot';
 import type { SecureInputBroker, SecureKind } from './secureInput';
 
 export type TeachHandlerDeps = {
@@ -15,11 +17,29 @@ export type TeachHandlerDeps = {
   broker: SecureInputBroker;
   /** Validates a taught-task draft and shows the review card (see teachSession.ts). */
   submitDraft(markdown: string): Promise<unknown>;
+  /** "Manual da função"; null when there is no JR access controller (handbook unavailable). */
+  handbook(): HandbookService | null;
+  /** Shows the handbook card of an activity above the send box (`teach.showHandbook`). */
+  showHandbook(activityId: string): void;
+  /** Whether the signed-in JR user is an administrator (only admins may ask for another role). */
+  isAdmin(): boolean;
 };
 
 const INVALID = { ok: false, error: 'pedido inválido' } as const;
 const UNAVAILABLE = { ok: false, error: 'cofre indisponível neste computador' } as const;
 const SECURE_KINDS: ReadonlySet<unknown> = new Set<SecureKind>(['otp', 'password', 'text']);
+
+const MAX_QUERY = 300;
+const MAX_ROLE = 80;
+
+/** Same normalization as the control server's role key. */
+const roleKey = (title: string): string =>
+  title
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, ' ');
 
 const field = (body: unknown, key: string): unknown =>
   typeof body === 'object' && body !== null ? (body as Record<string, unknown>)[key] : undefined;
@@ -91,6 +111,45 @@ export function buildTeachHandlers(deps: TeachHandlerDeps): TeachHandlers {
       const markdown = field(body, 'markdown');
       if (typeof markdown !== 'string') return INVALID;
       return deps.submitDraft(markdown);
+    },
+
+    handbook_lookup: async (body) => {
+      const query = field(body, 'query');
+      const role = field(body, 'role');
+      if ((query !== undefined && typeof query !== 'string') || (role !== undefined && typeof role !== 'string'))
+        return INVALID;
+      const service = deps.handbook();
+      if (!service) return { ok: false, error: HANDBOOK_UNAVAILABLE_TEXT };
+      const text = typeof query === 'string' ? query.slice(0, MAX_QUERY) : undefined;
+      // An employee only reads the handbook of their own registered role; `role` is ignored.
+      const wanted = typeof role === 'string' ? role.trim().slice(0, MAX_ROLE) : '';
+      if (wanted && deps.isAdmin()) {
+        try {
+          return { ok: true, result: formatHandbookForBot(await service.adminRole(roleKey(wanted)), text) };
+        } catch {
+          return { ok: true, result: handbookEmptyText(wanted) };
+        }
+      }
+      try {
+        return { ok: true, result: formatHandbookForBot(await service.mine(), text) };
+      } catch {
+        return { ok: false, error: HANDBOOK_UNAVAILABLE_TEXT };
+      }
+    },
+
+    handbook_show: async (body) => {
+      const activityId = field(body, 'activityId');
+      if (typeof activityId !== 'string' || activityId === '') return INVALID;
+      const service = deps.handbook();
+      if (!service) return { ok: false, error: HANDBOOK_UNAVAILABLE_TEXT };
+      try {
+        const payload = await service.mine();
+        if (!payload.items.some((item) => item.id === activityId)) return { ok: false, error: 'não encontrado' };
+      } catch {
+        return { ok: false, error: HANDBOOK_UNAVAILABLE_TEXT };
+      }
+      deps.showHandbook(activityId);
+      return { ok: true, result: 'mostrado' };
     },
   };
 }

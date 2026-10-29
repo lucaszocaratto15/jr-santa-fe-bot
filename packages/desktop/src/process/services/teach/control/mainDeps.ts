@@ -8,10 +8,12 @@ import path from 'node:path';
 import { app, webContents } from 'electron';
 import { ipcBridge } from '@/common';
 import type { SecureRequest } from '@/common/types/agent/teachTypes';
+import { isJrAdmin } from '@/common/config/clientSettings';
 import { showNotification } from '@process/bridge/notificationBridge';
+import { getJrAccessController } from '@process/services/jr/auth';
 import i18n from '@process/services/i18n';
 import { getCdpBridgeHandle } from '@process/utils/cdpBridgeRegistry';
-import { getTeachServices, setSecureInputBroker, setTeachSession } from '../registry';
+import { getHandbookService, getTeachServices, setSecureInputBroker, setTeachSession } from '../registry';
 import { createTeachSession, TAUGHT_SHOTS_DIRNAME, TAUGHT_TASKS_DIRNAME } from '../recording/teachSession';
 import type { TeachHandlerDeps } from './controlHandlers';
 import { FILL_ERRORS, fillFocused } from './secretFill';
@@ -106,5 +108,19 @@ export function createMainTeachDeps(): TeachHandlerDeps {
     },
   });
   setTeachSession(session);
-  return { vault, fill: fillAttached, broker, submitDraft: (markdown) => session.submitDraft(markdown) };
+  return {
+    vault,
+    fill: fillAttached,
+    broker,
+    submitDraft: (markdown) => session.submitDraft(markdown),
+    handbook: getHandbookService,
+    showHandbook: (activityId) => ipcBridge.teach.showHandbook.emit({ activityId }),
+    isAdmin: () => {
+      try {
+        return isJrAdmin(getJrAccessController().state.user);
+      } catch {
+        return false;
+      }
+    },
+  };
 }

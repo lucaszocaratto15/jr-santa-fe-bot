@@ -41,6 +41,7 @@ const { calls, saveDraft, importSkill, discard, stop, start, stateListeners, dra
 vi.mock('@/common', () => ({
   ipcBridge: {
     teach: {
+      showHandbook: { on: () => () => {} },
       saveDraft: { invoke: saveDraft },
       discard: { invoke: discard },
       stop: { invoke: stop },
