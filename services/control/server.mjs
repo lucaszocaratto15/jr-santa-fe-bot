@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { handleHandbook } from './handbook.mjs';
 import { createModelProxy } from './proxy.mjs';
 import { createStore } from './store.mjs';
 import { httpError, isHttpError, textField, validateConfiguration } from './validation.mjs';
@@ -85,6 +86,20 @@ export function createControlServer(options = {}) {
           proxy.revokeSession(session.sessionHash);
           return json(response, 200, { loggedOut: true });
         }
+        if (
+          await handleHandbook({
+            request,
+            response,
+            path,
+            session,
+            store: store.handbook,
+            readJson,
+            json,
+            httpError,
+            reauth: authenticate,
+          })
+        )
+          return;
         if (path?.startsWith('/admin/')) {
           if (session.user.role !== 'admin') throw httpError(403, 'forbidden');
           if (request.method === 'GET' && path === '/admin/employees')
@@ -94,7 +109,7 @@ export function createControlServer(options = {}) {
             authenticate(request);
             return json(response, 201, store.invite(textField(body.name, 1, 120), body));
           }
-          const employee = /^\/admin\/employees\/([a-zA-Z0-9-]{1,64})\/(revoke|invite|block|policy)$/u.exec(path);
+          const employee = /^\/admin\/employees\/([a-zA-Z0-9-]{1,64})\/(revoke|invite|block|policy|title)$/u.exec(path);
           if (request.method === 'POST' && employee) {
             if (employee[2] === 'invite') return json(response, 201, store.renewInvite(employee[1]));
             if (employee[2] === 'revoke') {
@@ -104,6 +119,7 @@ export function createControlServer(options = {}) {
             }
             const body = await readJson(request, 16_384);
             authenticate(request);
+            if (employee[2] === 'title') return json(response, 200, store.setTitle(employee[1], body.title));
             if (employee[2] === 'block') {
               const result = store.setBlocked(employee[1], body.blocked);
               if (result.blocked) proxy.revokeUser(employee[1]);
