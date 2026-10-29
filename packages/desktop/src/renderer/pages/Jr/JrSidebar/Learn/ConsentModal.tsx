@@ -2,6 +2,7 @@ import { ipcBridge } from '@/common';
 import { LEARN_TERM_VERSION, type LearnState } from '@/common/types/agent/learnTypes';
 import MarkdownView from '@renderer/components/Markdown';
 import { Alert, Button, Checkbox, Link, Message, Modal } from '@arco-design/web-react';
+import { PreviewClose, PreviewOpen } from '@icon-park/react';
 import React, { useEffect, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 
@@ -74,8 +75,10 @@ const ConsentModal: React.FC<ConsentModalProps> = ({ visible, reconsent, onClose
         className='!w-560px max-w-[calc(100vw-32px)]'
         footer={
           <>
-            <Button onClick={onClose}>{t('common.jr.learn.consent.notNow')}</Button>
-            <Button type='primary' disabled={!agreed} loading={saving} onClick={() => void allow()}>
+            <Button shape='round' onClick={onClose}>
+              {t('common.jr.learn.consent.notNow')}
+            </Button>
+            <Button type='primary' shape='round' disabled={!agreed} loading={saving} onClick={() => void allow()}>
               {t('common.jr.learn.consent.allow')}
             </Button>
           </>
@@ -86,22 +89,37 @@ const ConsentModal: React.FC<ConsentModalProps> = ({ visible, reconsent, onClose
             <Alert className='mb-12px' type='warning' content={t('common.jr.learn.consent.reconsentNotice')} />
           )}
           <p className='m-0'>{t('common.jr.learn.consent.intro')}</p>
-          {section(
-            'common.jr.learn.consent.seesTitle',
-            <ul className='m-0 pl-20px' data-testid='learn-consent-sees'>
-              <li>{t('common.jr.learn.consent.sees1')}</li>
-              <li>{t('common.jr.learn.consent.sees2')}</li>
-            </ul>
-          )}
-          {section(
-            'common.jr.learn.consent.neverTitle',
-            <ul className='m-0 pl-20px'>
-              <li>{t('common.jr.learn.consent.never1')}</li>
-              <li>{t('common.jr.learn.consent.never2')}</li>
-              <li>{t('common.jr.learn.consent.never3')}</li>
-              <li>{t('common.jr.learn.consent.never4')}</li>
-            </ul>
-          )}
+          <div className='mt-16px grid grid-cols-1 gap-12px sm:grid-cols-2'>
+            <section className='rounded-12px bg-fill-2 p-14px'>
+              <h4 className='m-0 mb-10px text-13px font-600 text-t-primary'>
+                {t('common.jr.learn.consent.seesTitle')}
+              </h4>
+              <ul
+                className='m-0 p-0 list-none flex flex-col gap-8px text-13px leading-20px'
+                data-testid='learn-consent-sees'
+              >
+                {(['sees1', 'sees2'] as const).map((key) => (
+                  <li key={key} className='flex gap-8px'>
+                    <PreviewOpen theme='outline' size={14} className='mt-3px shrink-0 text-t-secondary' />
+                    <span>{t(`common.jr.learn.consent.${key}`)}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+            <section className='rounded-12px bg-fill-2 p-14px'>
+              <h4 className='m-0 mb-10px text-13px font-600 text-t-primary'>
+                {t('common.jr.learn.consent.neverTitle')}
+              </h4>
+              <ul className='m-0 p-0 list-none flex flex-col gap-8px text-13px leading-20px'>
+                {(['never1', 'never2', 'never3', 'never4'] as const).map((key) => (
+                  <li key={key} className='flex gap-8px'>
+                    <PreviewClose theme='outline' size={14} className='mt-3px shrink-0 text-t-tertiary' />
+                    <span>{t(`common.jr.learn.consent.${key}`)}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          </div>
           {section(
             'common.jr.learn.consent.whereTitle',
             <p className='m-0'>{t('common.jr.learn.consent.whereBody')}</p>
@@ -115,14 +133,12 @@ const ConsentModal: React.FC<ConsentModalProps> = ({ visible, reconsent, onClose
           <p className='mt-12px mb-0'>
             <Trans i18nKey='common.jr.learn.consent.control' components={BOLD} />
           </p>
-          <div className='mt-16px'>
+          <div className='mt-16px pt-14px flex flex-wrap items-center justify-between gap-8px border-t border-t-solid border-[var(--jr-hairline)]'>
             <Checkbox checked={agreed} onChange={(checked: boolean) => setAgreed(checked)}>
               {t('common.jr.learn.consent.checkbox')}
             </Checkbox>
+            <Link onClick={() => setShowTerm(true)}>{t('common.jr.learn.consent.readFull')}</Link>
           </div>
-          <Link className='mt-8px inline-block' onClick={() => setShowTerm(true)}>
-            {t('common.jr.learn.consent.readFull')}
-          </Link>
         </div>
       </Modal>
       <TermModal visible={showTerm} onClose={() => setShowTerm(false)} />

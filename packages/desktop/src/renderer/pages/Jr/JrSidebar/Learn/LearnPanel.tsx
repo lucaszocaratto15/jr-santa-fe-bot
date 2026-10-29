@@ -5,8 +5,8 @@ import {
   type LearnState,
   type LearnSuggestion,
 } from '@/common/types/agent/learnTypes';
-import { Alert, Button, Message, Modal, Tag } from '@arco-design/web-react';
-import { PauseOne, PlayOne } from '@icon-park/react';
+import { Alert, Button, Message, Modal } from '@arco-design/web-react';
+import { Lock, PauseOne, PlayOne } from '@icon-park/react';
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import useSWR from 'swr';
@@ -15,6 +15,7 @@ import ConsentModal, { TermModal } from './ConsentModal';
 import ExclusionList from './ExclusionList';
 import InsightList from './InsightList';
 import { useLearnState } from '@renderer/hooks/agent/useLearnState';
+import { PageHeader, SectionLabel } from '../Teach/PanelParts';
 
 const INSIGHTS_KEY = 'jr.learn.insights';
 const EXCLUSIONS_KEY = 'jr.learn.exclusions';
@@ -113,13 +114,49 @@ const LearnPanel: React.FC<LearnPanelProps> = ({ autoConsent, onTeach }) => {
     void refresh();
   };
 
+  const running = state?.status === 'active' || state?.status === 'paused';
+  const statusChip = state && state.status !== 'unavailable' && (
+    <span className={`${styles.chip} ${state.status === 'active' ? styles.chipSuccess : ''}`}>
+      <span className={styles.dot} aria-hidden='true' />
+      {t(STATUS_KEY[state.status])}
+    </span>
+  );
+  const pauseButton = running && (
+    <Button
+      className={styles.softButton}
+      shape='round'
+      size='small'
+      icon={state?.status === 'paused' ? <PlayOne theme='outline' size={14} /> : <PauseOne theme='outline' size={14} />}
+      loading={busy === 'pause'}
+      onClick={() =>
+        void act('pause', () =>
+          state?.status === 'paused' ? ipcBridge.learn.resume.invoke() : ipcBridge.learn.pause.invoke({ minutes: null })
+        )
+      }
+    >
+      {t(state?.status === 'paused' ? 'common.jr.learn.panel.resume' : 'common.jr.learn.panel.pause')}
+    </Button>
+  );
   const header = (
-    <div className='flex items-center gap-12px mb-4px'>
-      <h2 className={`${styles.pageTitle} flex-1 !mb-0`}>{t('common.jr.learn.panel.title')}</h2>
-      {state && state.status !== 'unavailable' && (
-        <Tag color={state.status === 'active' ? 'green' : undefined}>{t(STATUS_KEY[state.status])}</Tag>
-      )}
-    </div>
+    <PageHeader
+      title={t('common.jr.learn.panel.title')}
+      subtitle={
+        running && (
+          <>
+            <Lock theme='outline' size={12} />
+            <span>{t('common.jr.learn.panel.onlyYou')}</span>
+          </>
+        )
+      }
+      aside={
+        (statusChip || pauseButton) && (
+          <>
+            {statusChip}
+            {pauseButton}
+          </>
+        )
+      }
+    />
   );
 
   const consentModal = (
@@ -133,7 +170,6 @@ const LearnPanel: React.FC<LearnPanelProps> = ({ autoConsent, onTeach }) => {
 
   if (!state) return header;
 
-  const paused = state.status === 'paused';
   const acceptedAt = state.acceptedAt
     ? new Intl.DateTimeFormat(i18n.language || 'pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(
         new Date(state.acceptedAt)
@@ -154,48 +190,55 @@ const LearnPanel: React.FC<LearnPanelProps> = ({ autoConsent, onTeach }) => {
   );
 
   const dataCard = (
-    <div className={`${styles.card} ${styles.cardList}`}>
-      <div className={styles.row}>
-        <div className={styles.rowCopy}>
-          <p className={styles.rowTitle}>{t('common.jr.learn.data.title')}</p>
-          <p className={styles.muted}>{t('common.jr.learn.data.rawHours', { count: state.rawHours })}</p>
-        </div>
-        <div className={styles.rowActions}>
-          <Button className={styles.softButton} size='small' onClick={() => setConfirm('wipe')}>
-            {t('common.jr.learn.data.wipeNow')}
-          </Button>
-        </div>
-      </div>
-      {state.acceptedVersion !== null && (
+    <>
+      <SectionLabel>{t('common.jr.learn.data.title')}</SectionLabel>
+      <div className={`${styles.card} ${styles.cardList}`}>
         <div className={styles.row}>
-          <p className={`${styles.muted} flex-1`}>
-            {t('common.jr.learn.data.accepted', { date: acceptedAt, version: state.acceptedVersion })}
-          </p>
+          <p className={`${styles.rowTitle} flex-1`}>{t('common.jr.learn.data.rawHours', { count: state.rawHours })}</p>
           <div className={styles.rowActions}>
-            <Button type='text' size='small' onClick={() => setTermOpen(true)}>
-              {t('common.jr.learn.data.readTerm')}
+            <Button className={styles.ghostIcon} shape='round' size='small' onClick={() => setConfirm('wipe')}>
+              {t('common.jr.learn.data.wipeNow')}
             </Button>
           </div>
         </div>
-      )}
-      <div className={styles.row}>
-        <div className={styles.rowActions}>
-          {on && (
+        {state.acceptedVersion !== null && (
+          <div className={styles.row}>
+            <p className={`${styles.rowTitle} flex-1`}>
+              {t('common.jr.learn.data.accepted', { date: acceptedAt, version: state.acceptedVersion })}
+            </p>
+            <div className={styles.rowActions}>
+              <Button className={styles.ghostIcon} shape='round' size='small' onClick={() => setTermOpen(true)}>
+                {t('common.jr.learn.data.readTerm')}
+              </Button>
+            </div>
+          </div>
+        )}
+        <div className={`${styles.row} justify-end`}>
+          <div className={styles.rowActions}>
+            {on && (
+              <Button
+                className={styles.ghostIcon}
+                shape='round'
+                size='small'
+                loading={busy === 'off'}
+                onClick={() => void act('off', () => ipcBridge.learn.turnOff.invoke())}
+              >
+                {t('common.jr.learn.data.turnOff')}
+              </Button>
+            )}
             <Button
-              className={styles.softButton}
+              status='danger'
+              shape='round'
               size='small'
-              loading={busy === 'off'}
-              onClick={() => void act('off', () => ipcBridge.learn.turnOff.invoke())}
+              loading={busy === 'revoke'}
+              onClick={() => setConfirm('revoke')}
             >
-              {t('common.jr.learn.data.turnOff')}
+              {t('common.jr.learn.data.revoke')}
             </Button>
-          )}
-          <Button status='danger' size='small' loading={busy === 'revoke'} onClick={() => setConfirm('revoke')}>
-            {t('common.jr.learn.data.revoke')}
-          </Button>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 
   const dialogs = (
@@ -219,9 +262,9 @@ const LearnPanel: React.FC<LearnPanelProps> = ({ autoConsent, onTeach }) => {
   /** Insights and "Seus dados" while the feature is not running but data or a consent remains. */
   const dataWhileStopped = hasData && (
     <>
-      <h3 className={`${styles.cardTitle} mt-20px mb-12px`}>{t('common.jr.learn.insights.title')}</h3>
+      <SectionLabel>{t('common.jr.learn.insights.title')}</SectionLabel>
       {insightList}
-      <div className='mt-14px'>{dataCard}</div>
+      {dataCard}
       {dialogs}
     </>
   );
@@ -262,7 +305,6 @@ const LearnPanel: React.FC<LearnPanelProps> = ({ autoConsent, onTeach }) => {
   return (
     <div>
       {header}
-      <p className={`${styles.muted} mb-16px`}>{t('common.jr.learn.panel.onlyYou')}</p>
 
       {state.titles === 'app-only' && (
         <Alert
@@ -289,29 +331,25 @@ const LearnPanel: React.FC<LearnPanelProps> = ({ autoConsent, onTeach }) => {
         />
       )}
 
-      <div className={`${styles.cardRow} mb-12px`}>
-        <h3 className={`${styles.cardTitle} flex-1`}>{t('common.jr.learn.insights.title')}</h3>
-        <Button
-          className={styles.softButton}
-          size='small'
-          icon={paused ? <PlayOne theme='outline' size={14} /> : <PauseOne theme='outline' size={14} />}
-          loading={busy === 'pause'}
-          onClick={() =>
-            void act('pause', () =>
-              paused ? ipcBridge.learn.resume.invoke() : ipcBridge.learn.pause.invoke({ minutes: null })
-            )
-          }
-        >
-          {t(paused ? 'common.jr.learn.panel.resume' : 'common.jr.learn.panel.pause')}
-        </Button>
-        <Button type='primary' size='small' loading={busy === 'generate'} onClick={() => void generate()}>
-          {t('common.jr.learn.insights.generate')}
-        </Button>
-      </div>
+      <SectionLabel
+        aside={
+          <Button
+            type='primary'
+            shape='round'
+            size='small'
+            loading={busy === 'generate'}
+            onClick={() => void generate()}
+          >
+            {t('common.jr.learn.insights.generate')}
+          </Button>
+        }
+      >
+        {t('common.jr.learn.insights.title')}
+      </SectionLabel>
       {insightList}
 
-      <div className={`${styles.card} mt-14px`}>
-        <h3 className={styles.cardTitle}>{t('common.jr.learn.exclusions.title')}</h3>
+      <SectionLabel>{t('common.jr.learn.exclusions.title')}</SectionLabel>
+      <div className={styles.card}>
         <ExclusionList
           rules={exclusions.data ?? []}
           onChange={(rules) => void saveExclusions(rules)}

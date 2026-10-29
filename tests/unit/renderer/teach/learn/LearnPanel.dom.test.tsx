@@ -156,7 +156,9 @@ describe('LearnPanel', () => {
     learn.listInsights.invoke.mockResolvedValue([batch]);
     renderPanel(active);
     expect(await screen.findByText('Baixar NF no portal')).toBeInTheDocument();
-    expect(screen.getByText(/Excel 2h10 · Portal NF 1h05/)).toBeInTheDocument();
+    expect(screen.getByText('Excel')).toBeInTheDocument();
+    expect(screen.getByText('2h10')).toBeInTheDocument();
+    expect(screen.getByText('1h05')).toBeInTheDocument();
     expect(await screen.findByText('Bancos')).toBeInTheDocument();
     expect(screen.getByText('Registros brutos: 9 h guardadas (apagadas em até 48 h)')).toBeInTheDocument();
     expect(screen.getByText(/Termo aceito em .* \(v1\.3\)/)).toBeInTheDocument();

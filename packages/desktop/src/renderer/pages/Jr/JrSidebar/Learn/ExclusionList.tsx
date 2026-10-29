@@ -45,6 +45,7 @@ const ExclusionList: React.FC<ExclusionListProps> = ({ rules, onChange, onRestor
           <Tag
             key={group}
             closable
+            className={styles.pillTag}
             onClose={() => onChange(rules.filter((rule) => groupOf(rule) !== group))}
             aria-label={t(`common.jr.learn.exclusions.groups.${group}`)}
           >
@@ -52,7 +53,12 @@ const ExclusionList: React.FC<ExclusionListProps> = ({ rules, onChange, onRestor
           </Tag>
         ))}
         {custom.map((rule) => (
-          <Tag key={rule.id} closable onClose={() => onChange(rules.filter((item) => item.id !== rule.id))}>
+          <Tag
+            key={rule.id}
+            closable
+            className={styles.pillTag}
+            onClose={() => onChange(rules.filter((item) => item.id !== rule.id))}
+          >
             {`${t(`common.jr.learn.exclusions.kind.${rule.kind}`)}: ${rule.pattern}`}
           </Tag>
         ))}
@@ -69,7 +75,7 @@ const ExclusionList: React.FC<ExclusionListProps> = ({ rules, onChange, onRestor
           }))}
         />
         <Input
-          className='w-220px'
+          className='flex-1 min-w-180px'
           size='small'
           value={pattern}
           maxLength={200}
@@ -79,6 +85,7 @@ const ExclusionList: React.FC<ExclusionListProps> = ({ rules, onChange, onRestor
         />
         <Button
           className={styles.softButton}
+          shape='round'
           size='small'
           icon={<Plus theme='outline' size={14} />}
           disabled={!pattern.trim()}
