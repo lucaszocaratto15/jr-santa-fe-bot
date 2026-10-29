@@ -102,13 +102,59 @@ test('migration gives Bruno Yanes two PCs', async (t) => {
       created_at INTEGER NOT NULL, revoked_at INTEGER, blocked_at INTEGER, token_limit INTEGER, access_start TEXT, access_end TEXT);
     CREATE TABLE sessions (hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, device_id TEXT NOT NULL, device_name TEXT NOT NULL,
       created_at INTEGER NOT NULL, last_seen_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, revoked_at INTEGER);
-    INSERT INTO users (id,name,role,created_at) VALUES ('u1','Bruno Yanes','employee',1),('u2','Outra Pessoa','employee',2);
+    INSERT INTO users (id,name,role,created_at) VALUES ('u1',' bruno yanes ','employee',1),('u2','Outra Pessoa','employee',2);
   `);
   old.close();
   const store = createStore({ databasePath, adminCode: ADMIN_CODE, model: 'm' });
   const rows = Object.fromEntries(store.employees().map((e) => [e.name, e.maxDevices]));
   store.close();
-  assert.deepEqual(rows, { 'Bruno Yanes': 2, 'Outra Pessoa': 1 });
+  assert.deepEqual(rows, { ' bruno yanes ': 2, 'Outra Pessoa': 1 });
+});
+
+async function deviceList(s) {
+  const body = await (await s.app.request('/admin/employees', { token: s.admin })).json();
+  return body.employees.find((e) => e.id === s.employee.id).devices;
+}
+
+test('login response never exposes replacedSessions', async (t) => {
+  const s = await setup(t);
+  const response = await s.app.request('/auth/login', {
+    method: 'POST',
+    body: { code: s.firstCode, deviceId: 'device-test-aaaaaaaa', deviceName: 'PC A' },
+  });
+  assert.equal(response.status, 200);
+  assert.equal('replacedSessions' in (await response.json()), false);
+});
+
+test('devices lists one row per PC with an active session', async (t) => {
+  const s = await setup(t);
+  await s.loginAs('aaaaaaaa', s.firstCode);
+  await s.loginAs('aaaaaaaa');
+  const devices = await deviceList(s);
+  assert.equal(devices.length, 1);
+  assert.equal(devices[0].id, 'device-test-aaaaaaaa');
+  assert.equal(devices[0].revokedAt, null);
+});
+
+test('an evicted PC disappears from the device list', async (t) => {
+  const s = await setup(t);
+  await s.loginAs('aaaaaaaa', s.firstCode);
+  await s.loginAs('bbbbbbbb');
+  assert.deepEqual(
+    (await deviceList(s)).map((d) => d.id),
+    ['device-test-bbbbbbbb']
+  );
+});
+
+test('an expired session is not listed as a device', async (t) => {
+  let clock = 1_800_000_000_000;
+  const s = await setup(t, { now: () => clock });
+  await s.loginAs('aaaaaaaa', s.firstCode);
+  assert.equal((await deviceList(s)).length, 1);
+  clock += 400 * 24 * 3_600_000;
+  const admin = (await s.app.login()).token;
+  const body = await (await s.app.request('/admin/employees', { token: admin })).json();
+  assert.deepEqual(body.employees.find((e) => e.id === s.employee.id).devices, []);
 });
 
 test('evicted in-flight request is aborted', async (t) => {

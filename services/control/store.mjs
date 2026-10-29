@@ -193,7 +193,7 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
   }
   if (!userColumns.has('max_devices')) {
     db.exec('ALTER TABLE users ADD COLUMN max_devices INTEGER NOT NULL DEFAULT 1');
-    db.prepare("UPDATE users SET max_devices = 2 WHERE name = 'Bruno Yanes' AND max_devices = 1").run();
+    db.prepare("UPDATE users SET max_devices = 2 WHERE lower(trim(name)) = 'bruno yanes' AND max_devices = 1").run();
   }
   const sessionColumns = new Set(
     db
@@ -414,7 +414,9 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
       } catch (error) {
         if (deniedUserId !== null && error?.code === 'outside_access_hours') {
           try {
-            recordDenial(deniedUserId, 'login');
+            // A new hire retrying an invite outside hours has no session yet and is never auto-blocked.
+            if (db.prepare('SELECT 1 FROM sessions WHERE user_id = ? LIMIT 1').get(deniedUserId))
+              recordDenial(deniedUserId, 'login');
           } catch {
             // Counting a denial must never change the login answer.
           }
@@ -568,15 +570,19 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
           maxDevices: row.max_devices,
           devices: db
             .prepare(
-              'SELECT device_id,device_name,last_seen_at,expires_at,revoked_at FROM sessions WHERE user_id = ? ORDER BY last_seen_at DESC'
+              `SELECT device_id, MAX(last_seen_at) AS last_seen_at, MAX(expires_at) AS expires_at,
+                (SELECT s2.device_name FROM sessions s2 WHERE s2.user_id = s.user_id AND s2.device_id = s.device_id
+                  AND s2.revoked_at IS NULL AND s2.expires_at > ? ORDER BY s2.last_seen_at DESC LIMIT 1) AS device_name
+              FROM sessions s WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ?
+              GROUP BY device_id ORDER BY last_seen_at DESC`
             )
-            .all(row.id)
+            .all(now(), row.id, now())
             .map((device) => ({
               id: device.device_id,
               name: device.device_name,
               lastSeenAt: iso(device.last_seen_at),
               expiresAt: iso(device.expires_at),
-              revokedAt: iso(device.revoked_at),
+              revokedAt: null,
             })),
           usage: usageFor(row.id),
         }));

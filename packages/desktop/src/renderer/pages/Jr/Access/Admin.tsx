@@ -20,6 +20,17 @@ const formatTime = (iso: string | null) => {
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 };
 
+const DISMISSED_KEY = 'jr.admin.dismissedBlocks';
+
+const readDismissed = (): string[] => {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(DISMISSED_KEY) ?? '[]');
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : [];
+  } catch {
+    return [];
+  }
+};
+
 const MIN_DEVICES = 1;
 const MAX_DEVICES = 5;
 
@@ -198,7 +209,20 @@ const AdminContent: React.FC = () => {
       setPending('');
     }
   };
-  const autoBlocked = people.filter((person) => person.blocked && !person.revoked && person.blockedReason);
+  const [dismissed, setDismissed] = useState<string[]>(readDismissed);
+  const blockKey = (person: JrAdminEmployee) => `${person.id}:${person.blockedAt}`;
+  const dismissBlock = (person: JrAdminEmployee) => {
+    const next = [...dismissed, blockKey(person)];
+    setDismissed(next);
+    try {
+      localStorage.setItem(DISMISSED_KEY, JSON.stringify(next));
+    } catch {
+      // Dismissal then only lasts for this session.
+    }
+  };
+  const autoBlocked = people.filter(
+    (person) => person.blocked && !person.revoked && person.blockedReason && !dismissed.includes(blockKey(person))
+  );
   const copy = async () => {
     if (!invite) return;
     try {
@@ -243,14 +267,19 @@ const AdminContent: React.FC = () => {
                 { name: person.name, time: formatTime(person.blockedAt) }
               )}
               action={
-                <Button
-                  size='mini'
-                  disabled={Boolean(pending)}
-                  loading={pending === person.id}
-                  onClick={() => void setBlocked(person)}
-                >
-                  {t('common.jr.access.unblockAction')}
-                </Button>
+                <>
+                  <Button
+                    size='mini'
+                    disabled={Boolean(pending)}
+                    loading={pending === person.id}
+                    onClick={() => void setBlocked(person)}
+                  >
+                    {t('common.jr.access.unblockAction')}
+                  </Button>
+                  <Button size='mini' type='text' onClick={() => dismissBlock(person)}>
+                    {t('common.jr.access.dismissAction')}
+                  </Button>
+                </>
               }
             />
           ))}

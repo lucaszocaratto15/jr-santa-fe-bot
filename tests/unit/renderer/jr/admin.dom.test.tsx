@@ -51,6 +51,7 @@ const show = (role: 'admin' | 'employee', id = 'staff-1') =>
     </SWRConfig>
   );
 beforeEach(() => {
+  localStorage.clear();
   vi.resetAllMocks();
   mocks.list.mockResolvedValue([]);
 });
@@ -206,6 +207,29 @@ it('lists auto-blocked employees in a banner and unblocks with setBlocked(false)
   const unblock = within(alerts[0]).getByRole('button', { name: 'common.jr.access.unblockAction' });
   fireEvent.click(unblock);
   await waitFor(() => expect(mocks.setBlocked).toHaveBeenCalledWith({ employeeId: 'p1', blocked: false }));
+});
+it('dismisses an auto-block banner until a new auto block appears', async () => {
+  const blocked = {
+    ...base,
+    id: 'p1',
+    name: 'Ana',
+    blocked: true,
+    blockedAt: '2026-10-29T15:30:00Z',
+    blockedReason: 'auto_volume',
+  };
+  mocks.list.mockResolvedValue([blocked]);
+  const view = show('admin', 'owner');
+  const alert = await screen.findByRole('alert');
+  fireEvent.click(within(alert).getByRole('button', { name: 'common.jr.access.dismissAction' }));
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  view.unmount();
+  const again = show('admin', 'owner');
+  expect(await screen.findByRole('heading', { name: 'Ana' })).toBeInTheDocument();
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  again.unmount();
+  mocks.list.mockResolvedValue([{ ...blocked, blockedAt: '2026-10-30T09:00:00Z' }]);
+  show('admin', 'owner');
+  expect(await screen.findByRole('alert')).toBeInTheDocument();
 });
 it('shows no banner for manual blocks', async () => {
   mocks.list.mockResolvedValue([

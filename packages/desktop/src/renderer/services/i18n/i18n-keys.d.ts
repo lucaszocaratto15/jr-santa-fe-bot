@@ -324,6 +324,7 @@ export type I18nKey =
   | 'common.jr.access.deviceBound'
   | 'common.jr.access.devices'
   | 'common.jr.access.disconnectDevice'
+  | 'common.jr.access.dismissAction'
   | 'common.jr.access.employeeEmail'
   | 'common.jr.access.employeeEmailPlaceholder'
   | 'common.jr.access.employeeName'

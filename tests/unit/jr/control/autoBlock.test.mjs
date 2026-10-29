@@ -83,9 +83,14 @@ const chatOnce = (app, token) =>
 test('outside-hours login attempts block on the third episode in a day', async (t) => {
   const { app, admin, employee, clock } = await nightSetup(t);
   // The owner has no access hours, so the admin list stays readable at night.
+  // Only someone who already has a session can be auto-blocked by login denials.
+  assert.equal((await app.login(employee.code, 'day')).response.status, 200);
+  const code = (
+    await (await app.request(`/admin/employees/${employee.id}/invite`, { method: 'POST', token: admin })).json()
+  ).code;
   clock.now = NIGHT;
   for (let attempt = 1; attempt < HOURS_DENIALS_LIMIT; attempt += 1) {
-    const denied = await app.login(employee.code, 'night');
+    const denied = await app.login(code, 'night');
     assert.equal(denied.response.status, 403);
     assert.equal(denied.error.code, 'outside_access_hours');
     const row = await employeeRow(app, admin, employee.id);
@@ -93,11 +98,11 @@ test('outside-hours login attempts block on the third episode in a day', async (
     assert.equal(row.blockedReason, null);
     clock.now += DENIAL_EPISODE_MS + 60_000;
   }
-  await app.login(employee.code, 'night');
+  await app.login(code, 'night');
   const row = await employeeRow(app, admin, employee.id);
   assert.equal(row.blocked, true);
   assert.equal(row.blockedReason, 'auto_hours');
-  const blocked = await app.login(employee.code, 'day');
+  const blocked = await app.login(code, 'day');
   assert.equal(blocked.error.code, 'employee_blocked');
   // Denials from before the owner lifts the block do not count again the same night.
   clock.now += 60_000;
@@ -107,8 +112,21 @@ test('outside-hours login attempts block on the third episode in a day', async (
     body: { blocked: false },
   });
   clock.now += 60_000;
-  assert.equal((await app.login(employee.code, 'night')).error.code, 'outside_access_hours');
+  assert.equal((await app.login(code, 'night')).error.code, 'outside_access_hours');
   assert.equal((await employeeRow(app, admin, employee.id)).blocked, false);
+});
+
+test('a new hire retrying an invite outside hours is never auto-blocked', async (t) => {
+  const { app, admin, employee, clock } = await nightSetup(t);
+  clock.now = NIGHT;
+  for (let attempt = 0; attempt < HOURS_DENIALS_LIMIT + 2; attempt += 1) {
+    const denied = await app.login(employee.code, 'night');
+    assert.equal(denied.error.code, 'outside_access_hours');
+    clock.now += DENIAL_EPISODE_MS + 60_000;
+  }
+  const row = await employeeRow(app, admin, employee.id);
+  assert.equal(row.blocked, false);
+  assert.equal(row.blockedReason, null);
 });
 
 test('outside-hours model requests count, session polling outside hours never counts', async (t) => {
