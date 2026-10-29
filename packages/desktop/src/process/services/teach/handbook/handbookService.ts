@@ -117,10 +117,12 @@ function sanitizeActivity(edited: unknown, source: HandbookActivityBody): Handbo
   const steps = (Array.isArray(edited.steps) ? edited.steps : [])
     .slice(0, MAX_STEPS)
     .filter(record)
-    .map((step) => ({
-      text: clip(step.text, MAX_STEP_TEXT),
-      ...(Number.isInteger(step.shot) ? { shot: step.shot as number } : {}),
-    }))
+    .map((step) =>
+      Object.assign(
+        { text: clip(step.text, MAX_STEP_TEXT) },
+        Number.isInteger(step.shot) ? { shot: step.shot as number } : {}
+      )
+    )
     .filter((step) => step.text);
   const title = clip(edited.title, 120);
   if (!title) throw new Error('invalid');
