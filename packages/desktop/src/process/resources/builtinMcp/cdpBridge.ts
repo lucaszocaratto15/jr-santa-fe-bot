@@ -57,7 +57,11 @@ export type CdpBridgeHandle = {
   onAttach: (listener: (webContentsId: number) => void) => () => void;
   /** Register a live secret to be redacted from all client-bound traffic until the webContents is destroyed. */
   addSecret: (webContentsId: number, value: string) => void;
-  /** While locked, bridge clients get a CDP error for every command and nothing is forwarded. */
+  /**
+   * While locked, every client command is rejected with a CDP error and request bodies are
+   * stripped from relayed events (events still flow). Bodies of requests seen while locked
+   * stay hidden from `Network.getRequestPostData` after unlock.
+   */
   setClientsLocked: (locked: boolean, reason?: string) => void;
 };
 
@@ -75,6 +79,21 @@ const attachListeners = new Set<(webContentsId: number) => void>();
 /** Live secrets per webContents id, redacted from everything sent to clients. */
 const secretsByContents = new Map<number, Set<string>>();
 let clientsLocked: { reason?: string } | null = null;
+/** requestIds of Network/Fetch events relayed while locked (insertion order, capped). */
+const lockedRequestIds = new Set<string>();
+const MAX_LOCKED_REQUEST_IDS = 10_000;
+
+const rememberLockedRequest = (method: string, params: unknown) => {
+  if (!method.startsWith('Network.') && !method.startsWith('Fetch.')) return;
+  const requestId = (params as { requestId?: unknown } | undefined)?.requestId;
+  if (typeof requestId !== 'string') return;
+  lockedRequestIds.delete(requestId);
+  lockedRequestIds.add(requestId);
+  if (lockedRequestIds.size > MAX_LOCKED_REQUEST_IDS) {
+    const oldest = lockedRequestIds.values().next().value;
+    if (oldest !== undefined) lockedRequestIds.delete(oldest);
+  }
+};
 
 /** All live secrets (any contents): fail closed across detach/re-attach. */
 const currentSecrets = (): string[] => [...secretsByContents.values()].flatMap((set) => [...set]);
@@ -174,8 +193,9 @@ const attachInternal = (webContentsId: number): { ok: true } | { ok: false; reas
       }
     }
     if (!isInternalBindingEvent(method, params)) {
-      // While a secret is live, request bodies (login POST) never reach clients.
-      const safe = currentSecrets().length > 0 ? stripPostData(params) : params;
+      // While recording or while a secret is live, request bodies (login POST) never reach clients.
+      if (clientsLocked) rememberLockedRequest(method, params);
+      const safe = clientsLocked || currentSecrets().length > 0 ? stripPostData(params) : params;
       broadcast({ method, params: safe ?? {}, sessionId: SINGLE_SESSION_ID });
     }
   };
@@ -261,6 +281,20 @@ const handleSocketMessage = async (ws: WebSocket, raw: string, announcedSessions
     sendToClient(ws, {
       id: id ?? 0,
       error: { code: -32000, message: 'post data hidden: vault secret on this page' },
+      sessionId,
+    });
+    return;
+  }
+
+  const postDataRequestId = (params as { requestId?: unknown } | undefined)?.requestId;
+  if (
+    method === 'Network.getRequestPostData' &&
+    typeof postDataRequestId === 'string' &&
+    lockedRequestIds.has(postDataRequestId)
+  ) {
+    sendToClient(ws, {
+      id: id ?? 0,
+      error: { code: -32000, message: 'post data hidden: request made while recording' },
       sessionId,
     });
     return;
@@ -494,6 +528,7 @@ export const startCdpBridge = async (): Promise<CdpBridgeHandle> => {
       attachListeners.clear();
       secretsByContents.clear();
       clientsLocked = null;
+      lockedRequestIds.clear();
       for (const ws of sockets) ws.close();
       sockets = new Set();
       await new Promise<void>((resolve) => {

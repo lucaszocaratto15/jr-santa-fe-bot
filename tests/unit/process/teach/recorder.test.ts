@@ -225,13 +225,13 @@ describe('teach recorder', () => {
 
   it('records downloads only while recording', async () => {
     const { fake, recorder } = await setup();
-    recorder.recordDownload({ fileName: 'antes.pdf', path: '/x/antes.pdf', origin: 'https://a.test' });
+    recorder.recordDownload({ fileName: 'antes.pdf', origin: 'https://a.test' });
     await recorder.start('x');
-    recorder.recordDownload({ fileName: 'nota.pdf', path: '/x/nota.pdf', origin: 'https://nfe.example.com' });
+    recorder.recordDownload({ fileName: 'nota.pdf', origin: 'https://nfe.example.com' });
     const { events } = await recorder.stop();
     expect(fake.sent.length).toBeGreaterThan(0);
     expect(events.filter((e) => e.kind === 'download')).toEqual([
-      expect.objectContaining({ fileName: 'nota.pdf', url: 'https://nfe.example.com', tab: 1 }),
+      expect.objectContaining({ fileName: 'nota.pdf', url: 'https://nfe.example.com/', tab: 1 }),
     ]);
   });
 
@@ -254,6 +254,59 @@ describe('teach recorder', () => {
     await recorder.cleanup(id);
     await expect(stat(join(dir, id))).rejects.toThrow();
     await expect(recorder.cleanup('../etc')).rejects.toThrow();
+  });
+
+  it('never writes secret url parameters to events.jsonl', async () => {
+    const { dir, fake, recorder } = await setup();
+    fake.setHref('https://p.gov.br/login?user=x&pw=S3nh@');
+    const { id } = await recorder.start('x');
+    fake.emit('Page.frameNavigated', { frame: { id: 'f', url: 'https://p.gov.br/cb#access_token=abc123' } });
+    fake.page({ kind: 'click', url: 'https://p.gov.br/login?user=x&pw=S3nh@', target: [{ text: 'Entrar' }] });
+    fake.page({ kind: 'input', url: 'https://p.gov.br/login?pw=S3nh@', field: { tag: 'input', type: 'password' } });
+    fake.setHref('https://p.gov.br/popup?token=abc123');
+    fake.attachNew(9);
+    await flush();
+    await flush();
+    const result = await recorder.stop();
+    const text = await readFile(join(dir, id, 'events.jsonl'), 'utf8');
+    for (const leak of ['S3nh@', 'abc123']) {
+      expect(text).not.toContain(leak);
+      expect(JSON.stringify(result)).not.toContain(leak);
+    }
+    expect(result.events[0].url).toBe('https://p.gov.br/login?user=x&pw=«segredo»');
+    expect(result.secretOrigins).toEqual(['https://p.gov.br']);
+  });
+
+  it('records a tab attached while paused when recording resumes', async () => {
+    const { fake, recorder } = await setup();
+    await recorder.start('x');
+    recorder.pause();
+    fake.setHref('https://nfe.example.com/popup');
+    fake.attachNew(9);
+    await flush();
+    await flush();
+    recorder.resume();
+    fake.page({ kind: 'click', url: 'https://nfe.example.com/popup', target: [{ text: 'Baixar' }] });
+    const { events } = await recorder.stop();
+    expect(events.slice(-2).map((e) => [e.kind, e.tab])).toEqual([
+      ['tab-open', 2],
+      ['click', 2],
+    ]);
+  });
+
+  it('discard during an in-flight auto-stop removes the dir and stop returns the same result', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const { dir, fake, recorder, onAutoStop } = await setup({ limitMs: 1_000 });
+    const { id } = await recorder.start('x');
+    fake.page({ kind: 'click', url: 'https://a.test/', target: [{ text: 'Ok' }] });
+    vi.advanceTimersByTime(1_000);
+    vi.useRealTimers();
+    const stopped = recorder.stop();
+    await recorder.discard();
+    await expect(stopped).resolves.toMatchObject({ id });
+    await expect(stat(join(dir, id))).rejects.toThrow();
+    await vi.waitFor(() => expect(onAutoStop).toHaveBeenCalledTimes(1));
+    expect(recorder.state()).toBe('idle');
   });
 
   it('refuses to start twice', async () => {

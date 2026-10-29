@@ -130,6 +130,44 @@ describe('cdpBridge redaction + internal api', () => {
     expect(contents.sent.length).toBe(0);
   });
 
+  it('strips postData while locked even without a vault secret', async () => {
+    handle.setClientsLocked(true, 'gravando');
+    contents.emitDbg('Network.requestWillBeSent', {
+      requestId: 'r1',
+      request: { url: 'u', postData: 'user=x&pw=S3nh@', postDataEntries: [{ bytes: 'eA==' }] },
+    });
+    await waitFor(() => frames.some((f) => f.method === 'Network.requestWillBeSent'));
+    const f = frames.find((x) => x.method === 'Network.requestWillBeSent')!;
+    expect(f.params.request).toEqual({ url: 'u' });
+    expect(JSON.stringify(frames)).not.toContain('S3nh@');
+  });
+
+  it('refuses getRequestPostData after unlock for requests seen while locked', async () => {
+    handle.setClientsLocked(true, 'gravando');
+    contents.emitDbg('Network.requestWillBeSent', {
+      requestId: 'r-locked',
+      request: { url: 'u', postData: 'pw=S3nh@' },
+    });
+    contents.emitDbg('Fetch.requestPaused', { requestId: 'f-locked', request: { url: 'u' } });
+    await waitFor(() => frames.some((f) => f.method === 'Fetch.requestPaused'));
+    handle.setClientsLocked(false);
+    const r = await call('Network.getRequestPostData', { requestId: 'r-locked' });
+    expect(r.error).toEqual({ code: -32000, message: 'post data hidden: request made while recording' });
+    const r2 = await call('Network.getRequestPostData', { requestId: 'f-locked' });
+    expect(r2.error?.message).toMatch(/^post data hidden/);
+    expect(contents.sent.length).toBe(0);
+  });
+
+  it('forwards requests seen while unlocked normally when no secret is live', async () => {
+    contents.emitDbg('Network.requestWillBeSent', { requestId: 'r-free', request: { url: 'u', postData: 'q=1' } });
+    await waitFor(() => frames.some((f) => f.method === 'Network.requestWillBeSent'));
+    expect(frames.find((f) => f.method === 'Network.requestWillBeSent')!.params.request.postData).toBe('q=1');
+    contents.commandResult = { postData: 'q=1' };
+    const r = await call('Network.getRequestPostData', { requestId: 'r-free' });
+    expect(r.error).toBeUndefined();
+    expect(contents.sent).toEqual([{ method: 'Network.getRequestPostData', params: { requestId: 'r-free' } }]);
+  });
+
   it('strips request bodies from Fetch.requestPaused while a secret is live', async () => {
     handle.addSecret(contents.id, SECRET);
     contents.emitDbg('Fetch.requestPaused', {

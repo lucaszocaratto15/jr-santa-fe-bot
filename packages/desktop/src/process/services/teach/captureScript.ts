@@ -89,6 +89,7 @@ const PAGE_SOURCE = String.raw`(function (RULES) {
   function visibleText(el) {
     // Form fields and editable regions hold user data: never use their text as a locator.
     if (isField(el) || el.isContentEditable) return '';
+    if (el.querySelector && el.querySelector('[contenteditable]')) return '';
     return clean(el.innerText != null ? el.innerText : el.textContent);
   }
   function nameOf(el) {

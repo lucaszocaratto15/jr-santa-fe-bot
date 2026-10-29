@@ -83,6 +83,16 @@ describe('capture script', () => {
     expect(calls[1]).toMatchObject({ key: 'Enter' });
   });
 
+  it('never uses text of an element containing an editable region as a locator', () => {
+    const box = document.createElement('div');
+    box.setAttribute('role', 'group');
+    box.innerHTML = '<div contenteditable="true">rascunho privado</div>';
+    document.body.appendChild(box);
+    box.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(JSON.stringify(calls)).not.toContain('rascunho');
+    box.remove();
+  });
+
   it('does not install listeners twice when injected again', () => {
     // eslint-disable-next-line no-eval -- see above
     (0, eval)(buildCaptureScript());

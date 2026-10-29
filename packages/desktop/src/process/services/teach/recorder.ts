@@ -16,6 +16,7 @@ import type { CdpBridgeHandle } from '@process/resources/builtinMcp/cdpBridge';
 import { REDACTED } from '@process/resources/builtinMcp/secretRedact';
 import { CAPTURE_BINDING, buildCaptureScript } from './captureScript';
 import { isSecretField, type FieldAttrs } from './fieldClassifier';
+import { sanitizeUrl } from './urlSanitizer';
 
 export type Locator = {
   role?: string;
@@ -53,7 +54,7 @@ export type Recorder = {
   /** Remove a finished recording's raw dir (after Save). */
   cleanup(id: string): Promise<void>;
   /** Record a finished download of the in-app browser (no-op unless recording). */
-  recordDownload(info: { fileName: string; path: string; origin: string }): void;
+  recordDownload(info: { fileName: string; origin: string }): void;
   state(): RecorderState;
 };
 
@@ -86,6 +87,8 @@ type Session = {
   unsubscribe: Array<() => void>;
   timer: ReturnType<typeof setTimeout> | null;
   writes: Promise<void>;
+  /** Tab events of attaches that happened while paused, pushed on resume. */
+  pendingTabEvents: Array<Pick<TeachEvent, 'kind' | 'tab' | 'url'>>;
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -140,7 +143,13 @@ export function createRecorder(deps: RecorderDeps): Recorder {
   let lastResult: RecordingResult | null = null;
 
   const push = (s: Session, event: Omit<TeachEvent, 't' | 'tab'> & { tab?: number }) => {
-    const full: TeachEvent = { t: now() - s.startedAt, tab: event.tab ?? s.currentTab, ...event } as TeachEvent;
+    // Every url written to events.jsonl goes through sanitizeUrl (no secrets in query/fragment).
+    const full = {
+      ...event,
+      t: now() - s.startedAt,
+      tab: event.tab ?? s.currentTab,
+      url: sanitizeUrl(event.url),
+    } as TeachEvent;
     s.events.push(full);
     const file = path.join(s.dir, 'events.jsonl');
     s.writes = s.writes.then(() => appendFile(file, `${JSON.stringify(full)}\n`, 'utf8')).catch(() => {});
@@ -198,7 +207,7 @@ export function createRecorder(deps: RecorderDeps): Recorder {
       event.value = secret ? REDACTED : (str(payload.value) ?? '').slice(0, MAX_VALUE);
     }
     if (secret) {
-      const origin = originOf(url);
+      const origin = originOf(sanitizeUrl(url));
       if (origin) s.secretOrigins.add(origin);
     }
     push(s, event);
@@ -224,8 +233,11 @@ export function createRecorder(deps: RecorderDeps): Recorder {
     if (known === undefined) s.tabs.set(webContentsId, tab);
     s.currentTab = tab;
     await inject(s);
-    if (session !== s || current !== 'recording') return;
-    push(s, { kind: known === undefined ? 'tab-open' : 'tab-switch', tab, url: await currentHref() });
+    if (session !== s) return;
+    const event = { kind: known === undefined ? 'tab-open' : 'tab-switch', tab, url: await currentHref() } as const;
+    if (session !== s) return;
+    if (current === 'recording') push(s, event);
+    else s.pendingTabEvents.push(event);
   };
 
   const teardown = async (s: Session) => {
@@ -244,17 +256,23 @@ export function createRecorder(deps: RecorderDeps): Recorder {
     await s.writes;
   };
 
-  const finish = async (): Promise<RecordingResult> => {
+  /** In-flight stop (manual or auto); concurrent stop()/discard() share it. */
+  let finishing: Promise<RecordingResult> | null = null;
+
+  const finish = (): Promise<RecordingResult> => {
+    if (finishing) return finishing;
     const s = session;
-    if (!s) {
-      if (lastResult) return lastResult;
-      throw new Error('not recording');
-    }
+    if (!s) return lastResult ? Promise.resolve(lastResult) : Promise.reject(new Error('not recording'));
     session = null;
     current = 'idle';
-    await teardown(s);
-    lastResult = { id: s.id, events: [...s.events], secretOrigins: [...s.secretOrigins] };
-    return lastResult;
+    finishing = (async () => {
+      await teardown(s);
+      lastResult = { id: s.id, events: [...s.events], secretOrigins: [...s.secretOrigins] };
+      return lastResult;
+    })().finally(() => {
+      finishing = null;
+    });
+    return finishing;
   };
 
   const removeDir = async (id: string) => {
@@ -264,7 +282,7 @@ export function createRecorder(deps: RecorderDeps): Recorder {
 
   return {
     async start(_description) {
-      if (session) throw new Error('a recording is already in progress');
+      if (session || finishing) throw new Error('a recording is already in progress');
       const id = randomUUID();
       const dir = path.join(deps.dir, id);
       await mkdir(dir, { recursive: true });
@@ -280,6 +298,7 @@ export function createRecorder(deps: RecorderDeps): Recorder {
         unsubscribe: [],
         timer: null,
         writes: Promise.resolve(),
+        pendingTabEvents: [],
       };
       session = s;
       lastResult = null;
@@ -312,19 +331,15 @@ export function createRecorder(deps: RecorderDeps): Recorder {
       if (current === 'recording') current = 'paused';
     },
     resume() {
-      if (current === 'paused') current = 'recording';
+      if (current !== 'paused' || !session) return;
+      current = 'recording';
+      for (const event of session.pendingTabEvents.splice(0)) push(session, event);
     },
     stop: finish,
     async discard() {
-      const s = session;
-      if (s) {
-        session = null;
-        current = 'idle';
-        await teardown(s);
-        await removeDir(s.id);
-      } else if (lastResult) {
-        await removeDir(lastResult.id);
-      }
+      // Covers an active recording, an in-flight (auto-)stop and an already stopped one.
+      const result = session || finishing ? await finish() : lastResult;
+      if (result) await removeDir(result.id);
       lastResult = null;
     },
     cleanup: removeDir,
