@@ -57,7 +57,12 @@ describe('teach control handlers', () => {
   it('vault_fill username does not require a password field', async () => {
     const { handlers, fill } = makeDeps();
     await handlers.vault_fill({ item: 'Portal Gov', field: 'username' });
-    expect(fill).toHaveBeenCalledWith('joao', { requirePassword: false, allowedOrigins: ['https://portal.gov.br'] });
+    // R16: a username is redaction-only, so the agent can keep driving the login page.
+    expect(fill).toHaveBeenCalledWith('joao', {
+      requirePassword: false,
+      redactOnly: true,
+      allowedOrigins: ['https://portal.gov.br'],
+    });
   });
 
   it('vault_fill passes fill errors through', async () => {

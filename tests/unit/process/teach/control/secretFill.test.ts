@@ -13,7 +13,7 @@ const makeDeps = (focus: Focus, url = 'https://portal.gov.br/login', locked = fa
       if (method === 'Runtime.evaluate') return { result: { type: 'object', value: focus } };
       return {};
     }),
-    addSecret: vi.fn((_id: number, _value: string) => {
+    addSecret: vi.fn((_id: number, _value: string, _opts?: { probe: boolean }) => {
       calls.push('addSecret');
     }),
     isClientsLocked: vi.fn(() => locked),
@@ -60,8 +60,27 @@ describe('fillFocused', () => {
     expect(result).toEqual({ ok: true });
     const inserts = bridge.sendCommand.mock.calls.filter(([method]) => method === 'Input.insertText');
     expect(inserts).toEqual([['Input.insertText', { text: SECRET }]]);
-    expect(bridge.addSecret).toHaveBeenCalledWith(7, SECRET);
+    expect(bridge.addSecret).toHaveBeenCalledWith(7, SECRET, { probe: true });
     expect(calls.indexOf('addSecret')).toBeLessThan(calls.indexOf('Input.insertText'));
+  });
+
+  it('registers a redaction-only username without the field probe (R16)', async () => {
+    const { deps, bridge } = makeDeps({ editable: true, isPassword: false });
+    const result = await fillFocused(deps, 'joao.silva', { requirePassword: false, redactOnly: true });
+    expect(result).toEqual({ ok: true });
+    expect(bridge.addSecret).toHaveBeenCalledWith(7, 'joao.silva', { probe: false });
+  });
+
+  it('still probes a redaction-only value typed into a password field (R16)', async () => {
+    const { deps, bridge } = makeDeps({ editable: true, isPassword: true });
+    await fillFocused(deps, 'joao.silva', { requirePassword: false, redactOnly: true });
+    expect(bridge.addSecret).toHaveBeenCalledWith(7, 'joao.silva', { probe: true });
+  });
+
+  it('probes secure-input values in plain text fields by default (R16)', async () => {
+    const { deps, bridge } = makeDeps({ editable: true, isPassword: false });
+    await fillFocused(deps, '483917', { requirePassword: false });
+    expect(bridge.addSecret).toHaveBeenCalledWith(7, '483917', { probe: true });
   });
 
   it('never returns the value, on success or failure', async () => {

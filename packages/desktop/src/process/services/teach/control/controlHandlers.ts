@@ -64,6 +64,8 @@ export function buildTeachHandlers(deps: TeachHandlerDeps): TeachHandlers {
       const submit = field(body, 'submit') === true;
       const filled = await deps.fill(secret, {
         requirePassword: which === 'password',
+        // R16: usernames are redaction-only so they never block the rest of the login flow.
+        ...(which === 'username' ? { redactOnly: true } : {}),
         allowedOrigins: item.origins,
         ...(submit ? { submit } : {}),
       });

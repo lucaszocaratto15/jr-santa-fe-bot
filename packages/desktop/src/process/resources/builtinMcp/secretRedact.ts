@@ -9,7 +9,8 @@
  */
 
 export const REDACTED = '«segredo»';
-const MIN_SECRET_LENGTH = 4;
+/** Shorter secrets are neither redacted nor probed (too many false matches). */
+export const MIN_SECRET_LENGTH = 4;
 
 /** Name prefix of the internal Runtime bindings the teach recorder installs (never relayed to clients). */
 export const INTERNAL_BINDING_PREFIX = '__jrTeach';
@@ -25,16 +26,38 @@ const SEPARATOR = '(?:\\\\u[0-9a-fA-F]{4}|\\\\.|[^A-Za-z0-9])';
  * Replace every live secret (and simple transforms of it) with a placeholder.
  * Operates on serialized (JSON) text, so secrets are matched in their JSON-escaped form.
  *
- * Ceiling: base64 bodies at arbitrary byte offsets (e.g. Network.getResponseBody) are NOT matched.
+ * Exact + simple transforms only; this is defence in depth, not the barrier.
  *
- * Exact + simple transforms only; this is defence in depth. The real barrier (R13) lives in
- * cdpBridge: while a live secret sits in an input/textarea of the page, client
- * Runtime.evaluate / callFunctionOn / compileScript / Debugger.evaluateOnCallFrame are refused
- * (a value-free boolean probe decides), and vault_fill / secure_input submit the form via
- * `submit: true` so the agent never needs page JS while the secret is in a field.
- * Remaining ceiling: page listeners installed BEFORE the fill (e.g. by a pre-planned prompt
- * injection) can copy an encoded form of the value elsewhere in the page and read it after
- * the field is cleared or submitted.
+ * What protects a live secret (R13 + R16):
+ *  - Every client-bound CDP frame is redacted here (string values and keys only, R14).
+ *  - Request bodies are stripped while a secret is live (stripPostData).
+ *  - cdpBridge refuses client Runtime.evaluate / callFunctionOn / compileScript /
+ *    Debugger.evaluateOnCallFrame while a PROBED secret (password, OTP, secure_input value)
+ *    sits in an input/textarea. A value-free boolean probe decides: it receives the secrets
+ *    as Runtime.callFunctionOn arguments, so no secret is ever part of a script source
+ *    (Debugger.searchInContent / getScriptSource cannot find it). The probe fails closed:
+ *    error, non-false answer or no answer within 2 s all refuse the command.
+ *  - vault_fill / secure_input submit the form via `submit: true`, so the agent never needs
+ *    page JS while the secret is in a field.
+ *
+ * Not covered (known ceiling):
+ *  - Usernames (vault `field: 'username'`) are redaction-only: the agent may run page JS
+ *    while one sits in a field and read it in a transformed form this function cannot match.
+ *  - Secrets shorter than MIN_SECRET_LENGTH are neither redacted nor probed.
+ *  - DOM-mutation JS paths: page code (or agent JS run before the fill, or listeners
+ *    installed earlier, e.g. by a pre-planned prompt injection) can copy the field value
+ *    elsewhere (another element, attribute, storage, a closure) in an encoded form and read
+ *    it once the field is cleared or the form submitted. The probe only inspects
+ *    input/textarea values in the document, open shadow roots and same-origin frames;
+ *    closed shadow roots, cross-origin frames and contenteditable are not inspected.
+ *  - Screenshots / screencast frames are pixels and are not redacted (accepted per R11:
+ *    OTP / text values in visible fields can appear; passwords render masked).
+ *  - Non-string encodings (R14): numbers, arrays of char codes, typed arrays, base64 bodies
+ *    at arbitrary byte offsets (e.g. Network.getResponseBody), hashes or custom ciphers.
+ *
+ * Upgrade path: run vault fills in an isolated world / dedicated webContents the agent
+ * cannot script, or refuse all client page JS from fill until navigation (at the cost of
+ * blocking the flows R16 keeps working), and redact screenshots of focused secret fields.
  */
 export const redactSecrets = (text: string, secrets: readonly string[]): string => {
   let out = text;

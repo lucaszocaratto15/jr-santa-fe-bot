@@ -2,11 +2,12 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('electron', () => ({ webContents: { fromId: () => null } }));
 
-const { buildSecretFieldProbe } = await import('@process/resources/builtinMcp/cdpBridge');
+const { SECRET_FIELD_PROBE } = await import('@process/resources/builtinMcp/cdpBridge');
 
 const SECRET = 'S3nh@Forte9';
 // eslint-disable-next-line no-eval
-const runProbe = (secrets: string[]): unknown => (0, eval)(buildSecretFieldProbe(secrets));
+const runProbe = (secrets: string[]): unknown =>
+  ((0, eval)(`(${SECRET_FIELD_PROBE})`) as (s: string[]) => unknown)(secrets);
 
 describe('secret field probe (R13)', () => {
   it('returns true only when an input or textarea holds a live secret', () => {
@@ -28,6 +29,11 @@ describe('secret field probe (R13)', () => {
     expect(runProbe([SECRET])).toBe(false);
     input.value = SECRET;
     expect(runProbe([SECRET])).toBe(true);
+  });
+
+  it('takes the secrets as an argument, never in its source (R16)', () => {
+    expect(SECRET_FIELD_PROBE).not.toContain(SECRET);
+    expect(SECRET_FIELD_PROBE.trim().startsWith('function')).toBe(true);
   });
 
   it('returns a boolean, never a value', () => {

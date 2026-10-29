@@ -9,7 +9,12 @@ class FakeContents extends EventEmitter {
   commandResult: unknown = {};
   /** Value the internal secret-in-field probe returns (R13). */
   probeValue: unknown = false;
-  probes: string[] = [];
+  /** When set, the probe call never settles (R16 timeout). */
+  probeHangs = false;
+  /** Internal probe calls (Runtime.callFunctionOn params) the bridge sent to the page. */
+  probes: Array<{ functionDeclaration: string; arguments: Array<{ value?: unknown }> }> = [];
+  /** Every internal (non-relayed) command the probe issued, for source inspection. */
+  internal: Array<{ method: string; params: unknown }> = [];
   dbgEmitter = new EventEmitter();
   attachedFlag = false;
   debugger = {
@@ -23,10 +28,16 @@ class FakeContents extends EventEmitter {
     on: (e: string, l: (...a: unknown[]) => void) => this.dbgEmitter.on(e, l),
     removeListener: (e: string, l: (...a: unknown[]) => void) => this.dbgEmitter.removeListener(e, l),
     sendCommand: async (method: string, params: unknown) => {
-      const expression = (params as { expression?: string } | undefined)?.expression;
-      if (method === 'Runtime.evaluate' && expression?.includes("querySelectorAll('input, textarea')")) {
-        this.probes.push(expression);
-        return { result: { type: 'boolean', value: this.probeValue } };
+      const p = (params ?? {}) as { expression?: string; functionDeclaration?: string; objectGroup?: string };
+      if (p.objectGroup === 'jrTeachSecretProbe' || method === 'Runtime.releaseObjectGroup') {
+        this.internal.push({ method, params });
+        if (method === 'Runtime.evaluate') return { result: { type: 'object', objectId: 'global-1' } };
+        if (method === 'Runtime.callFunctionOn') {
+          this.probes.push(params as (typeof this.probes)[number]);
+          if (this.probeHangs) return new Promise(() => {});
+          return { result: { type: 'boolean', value: this.probeValue } };
+        }
+        return {};
       }
       this.sent.push({ method, params });
       return this.commandResult;
@@ -238,8 +249,80 @@ describe('cdpBridge redaction + internal api', () => {
     }
     expect(contents.sent).toEqual([]);
     expect(contents.probes.length).toBe(4);
-    expect(contents.probes[0]).toContain(JSON.stringify(SECRET));
     expect(JSON.stringify(frames)).not.toContain(SECRET);
+  });
+
+  it('passes probed secrets only as call arguments, never in probe source (R16)', async () => {
+    handle.addSecret(contents.id, SECRET);
+    contents.probeValue = true;
+    await call('Runtime.evaluate', { expression: '1' });
+    const probe = contents.probes[0]!;
+    expect(probe.functionDeclaration).not.toContain(SECRET);
+    expect(probe.arguments).toEqual([{ value: [SECRET] }]);
+    for (const cmd of contents.internal) {
+      const { arguments: _args, ...rest } = cmd.params as Record<string, unknown>;
+      expect(JSON.stringify(rest)).not.toContain(SECRET);
+    }
+    expect(contents.internal.map((c) => c.method)).toContain('Runtime.releaseObjectGroup');
+  });
+
+  it('does not refuse page JS after a username-only fill (R16)', async () => {
+    handle.addSecret(contents.id, 'joao.silva', { probe: false });
+    contents.probeValue = true;
+    const r = await call('Runtime.callFunctionOn', { functionDeclaration: 'function(){this.click()}' });
+    expect(r.error).toBeUndefined();
+    expect(contents.probes).toEqual([]);
+    expect(contents.sent.map((c) => c.method)).toEqual(['Runtime.callFunctionOn']);
+  });
+
+  it('keeps refusing after a password fill and probes only probed secrets (R16)', async () => {
+    handle.addSecret(contents.id, 'joao.silva', { probe: false });
+    handle.addSecret(contents.id, SECRET, { probe: true });
+    contents.probeValue = true;
+    const r = await call('Runtime.callFunctionOn', { functionDeclaration: 'function(){}' });
+    expect(r.error?.message).toBe('bloqueado: campo com segredo preenchido na página');
+    expect(contents.probes[0]!.arguments).toEqual([{ value: [SECRET] }]);
+    expect(contents.sent).toEqual([]);
+  });
+
+  it('a username later filled as a password becomes probed (R16)', async () => {
+    handle.addSecret(contents.id, SECRET, { probe: false });
+    handle.addSecret(contents.id, SECRET, { probe: true });
+    handle.addSecret(contents.id, SECRET, { probe: false });
+    contents.probeValue = true;
+    const r = await call('Runtime.evaluate', { expression: '1' });
+    expect(r.error?.message).toBe('bloqueado: campo com segredo preenchido na página');
+  });
+
+  it('ignores secrets shorter than the redaction minimum when probing (R16)', async () => {
+    handle.addSecret(contents.id, 'abc');
+    contents.probeValue = true;
+    const r = await call('Runtime.evaluate', { expression: '1' });
+    expect(r.error).toBeUndefined();
+    expect(contents.probes).toEqual([]);
+  });
+
+  it('refuses page JS when the probe does not answer within 2 s (R16)', async () => {
+    handle.addSecret(contents.id, SECRET);
+    contents.probeHangs = true;
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const tick = () => new Promise((r) => setImmediate(r));
+      const id = 424242;
+      ws.send(JSON.stringify({ id, method: 'Runtime.evaluate', params: { expression: '1' } }));
+      for (let i = 0; i < 20 && contents.probes.length === 0; i++) await tick();
+      expect(contents.probes.length).toBe(1);
+      await vi.advanceTimersByTimeAsync(1_900);
+      for (let i = 0; i < 10; i++) await tick();
+      expect(frames.some((f) => f.id === id)).toBe(false);
+      await vi.advanceTimersByTimeAsync(200);
+      for (let i = 0; i < 20 && !frames.some((f) => f.id === id); i++) await tick();
+      const r = frames.find((f) => f.id === id)!;
+      expect(r.error).toEqual({ code: -32000, message: 'bloqueado: campo com segredo preenchido na página' });
+      expect(contents.sent).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('forwards page JS when the probe finds no secret in a field', async () => {

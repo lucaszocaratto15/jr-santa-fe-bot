@@ -13,6 +13,12 @@ export type FillOptions = {
   allowedOrigins?: string[];
   /** Press Enter after filling, so the agent never needs page JS while the secret is in a field (R13). */
   submit?: boolean;
+  /**
+   * Redact the value but do not refuse page JS while it sits in a field (R16). Only for vault
+   * usernames, so the agent can still click the password field after filling the login.
+   * Ignored when the focused field is a password field.
+   */
+  redactOnly?: boolean;
 };
 export type FillDeps = {
   bridge: Pick<CdpBridgeHandle, 'sendCommand' | 'addSecret' | 'isClientsLocked'>;
@@ -87,7 +93,7 @@ export async function fillFocused(deps: FillDeps, value: string, opts: FillOptio
     // The page may have navigated while we checked focus.
     if (!originOk()) return { ok: false, error: FILL_ERRORS.origin };
     // Register first so no event caused by the insert can reach clients unredacted.
-    deps.bridge.addSecret(deps.webContentsId(), value);
+    deps.bridge.addSecret(deps.webContentsId(), value, { probe: focus.isPassword || opts.redactOnly !== true });
     await deps.bridge.sendCommand('Input.insertText', { text: value });
     if (opts.submit) {
       await deps.bridge.sendCommand('Input.dispatchKeyEvent', { type: 'keyDown', ...ENTER_KEY, text: '\r' });
