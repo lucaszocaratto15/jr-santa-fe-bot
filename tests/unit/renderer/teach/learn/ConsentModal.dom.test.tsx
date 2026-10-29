@@ -136,4 +136,15 @@ describe('consent locales', () => {
     expect(section5).toMatch(/OpenRouter e Google \(Gemini\), também com servidores localizados fora do Brasil/);
     expect(section5).toContain('transferência internacional de dados');
   });
+
+  it('term.full §5 says screens never reach the AI but the manual text (steps, indicators, flowchart) does', () => {
+    const full = learnOf('pt-BR').term.full;
+    const section5 = full.slice(full.indexOf('**5.'), full.indexOf('**6.'));
+    expect(section5).toContain('As telas **nunca** são enviadas ao provedor de IA.');
+    expect(section5).toMatch(
+      /o texto do manual \(atividades, passo a passo, indicadores do cargo e fluxograma.*\) é enviado ao provedor de IA/
+    );
+    expect(full).not.toContain('o passo a passo **não** são enviados');
+    expect(full).not.toContain('ele recebe só o texto do manual');
+  });
 });
