@@ -82,7 +82,12 @@ const LearnIndicator: React.FC = () => {
           data-testid='learn-indicator'
           aria-label={t('common.jr.learn.indicator.label')}
           className={classNames('app-titlebar__learn', status === 'paused' && 'app-titlebar__learn--paused')}
-          icon={<Brain theme='outline' size={18} />}
+          icon={
+            <span className='app-titlebar__learn-icon'>
+              <Brain theme='outline' size={18} />
+              {status === 'active' && <span className='app-titlebar__learn-dot' aria-hidden='true' />}
+            </span>
+          }
         />
       </Badge>
     </Dropdown>

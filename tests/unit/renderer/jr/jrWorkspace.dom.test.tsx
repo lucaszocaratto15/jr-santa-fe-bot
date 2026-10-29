@@ -227,7 +227,10 @@ it('opens and closes connections over the current chat without navigation', asyn
       <main data-testid='current-chat'>Mensagem atual</main>
     </>
   );
-  fireEvent.click(screen.getByRole('button', { name: 'common.jr.mcp.title' }));
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: /Lucas/ }));
+  });
+  fireEvent.click(await screen.findByText('common.jr.mcp.title'));
   expect(await screen.findByRole('dialog', { name: 'common.jr.mcp.title' })).toBeInTheDocument();
   expect(screen.getByTestId('current-chat')).toHaveTextContent('Mensagem atual');
   expect(mocks.navigate).not.toHaveBeenCalled();

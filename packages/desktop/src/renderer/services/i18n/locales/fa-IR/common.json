@@ -518,7 +518,8 @@
       "usedLast5h": "مصرف ۵ ساعته",
       "usedThisWeek": "مصرف هفتگی",
       "usedTotal": "Total",
-      "usageAmount": "{{used}} / {{limit}}"
+      "usageAmount": "{{used}} / {{limit}}",
+      "toggleTheme": "Switch light / dark theme"
     },
     "search": "Buscar",
     "newBot": "Novo Bot",

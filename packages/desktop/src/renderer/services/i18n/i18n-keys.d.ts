@@ -629,6 +629,7 @@ export type I18nKey =
   | 'common.jr.look.themeDark'
   | 'common.jr.look.themeLight'
   | 'common.jr.look.themeSystem'
+  | 'common.jr.look.toggleTheme'
   | 'common.jr.look.tokensLabel'
   | 'common.jr.look.unsectioned'
   | 'common.jr.look.upToDateBanner'

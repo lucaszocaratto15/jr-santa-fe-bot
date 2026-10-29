@@ -13,7 +13,7 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { LinkOne, Peoples, Plus, Pushpin, Search } from '@icon-park/react';
+import { Peoples, Plus, Pushpin, Search, SettingTwo } from '@icon-park/react';
 import { useAuth } from '@renderer/hooks/context/AuthContext';
 import { loadLatestConversationMessages } from '@renderer/utils/chat/messagePagination';
 import React, { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
@@ -412,11 +412,13 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
                   void navigate('/admin');
                 }
                 if (key === 'settings') setSettingsTab('general');
+                if (key === 'connections') setConnectionsOpen(true);
                 if (key === 'sign-out') void logout();
               }}
             >
               {isJrAdmin(state.user) && <Menu.Item key='admin'>{t('common.jr.access.adminTitle')}</Menu.Item>}
               <Menu.Item key='settings'>{t('common.settings')}</Menu.Item>
+              <Menu.Item key='connections'>{t('common.jr.mcp.title')}</Menu.Item>
               <Menu.Item key='sign-out'>{t('common.jr.access.signOut')}</Menu.Item>
             </Menu>
           }
@@ -433,9 +435,10 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
         <Button
           type='text'
           className={styles.iconButton}
-          aria-label={t('common.jr.mcp.title')}
-          icon={<LinkOne size={18} />}
-          onClick={() => setConnectionsOpen(true)}
+          aria-label={t('common.settings')}
+          title={t('common.settings')}
+          icon={<SettingTwo size={17} />}
+          onClick={() => setSettingsTab('general')}
         />
       </div>
       <Modal

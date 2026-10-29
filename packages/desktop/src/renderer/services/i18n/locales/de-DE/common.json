@@ -518,7 +518,8 @@
       "usedLast5h": "Nutzung in 5 Stunden",
       "usedThisWeek": "Wöchentliche Nutzung",
       "usedTotal": "Total",
-      "usageAmount": "{{used}} / {{limit}}"
+      "usageAmount": "{{used}} / {{limit}}",
+      "toggleTheme": "Switch light / dark theme"
     },
     "search": "Buscar",
     "newBot": "Novo Bot",
