@@ -591,6 +591,21 @@
       "formEdit": "Editar login",
       "saveFailed": "Não foi possível salvar. Confira o endereço do site.",
       "deleteFailed": "Não foi possível excluir."
+    },
+    "teach": {
+      "secure": {
+        "title": "{{origin}} pediu {{what}}",
+        "whatOtp": "um código de verificação",
+        "whatPassword": "uma senha",
+        "whatText": "uma informação",
+        "send": "Enviar",
+        "cancel": "Cancelar",
+        "saveToVault": "Salvar no cofre deste site",
+        "footnote": "O bot não vê o que você digita.",
+        "saveOnlyTitle": "Salvar a senha de {{origin}} no cofre?",
+        "saveOnlySubmit": "Salvar",
+        "sendFailed": "Não foi possível enviar. Tente de novo."
+      }
     }
   }
 }

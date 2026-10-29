@@ -1,5 +1,5 @@
 import { ipcBridge } from '@/common';
-import { getTeachServices } from '@process/services/teach/registry';
+import { getSecureInputBroker, getTeachServices } from '@process/services/teach/registry';
 
 const requireVault = () => {
   const services = getTeachServices();
@@ -13,4 +13,11 @@ export function initVaultBridge(): void {
   ipcBridge.vault.list.provider(async () => (getTeachServices() ? requireVault().list() : []));
   ipcBridge.vault.upsert.provider(async (input) => requireVault().upsert(input));
   ipcBridge.vault.remove.provider(async ({ id }) => requireVault().remove(id));
+}
+
+/** Secure card answers. The typed value goes to the broker and is never sent back. */
+export function initSecureInputBridge(): void {
+  ipcBridge.teach.secureRespond.provider(async (response) => {
+    await getSecureInputBroker()?.respond(response);
+  });
 }

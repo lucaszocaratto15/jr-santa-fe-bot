@@ -591,6 +591,21 @@
       "formEdit": "Edit login",
       "saveFailed": "Could not save. Check the site address.",
       "deleteFailed": "Could not delete."
+    },
+    "teach": {
+      "secure": {
+        "title": "{{origin}} asked for {{what}}",
+        "whatOtp": "a verification code",
+        "whatPassword": "a password",
+        "whatText": "some information",
+        "send": "Send",
+        "cancel": "Cancel",
+        "saveToVault": "Save to this site's vault",
+        "footnote": "The bot can't see what you type.",
+        "saveOnlyTitle": "Save the password for {{origin}} to the vault?",
+        "saveOnlySubmit": "Save",
+        "sendFailed": "Couldn't send. Try again."
+      }
     }
   }
 }

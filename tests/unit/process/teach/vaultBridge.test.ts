@@ -18,11 +18,13 @@ vi.mock('@/common', () => ({
       upsert: channel('upsert'),
       remove: channel('remove'),
     },
+    teach: { secureRespond: channel('secureRespond') },
   },
 }));
 
-import { initVaultBridge } from '@process/bridge/vaultBridge';
-import { setTeachServices } from '@process/services/teach/registry';
+import { initSecureInputBridge, initVaultBridge } from '@process/bridge/vaultBridge';
+import { setSecureInputBroker, setTeachServices } from '@process/services/teach/registry';
+import type { SecureInputBroker } from '@process/services/teach/control/secureInput';
 import type { VaultStore } from '@process/services/teach/vault/vault';
 
 const item = { id: 'a', name: 'CRTI', origins: ['https://x.com'], username: 'u', hasPassword: true, hints: '' };
@@ -64,5 +66,16 @@ describe('vaultBridge', () => {
   it('never exposes a secret-reading channel', async () => {
     const actual = await vi.importActual<typeof import('@/common/adapter/ipcBridge')>('@/common/adapter/ipcBridge');
     expect(Object.keys(actual.vault)).toEqual(['available', 'list', 'upsert', 'remove']);
+  });
+
+  it('forwards secure card answers to the broker and returns nothing', async () => {
+    const respond = vi.fn(async () => undefined);
+    setSecureInputBroker({ respond } as unknown as SecureInputBroker);
+    initSecureInputBridge();
+    const response = { id: 'r1', value: '123456' };
+    expect(await handlers.secureRespond(response)).toBeUndefined();
+    expect(respond).toHaveBeenCalledWith(response);
+    setSecureInputBroker(null);
+    expect(await handlers.secureRespond(response)).toBeUndefined();
   });
 });

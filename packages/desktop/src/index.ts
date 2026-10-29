@@ -847,7 +847,8 @@ const handleAppReady = async (): Promise<void> => {
   try {
     const { createTeachControlServer } = await import('./process/services/teach/control/controlServer');
     const { buildTeachHandlers } = await import('./process/services/teach/control/controlHandlers');
-    const teachControl = await createTeachControlServer(buildTeachHandlers());
+    const { createMainTeachDeps } = await import('./process/services/teach/control/mainDeps');
+    const teachControl = await createTeachControlServer(buildTeachHandlers(createMainTeachDeps()));
     process.env.JR_TEACH_PORT = String(teachControl.port);
     process.env.JR_TEACH_TOKEN = teachControl.token;
     app.once('will-quit', () => {

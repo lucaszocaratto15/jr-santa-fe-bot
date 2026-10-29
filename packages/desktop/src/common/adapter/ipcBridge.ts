@@ -2557,7 +2557,14 @@ export const sidebar = {
   ),
 };
 
+export type SecureRequest = import('@process/services/teach/control/secureInput').SecureRequest;
+export type SecureResponse = import('@process/services/teach/control/secureInput').SecureResponse;
+
 export const teach = {
   openTab: bridge.buildEmitter<{ url: string; openerWebContentsId: number }>('teach:open-tab'),
   downloaded: bridge.buildEmitter<{ fileName: string; path: string; origin: string }>('teach:downloaded'),
+  /** Main → renderer: show a secure input card. Carries no value. */
+  secureRequest: bridge.buildEmitter<SecureRequest>('teach:secure-request'),
+  /** Renderer → main: the typed value goes straight to the filler; nothing is returned. */
+  secureRespond: bridge.buildProvider<void, SecureResponse>('teach:secure-respond'),
 };

@@ -1,0 +1,51 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--jr-surface);
+  border: 1px solid var(--jr-hairline);
+  box-shadow: var(--jr-composer-shadow);
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--color-text-1);
+}
+
+.icon {
+  display: inline-flex;
+  color: var(--jr-accent);
+}
+
+.label {
+  color: var(--color-text-2);
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+}
+
+.save {
+  color: var(--color-text-2);
+}
+
+.footnote {
+  color: var(--color-text-3);
+  font-size: 12px;
+}
