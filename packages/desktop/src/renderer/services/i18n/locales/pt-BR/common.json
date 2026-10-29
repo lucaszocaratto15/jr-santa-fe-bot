@@ -452,7 +452,10 @@
       "openAccess": "Sem horário de início ou de fim. O consumo fica registrado e não bloqueia o acesso.",
       "noLimitPlaceholder": "Sem limite",
       "unlimited": "Sem limite",
-      "tokensUsed": "Tokens usados: {{used}}"
+      "tokensUsed": "Tokens usados: {{used}}",
+      "editTitle": "Editar cargo",
+      "editTitleHeading": "Cargo de {{name}}",
+      "editTitleHint": "Os itens do manual já publicados continuam no cargo em que foram publicados."
     },
     "executing": "Executando",
     "look": {
@@ -467,7 +470,8 @@
         "updates": "Atualizações",
         "vault": "Cofre",
         "tasks": "Minhas tarefas",
-        "learn": "Aprender"
+        "learn": "Aprender",
+        "handbook": "Manual da função"
       },
       "generalTitle": "Geral",
       "account": "Conta",
@@ -809,6 +813,93 @@
         "open": "Ver insights e ajustes",
         "turnOff": "Desligar",
         "reviewTerm": "O termo mudou: revisar"
+      }
+    },
+    "handbook": {
+      "title": "Manual da função",
+      "roleLabel": "Cargo: {{role}}",
+      "visibleNotice": "O que você aprovar fica visível para o seu gestor e para quem ocupar o seu cargo no futuro.",
+      "noRole": "Seu cargo não está cadastrado. Peça ao administrador para cadastrá-lo.",
+      "unavailable": "Disponível só com o servidor da empresa.",
+      "loadFailed": "Não foi possível carregar o Manual da função.",
+      "draftsTitle": "Rascunhos para revisar",
+      "noDrafts": "Nenhum rascunho para revisar agora.",
+      "publishedTitle": "No manual (aprovados por você)",
+      "noPublished": "Você ainda não aprovou nenhum item.",
+      "kindTaught": "Atividade · {{title}} (tarefa ensinada)",
+      "kindLearn": "Atividade · {{title}} (observada)",
+      "kindIndicators": "Indicadores da semana de {{week}}",
+      "changed": "Atualizar",
+      "stepsCount": "{{steps}} passos · {{shots}} telas",
+      "review": "Revisar",
+      "dismiss": "Descartar",
+      "view": "Ver",
+      "withdraw": "Retirar",
+      "withdrawConfirm": "Retirar este item do manual do cargo agora?",
+      "withdrawn": "Item retirado do manual",
+      "frequency": {
+        "daily": "Diária",
+        "weekly": "Semanal",
+        "occasional": "Eventual"
+      },
+      "editor": {
+        "title": "Revisar item do manual",
+        "fieldTitle": "Título",
+        "fieldDescription": "Descrição",
+        "fieldFrequency": "Frequência",
+        "steps": "Passos",
+        "stepLabel": "Passo {{index}}",
+        "removeStep": "Remover passo",
+        "removeShot": "Remover tela",
+        "confirmBefore": "Confirmar antes de (um por linha)",
+        "preview": "Prévia do fluxograma",
+        "indicatorsHint": "Seu tempo e sua frequência na semana. No manual eles só aparecem como média do cargo.",
+        "approve": "Aprovar e publicar no manual",
+        "confirmTitle": "Publicar no manual do cargo?",
+        "confirmBody": "Este item ficará visível para o seu gestor e para quem ocupar o seu cargo. Publicar?",
+        "publish": "Publicar",
+        "published": "Publicado no manual"
+      },
+      "errors": {
+        "no_role": "Seu cargo não está cadastrado. Peça ao administrador para cadastrá-lo.",
+        "unavailable": "Não foi possível falar com o servidor da empresa. Tente de novo.",
+        "forbidden": "Você não tem permissão para isso.",
+        "too_large": "Este item ficou grande demais. Remova algumas telas e tente de novo.",
+        "generic": "Algo deu errado. Tente de novo."
+      },
+      "replay": {
+        "step": "Passo {{current}}/{{total}}",
+        "noShot": "Sem tela neste passo (dado protegido)",
+        "loadingShot": "Carregando a tela…",
+        "previous": "Anterior",
+        "next": "Próximo",
+        "empty": "Esta atividade não tem passos."
+      },
+      "viewer": {
+        "noHandbook": "Ainda não existe Manual da função para este cargo.",
+        "activities": "Atividades",
+        "back": "Voltar ao cargo",
+        "confirmBefore": "Confirmar antes de",
+        "roleFlowchart": "Fluxograma do cargo"
+      },
+      "indicators": {
+        "title": "Indicadores do cargo",
+        "empty": "Ainda não há indicadores para este cargo.",
+        "activity": "{{title}} · {{times}}×/semana · {{minutes}} min por vez",
+        "app": "{{app}} · {{minutes}} min/dia",
+        "contributors": "Média de {{count}} pessoas no cargo, últimas 4 semanas"
+      },
+      "admin": {
+        "title": "Manual da função",
+        "empty": "Nenhum cargo tem manual ainda.",
+        "activities": "{{count}} atividades",
+        "updated": "atualizado em {{date}}",
+        "readOnly": "Somente leitura. Só o funcionário aprova ou retira itens."
+      },
+      "card": {
+        "title": "Manual da função",
+        "close": "Fechar",
+        "loadFailed": "Não foi possível abrir o Manual da função."
       }
     }
   }

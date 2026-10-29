@@ -1,5 +1,15 @@
 import { Button, Message } from '@arco-design/web-react';
-import { Brain, ChartHistogram, Close, Computer, Download, ListCheckbox, Lock, SettingTwo } from '@icon-park/react';
+import {
+  BookOpen,
+  Brain,
+  ChartHistogram,
+  Close,
+  Computer,
+  Download,
+  ListCheckbox,
+  Lock,
+  SettingTwo,
+} from '@icon-park/react';
 import React, { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
@@ -12,13 +22,23 @@ import { queueConversationIntent } from '@renderer/pages/conversation/Preview/br
 import { isMacOS } from '@/renderer/utils/platform';
 import { ComputerPanel, GeneralPanel, UpdatesPanel } from './panels';
 import LearnPanel from './Learn/LearnPanel';
+import HandbookPanel from './Teach/HandbookPanel';
 import TasksPanel from './Teach/TasksPanel';
 import { pickRunBot } from './Teach/taskActions';
 import UsagePanel from './Usage/UsagePanel';
 import VaultPanel from './Teach/VaultPanel';
 import styles from './JrSidebar.module.css';
 
-export const SETTINGS_TABS = ['general', 'computer', 'usage', 'vault', 'tasks', 'learn', 'updates'] as const;
+export const SETTINGS_TABS = [
+  'general',
+  'computer',
+  'usage',
+  'vault',
+  'tasks',
+  'learn',
+  'handbook',
+  'updates',
+] as const;
 export type SettingsTab = (typeof SETTINGS_TABS)[number];
 
 const TAB_LABEL = {
@@ -28,6 +48,7 @@ const TAB_LABEL = {
   vault: 'common.jr.look.tabs.vault',
   tasks: 'common.jr.look.tabs.tasks',
   learn: 'common.jr.look.tabs.learn',
+  handbook: 'common.jr.look.tabs.handbook',
   updates: 'common.jr.look.tabs.updates',
 } as const;
 
@@ -37,6 +58,7 @@ const tabIcon = (id: SettingsTab) => {
   if (id === 'vault') return <Lock size={20} />;
   if (id === 'tasks') return <ListCheckbox size={20} />;
   if (id === 'learn') return <Brain size={20} />;
+  if (id === 'handbook') return <BookOpen size={20} />;
   if (id === 'updates') return <Download size={20} />;
   return <SettingTwo size={20} />;
 };
@@ -132,6 +154,7 @@ const JrSettingsModal: React.FC<{
           {tab === 'learn' && (
             <LearnPanel autoConsent={autoConsent} onTeach={(suggestion) => void teachSuggestion(suggestion)} />
           )}
+          {tab === 'handbook' && <HandbookPanel />}
           {tab === 'updates' && <UpdatesPanel />}
         </div>
       </div>

@@ -454,7 +454,10 @@
       "openAccess": "Sem horário de início ou de fim. O consumo fica registrado e não bloqueia o acesso.",
       "noLimitPlaceholder": "Sem limite",
       "unlimited": "Sem limite",
-      "tokensUsed": "Tokens usados: {{used}}"
+      "tokensUsed": "Tokens usados: {{used}}",
+      "editTitle": "Edit role",
+      "editTitleHeading": "Role of {{name}}",
+      "editTitleHint": "Handbook items already published stay under the role they were published with."
     },
     "executing": "Working",
     "look": {
@@ -469,7 +472,8 @@
         "updates": "Updates",
         "vault": "Vault",
         "tasks": "My tasks",
-        "learn": "Learn"
+        "learn": "Learn",
+        "handbook": "Role handbook"
       },
       "generalTitle": "General",
       "account": "Account",
@@ -811,6 +815,93 @@
         "open": "View insights and settings",
         "turnOff": "Turn off",
         "reviewTerm": "The term changed: review"
+      }
+    },
+    "handbook": {
+      "title": "Role handbook",
+      "roleLabel": "Role: {{role}}",
+      "visibleNotice": "What you approve becomes visible to your manager and to whoever holds your role in the future.",
+      "noRole": "Your role is not registered. Ask the administrator to register it.",
+      "unavailable": "Available only with the company server.",
+      "loadFailed": "Could not load the role handbook.",
+      "draftsTitle": "Drafts to review",
+      "noDrafts": "No drafts to review right now.",
+      "publishedTitle": "In the handbook (approved by you)",
+      "noPublished": "You have not approved any item yet.",
+      "kindTaught": "Activity · {{title}} (taught task)",
+      "kindLearn": "Activity · {{title}} (observed)",
+      "kindIndicators": "Indicators for the week of {{week}}",
+      "changed": "Update",
+      "stepsCount": "{{steps}} steps · {{shots}} screens",
+      "review": "Review",
+      "dismiss": "Discard",
+      "view": "View",
+      "withdraw": "Withdraw",
+      "withdrawConfirm": "Remove this item from the role handbook now?",
+      "withdrawn": "Item removed from the handbook",
+      "frequency": {
+        "daily": "Daily",
+        "weekly": "Weekly",
+        "occasional": "Occasional"
+      },
+      "editor": {
+        "title": "Review handbook item",
+        "fieldTitle": "Title",
+        "fieldDescription": "Description",
+        "fieldFrequency": "Frequency",
+        "steps": "Steps",
+        "stepLabel": "Step {{index}}",
+        "removeStep": "Remove step",
+        "removeShot": "Remove screen",
+        "confirmBefore": "Confirm before (one per line)",
+        "preview": "Flowchart preview",
+        "indicatorsHint": "Your time and frequency for the week. In the handbook they only appear as the role average.",
+        "approve": "Approve and publish to the handbook",
+        "confirmTitle": "Publish to the role handbook?",
+        "confirmBody": "This item will be visible to your manager and to whoever holds your role. Publish?",
+        "publish": "Publish",
+        "published": "Published to the handbook"
+      },
+      "errors": {
+        "no_role": "Your role is not registered. Ask the administrator to register it.",
+        "unavailable": "The company server could not be reached. Try again.",
+        "forbidden": "You are not allowed to do this.",
+        "too_large": "This item is too large. Remove some screens and try again.",
+        "generic": "Something went wrong. Try again."
+      },
+      "replay": {
+        "step": "Step {{current}}/{{total}}",
+        "noShot": "No screen for this step (protected data)",
+        "loadingShot": "Loading screen…",
+        "previous": "Previous",
+        "next": "Next",
+        "empty": "This activity has no steps."
+      },
+      "viewer": {
+        "noHandbook": "There is no role handbook for this role yet.",
+        "activities": "Activities",
+        "back": "Back to the role",
+        "confirmBefore": "Confirm before",
+        "roleFlowchart": "Role flowchart"
+      },
+      "indicators": {
+        "title": "Role indicators",
+        "empty": "No indicators for this role yet.",
+        "activity": "{{title}} · {{times}}×/week · {{minutes}} min each",
+        "app": "{{app}} · {{minutes}} min/day",
+        "contributors": "Average of {{count}} people in the role, last 4 weeks"
+      },
+      "admin": {
+        "title": "Role handbooks",
+        "empty": "No role has a handbook yet.",
+        "activities": "{{count}} activities",
+        "updated": "updated {{date}}",
+        "readOnly": "Read only. Only the employee approves or withdraws items."
+      },
+      "card": {
+        "title": "Role handbook",
+        "close": "Close",
+        "loadFailed": "Could not open the role handbook."
       }
     }
   }

@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import useSWR from 'swr';
 import { isJrAdmin, useJrAccess } from './context';
 import styles from './Access.module.css';
+import HandbookAdmin from './HandbookAdmin';
 import TeamUsage from './TeamUsage';
 
 const statusKey = (person: JrAdminEmployee) => {
@@ -57,6 +58,8 @@ const AdminContent: React.FC = () => {
   const [failed, setFailed] = useState(false);
   const [copied, setCopied] = useState(false);
   const [toRevoke, setToRevoke] = useState<JrAdminEmployee>();
+  const [toRetitle, setToRetitle] = useState<JrAdminEmployee>();
+  const [newTitle, setNewTitle] = useState('');
   const openCreate = () => {
     if (pending) return;
     setFailed(false);
@@ -118,6 +121,25 @@ const AdminContent: React.FC = () => {
     setFailed(false);
     try {
       await ipcBridge.jr.admin.setBlocked.invoke({ employeeId: person.id, blocked: !person.blocked });
+      await mutate();
+    } catch {
+      setFailed(true);
+    } finally {
+      setPending('');
+    }
+  };
+  const openRetitle = (person: JrAdminEmployee) => {
+    setFailed(false);
+    setNewTitle(person.title ?? '');
+    setToRetitle(person);
+  };
+  const saveTitle = async () => {
+    if (!toRetitle || pending) return;
+    setPending(toRetitle.id);
+    setFailed(false);
+    try {
+      await ipcBridge.jr.admin.setTitle.invoke({ employeeId: toRetitle.id, title: newTitle.trim() || null });
+      setToRetitle(undefined);
       await mutate();
     } catch {
       setFailed(true);
@@ -187,6 +209,14 @@ const AdminContent: React.FC = () => {
                       type='text'
                       className={styles.quiet}
                       disabled={Boolean(pending)}
+                      onClick={() => openRetitle(person)}
+                    >
+                      {t('common.jr.access.editTitle')}
+                    </Button>
+                    <Button
+                      type='text'
+                      className={styles.quiet}
+                      disabled={Boolean(pending)}
                       loading={pending === person.id}
                       onClick={() => void generate(person.id)}
                     >
@@ -210,6 +240,7 @@ const AdminContent: React.FC = () => {
           </div>
         </>
       )}
+      <HandbookAdmin />
       <Modal
         visible={creating}
         title={t('common.jr.access.newEmployeeTitle')}
@@ -275,6 +306,35 @@ const AdminContent: React.FC = () => {
             {failed && <Alert type='error' content={t('common.jr.access.actionError')} />}
           </div>
         )}
+      </Modal>
+      <Modal
+        visible={Boolean(toRetitle)}
+        title={t('common.jr.access.editTitleHeading', { name: toRetitle?.name })}
+        closable={!pending}
+        maskClosable={!pending}
+        onCancel={() => setToRetitle(undefined)}
+        footer={[
+          <Button key='cancel' disabled={Boolean(pending)} onClick={() => setToRetitle(undefined)}>
+            {t('common.cancel')}
+          </Button>,
+          <Button key='save' type='primary' loading={Boolean(pending)} onClick={() => void saveTitle()}>
+            {t('common.save')}
+          </Button>,
+        ]}
+      >
+        <label className={styles.adminField} htmlFor='jr-employee-retitle'>
+          <span>{t('common.jr.access.employeeTitle')}</span>
+          <Input
+            id='jr-employee-retitle'
+            value={newTitle}
+            onChange={setNewTitle}
+            maxLength={80}
+            disabled={Boolean(pending)}
+            onPressEnter={() => void saveTitle()}
+          />
+        </label>
+        <p className={styles.hint}>{t('common.jr.access.editTitleHint')}</p>
+        {failed && <Alert type='error' content={t('common.jr.access.actionError')} />}
       </Modal>
       <Modal
         visible={Boolean(toRevoke)}
