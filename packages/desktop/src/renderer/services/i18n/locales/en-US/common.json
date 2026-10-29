@@ -662,6 +662,7 @@
       "tasks": {
         "title": "My tasks",
         "subtitle": "Tasks you taught the bot. Ask for them in the chat or pick them with /.",
+        "teach": "Teach a task",
         "emptyTitle": "No tasks yet",
         "emptyHint": "Open the bot's browser and click Teach. Do the task once and the bot learns it.",
         "delete": "Delete",

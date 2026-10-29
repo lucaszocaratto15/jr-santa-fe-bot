@@ -27,6 +27,7 @@ const TeachChatButton: React.FC = () => {
       type='secondary'
       shape='round'
       size='small'
+      className='jr-teach-chat-btn'
       icon={<Record theme='outline' size={14} />}
       onClick={() => {
         openBrowserTab();

@@ -1,13 +1,14 @@
 import { ipcBridge } from '@/common';
 import type { ICronJob } from '@/common/adapter/ipcBridge';
 import { Button, Dropdown, Menu, Message, Modal, Tooltip } from '@arco-design/web-react';
-import { AlarmClock, Edit, MagicWand, More, PlayOne } from '@icon-park/react';
+import { AlarmClock, Edit, MagicWand, More, PlayOne, Plus } from '@icon-park/react';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import useSWR from 'swr';
 import { listJrBots, providersForNewConversation, selectJrModel, startJrConversation } from '@renderer/pages/Jr/jrBots';
 import CreateTaskDialog, { type CronTaskPrefill } from '@renderer/pages/cron/ScheduledTasksPage/CreateTaskDialog';
+import { queueConversationIntent } from '@renderer/pages/conversation/Preview/browser/TeachCards/teachStore';
 import styles from '../JrSidebar.module.css';
 import EditTaskModal from './EditTaskModal';
 import { EmptyState, PageHeader, SkeletonRows } from './PanelParts';
@@ -107,6 +108,23 @@ const TasksPanel: React.FC<TasksPanelProps> = ({ onClose }) => {
     }
   };
 
+  /** "Ensinar tarefa": a new conversation of the active bot with its browser open and the describe card up. */
+  const teach = async () => {
+    try {
+      const bot = pickRunBot(await listJrBots(), params.get('bot'));
+      if (!bot) {
+        Message.warning(t('common.jr.teach.tasks.noBot'));
+        return;
+      }
+      onClose?.();
+      const conversation = await startJrConversation(bot, { newConversation: true });
+      queueConversationIntent(conversation.id, { openBrowser: true, describe: '' });
+      void navigate(`/conversation/${conversation.id}?bot=${encodeURIComponent(bot.id)}`);
+    } catch {
+      Message.error(t('common.jr.teach.tasks.runFailed'));
+    }
+  };
+
   const schedule = async (task: TaughtTaskSummary) => {
     if (preparing) return;
     setPreparing(task.name);
@@ -162,7 +180,20 @@ const TasksPanel: React.FC<TasksPanelProps> = ({ onClose }) => {
 
   return (
     <div>
-      <PageHeader title={t('common.jr.teach.tasks.title')} subtitle={t('common.jr.teach.tasks.subtitle')} />
+      <PageHeader
+        title={t('common.jr.teach.tasks.title')}
+        subtitle={t('common.jr.teach.tasks.subtitle')}
+        aside={
+          <Button
+            type='primary'
+            shape='round'
+            icon={<Plus theme='outline' size={14} fill='currentColor' />}
+            onClick={() => void teach()}
+          >
+            {t('common.jr.teach.tasks.teach')}
+          </Button>
+        }
+      />
       <div className={`${styles.card} ${styles.cardList}`}>
         {!skills.data && !skills.error && <SkeletonRows />}
         {skills.error && <p className={styles.muted}>{t('common.jr.teach.tasks.loadFailed')}</p>}
@@ -171,6 +202,16 @@ const TasksPanel: React.FC<TasksPanelProps> = ({ onClose }) => {
             icon={<MagicWand theme='outline' size={18} />}
             title={t('common.jr.teach.tasks.emptyTitle')}
             hint={t('common.jr.teach.tasks.emptyHint')}
+            action={
+              <Button
+                className={styles.softButton}
+                shape='round'
+                icon={<Plus theme='outline' size={14} />}
+                onClick={() => void teach()}
+              >
+                {t('common.jr.teach.tasks.teach')}
+              </Button>
+            }
           />
         )}
         {tasks.map((task) => {

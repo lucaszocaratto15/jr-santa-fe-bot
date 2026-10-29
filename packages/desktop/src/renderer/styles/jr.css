@@ -160,8 +160,9 @@ body[arco-theme='dark'] {
   display: none;
 }
 .jr-chat-bot-title {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
+  letter-spacing: -0.01em;
   line-height: 20px;
   color: var(--color-text-1);
 }
@@ -241,8 +242,8 @@ body[arco-theme='dark'] {
   max-width: none;
 }
 .app-shell .jr-sider-brandline .jr-brand-logo {
-  height: 36px !important;
-  width: 52px !important;
+  height: 30px !important;
+  width: 44px !important;
   max-width: none !important;
   max-height: none !important;
 }
@@ -278,15 +279,16 @@ body[arco-theme='dark'] {
   display: grid;
   grid-template-columns: minmax(40px, 1fr) auto minmax(40px, 1fr);
   align-items: center;
-  min-height: 56px;
-  padding: 0 12px !important;
+  min-height: 52px;
+  padding: 0 20px !important;
+  border-bottom: 1px solid var(--jr-hairline);
   overflow: visible;
   contain: none;
   background: transparent !important;
 }
 .app-shell .chat-layout-header:has(.jr-chat-bot-title) > .chat-layout-header__title {
-  grid-column: 2;
-  justify-self: center;
+  grid-column: 1 / span 2;
+  justify-self: start;
   flex: none;
   width: auto;
   min-width: 0;
@@ -318,14 +320,14 @@ body[arco-theme='dark'] {
 .jr-chat-bot-mark {
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   flex-shrink: 0;
 }
 .jr-chat-bot-mark img {
   display: block;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   box-shadow: none;
 }
 .jr-brand-symbol {
@@ -360,14 +362,19 @@ body[arco-theme='dark'] {
   background: var(--jr-user-bubble) !important;
   color: var(--color-text-1) !important;
   border-radius: 18px !important;
-  padding: 10px 14px !important;
+  padding: 10px 16px !important;
+  font-size: 14px;
+  line-height: 22px;
 }
+/* Assistant replies read as plain text on the chat surface, no bubble. */
 .jr-bubble-assistant {
   width: 100%;
-  background: var(--jr-assistant-bubble);
+  background: transparent;
   color: var(--color-text-1);
-  border-radius: 18px;
-  padding: 14px 16px;
+  border-radius: 0;
+  padding: 2px 0;
+  font-size: 14px;
+  line-height: 24px;
 }
 .jr-message-in {
   animation: jr-message-in 180ms ease-out;
@@ -385,8 +392,11 @@ body[arco-theme='dark'] {
   flex-shrink: 0;
 }
 .app-shell .sendbox-panel {
+  border-width: 1px !important;
+  border-color: var(--jr-hairline) !important;
   border-radius: 24px;
-  background: var(--jr-surface-2);
+  background: var(--jr-surface);
+  box-shadow: var(--jr-composer-shadow);
 }
 .app-shell .sendbox-panel:focus-within {
   border-color: var(--jr-accent) !important;
@@ -563,4 +573,25 @@ body:not([arco-theme='dark']) .jr-bubble-assistant {
   .jr-message-in {
     animation: none;
   }
+}
+
+/* "Ensinar" next to the composer: a soft pill. */
+.app-shell .jr-teach-chat-btn.arco-btn {
+  height: 32px;
+  padding: 0 12px;
+  gap: 6px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--color-text-1);
+  font-size: 13px;
+  font-weight: 500;
+}
+.app-shell .jr-teach-chat-btn.arco-btn:hover {
+  background: var(--bg-active);
+}
+.app-shell .jr-teach-chat-btn.arco-btn .arco-btn-icon,
+.app-shell .jr-teach-chat-btn.arco-btn .i-icon {
+  display: inline-flex;
+  margin: 0;
 }

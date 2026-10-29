@@ -84,7 +84,7 @@ const VaultPanel: React.FC = () => {
             <Button
               type='primary'
               shape='round'
-              icon={<Plus theme='outline' size={14} />}
+              icon={<Plus theme='outline' size={14} fill='currentColor' />}
               onClick={() => setDraft({ ...emptyDraft })}
             >
               {t('common.jr.vault.add')}

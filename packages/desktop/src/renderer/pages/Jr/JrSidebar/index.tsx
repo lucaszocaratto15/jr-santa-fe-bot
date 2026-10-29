@@ -13,7 +13,7 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { LinkOne, Peoples, Plus, Search } from '@icon-park/react';
+import { LinkOne, Peoples, Plus, Pushpin, Search } from '@icon-park/react';
 import { useAuth } from '@renderer/hooks/context/AuthContext';
 import { loadLatestConversationMessages } from '@renderer/utils/chat/messagePagination';
 import React, { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
@@ -99,7 +99,7 @@ const BotRow: React.FC<{
         onClick={onOpen}
       >
         <span className={styles.avatar}>
-          <JrCharacter appearance={bot.appearance} size={48} />
+          <JrCharacter appearance={bot.appearance} size={40} />
         </span>
         <span className={styles.botCopy}>
           <span className={styles.botName}>{bot.name}</span>
@@ -125,6 +125,12 @@ const PinZone: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       className={`${styles.pinned} ${isOver ? styles.pinOver : ''}`}
       aria-label={t('common.jr.look.pinnedBots')}
     >
+      {!empty && (
+        <p className={styles.pinnedLabel}>
+          <Pushpin size={11} />
+          {t('common.jr.look.pinnedBots')}
+        </p>
+      )}
       {children}
       {active && empty ? <div className={styles.pinDrop} /> : null}
     </div>
@@ -274,7 +280,7 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
       />
       <Button
         type='text'
-        className={styles.iconButton}
+        className={`${styles.iconButton} ${styles.softIcon}`}
         aria-label={t('common.jr.newBot')}
         icon={<Plus size={18} />}
         onClick={() => open('/guid?create=1')}

@@ -858,6 +858,7 @@ export type I18nKey =
   | 'common.jr.teach.tasks.scheduleFailed'
   | 'common.jr.teach.tasks.scheduledPrompt'
   | 'common.jr.teach.tasks.subtitle'
+  | 'common.jr.teach.tasks.teach'
   | 'common.jr.teach.tasks.title'
   | 'common.jr.teamBots'
   | 'common.jr.teamChat'
