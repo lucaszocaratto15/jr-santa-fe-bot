@@ -22,7 +22,7 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
-function setup(initial: JrStoredSession | null = null) {
+function setup(initial: JrStoredSession | null = null, onOwnerChange?: () => Promise<void>) {
   let data = initial;
   const store = {
     read: vi.fn(async () => data),
@@ -40,7 +40,7 @@ function setup(initial: JrStoredSession | null = null) {
   const configureCore = vi.fn(async () => {});
   const stopCore = vi.fn(async () => {});
   const onChange = vi.fn();
-  const controller = new JrAccessController({ url, store, request, configureCore, stopCore, onChange });
+  const controller = new JrAccessController({ url, store, request, configureCore, stopCore, onChange, onOwnerChange });
   return { controller, store, request, configureCore, stopCore, onChange };
 }
 
@@ -680,5 +680,75 @@ describe('stage 1 client states and admin calls', () => {
     await expect(controller.disconnectDevice({ employeeId: '../x', deviceId: 'device-12345' })).rejects.toThrow(
       'JR_ACCESS_INVALID_EMPLOYEE'
     );
+  });
+});
+
+describe('PC handover to a new employee', () => {
+  const next = { ...user, id: 'employee-2', name: 'Bia' };
+  const unboundPrior = { ...stored, token: null };
+
+  it('handover login wipes before persisting the new owner', async () => {
+    const order: string[] = [];
+    const onOwnerChange = vi.fn(async () => {
+      order.push('wipe');
+    });
+    const { controller, request, store, configureCore } = setup(unboundPrior, onOwnerChange);
+    await controller.initialize();
+    store.write.mockImplementation(async (value: JrStoredSession) => {
+      order.push(`write:${value.ownerId}`);
+    });
+    configureCore.mockImplementation(async () => {
+      order.push('configure');
+    });
+    request.mockResolvedValueOnce(Response.json({ token, user: next, handover: true }));
+    await controller.login({ code: 'a-company-invite' });
+    expect(onOwnerChange).toHaveBeenCalledOnce();
+    expect(order).toEqual(['wipe', 'write:employee-2', 'configure']);
+    expect(controller.state).toEqual({ status: 'authenticated', user: next });
+    expect(JSON.parse(String(request.mock.calls[0][1]?.body)).employeeId).toBe('employee-1');
+  });
+
+  it('handover wipe failure keeps the old binding and logs the token out', async () => {
+    const onOwnerChange = vi.fn(async () => {
+      throw new Error('EBUSY');
+    });
+    const { controller, request, store, configureCore } = setup(unboundPrior, onOwnerChange);
+    await controller.initialize();
+    request.mockResolvedValueOnce(Response.json({ token, user: next, handover: true }));
+    await expect(controller.login({ code: 'a-company-invite' })).rejects.toThrow('JR_ACCESS_HANDOVER_FAILED');
+    expect(store.write.mock.calls.some(([value]) => value.ownerId === 'employee-2')).toBe(false);
+    expect(configureCore).not.toHaveBeenCalled();
+    const logout = request.mock.calls.find(([input]) => String(input).endsWith('/auth/logout'));
+    expect(logout?.[1]?.method).toBe('POST');
+    expect(new Headers(logout?.[1]?.headers).get('Authorization')).toBe(`Bearer ${token}`);
+    expect(controller.state.status).toBe('signed-out');
+  });
+
+  it('handover without a wipe handler fails closed', async () => {
+    const { controller, request, store } = setup(unboundPrior);
+    await controller.initialize();
+    request.mockResolvedValueOnce(Response.json({ token, user: next, handover: true }));
+    await expect(controller.login({ code: 'a-company-invite' })).rejects.toThrow('JR_ACCESS_HANDOVER_FAILED');
+    expect(store.write.mock.calls.some(([value]) => value.ownerId === 'employee-2')).toBe(false);
+  });
+
+  it('different owner without handover flag is still refused', async () => {
+    const onOwnerChange = vi.fn(async () => {});
+    const { controller, request, store } = setup(unboundPrior, onOwnerChange);
+    await controller.initialize();
+    request.mockResolvedValueOnce(Response.json({ token, user: next }));
+    await expect(controller.login({ code: 'a-company-invite' })).rejects.toThrow('JR_ACCESS_DEVICE_BOUND');
+    expect(onOwnerChange).not.toHaveBeenCalled();
+    expect(store.write.mock.calls.some(([value]) => value.ownerId === 'employee-2')).toBe(false);
+  });
+
+  it('a handover flag for the same owner does not wipe', async () => {
+    const onOwnerChange = vi.fn(async () => {});
+    const { controller, request } = setup(unboundPrior, onOwnerChange);
+    await controller.initialize();
+    request.mockResolvedValueOnce(Response.json({ token, user, handover: true }));
+    await controller.login({ code: 'a-company-invite' });
+    expect(onOwnerChange).not.toHaveBeenCalled();
+    expect(controller.state.status).toBe('authenticated');
   });
 });

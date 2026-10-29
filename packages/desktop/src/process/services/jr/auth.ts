@@ -517,9 +517,21 @@ export class JrAccessController {
       const user = parseUser(record(value) ? value.user : null);
       if (!record(value) || !validToken(value.token)) return fail('JR_ACCESS_INVALID_RESPONSE');
       acceptedToken = value.token;
-      if (prior.ownerId && prior.ownerId !== user.id) return fail('JR_ACCESS_DEVICE_BOUND');
+      // A PC passes to a new employee only when the server confirms the saved owner was revoked.
+      const ownerChanged = Boolean(prior.ownerId && prior.ownerId !== user.id);
+      if (ownerChanged && value.handover !== true) return fail('JR_ACCESS_DEVICE_BOUND');
       const model = await this.verifyModel(acceptedToken);
       if (epoch !== this.generation) return fail('JR_ACCESS_BUSY');
+      if (ownerChanged) {
+        // Fail closed: the previous employee's local data must be gone before the new owner is saved.
+        try {
+          if (!this.options.onOwnerChange) return fail('JR_ACCESS_HANDOVER_FAILED');
+          await this.options.onOwnerChange();
+        } catch {
+          return fail('JR_ACCESS_HANDOVER_FAILED');
+        }
+        if (epoch !== this.generation) return fail('JR_ACCESS_BUSY');
+      }
       const next = { ...prior, ownerId: user.id, token: acceptedToken };
       await this.persist(next);
       if (epoch !== this.generation) return fail('JR_ACCESS_BUSY');
@@ -536,6 +548,7 @@ export class JrAccessController {
       const publicCodes = new Set([
         'JR_ACCESS_BUSY',
         'JR_ACCESS_DEVICE_BOUND',
+        'JR_ACCESS_HANDOVER_FAILED',
         'JR_ACCESS_INVALID_CODE',
         'JR_ACCESS_INVALID_RESPONSE',
         'JR_ACCESS_INVALID_MODEL',
