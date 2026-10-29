@@ -52,13 +52,13 @@ describe('uniqueFileName', () => {
     expect(uniqueFileName('/d', 'relatorio.pdf', () => false)).toBe('relatorio.pdf');
   });
   it('adds a counter before the extension', () => {
-    const taken = new Set(['/d/relatorio.pdf']);
+    const taken = new Set([path.join('/d', 'relatorio.pdf')]);
     expect(uniqueFileName('/d', 'relatorio.pdf', (p) => taken.has(p))).toBe('relatorio (1).pdf');
-    taken.add('/d/relatorio (1).pdf');
+    taken.add(path.join('/d', 'relatorio (1).pdf'));
     expect(uniqueFileName('/d', 'relatorio.pdf', (p) => taken.has(p))).toBe('relatorio (2).pdf');
   });
   it('handles names without extension', () => {
-    expect(uniqueFileName('/d', 'dados', (p) => p === '/d/dados')).toBe('dados (1)');
+    expect(uniqueFileName('/d', 'dados', (p) => p === path.join('/d', 'dados'))).toBe('dados (1)');
   });
 });
 
