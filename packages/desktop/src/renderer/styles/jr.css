@@ -136,6 +136,14 @@ body[arco-theme='dark'] {
 .app-shell .chat-layout-header:has(.jr-chat-bot-title) > .chat-layout-header__extra {
   margin-inline-end: 72px;
 }
+/* The header comes after the titlebar in the DOM, so its drag region would swallow the
+   titlebar buttons above it. Only the title column drags the window. */
+.app-shell .chat-layout-header:has(.jr-chat-bot-title) {
+  -webkit-app-region: no-drag;
+}
+.app-shell .chat-layout-header:has(.jr-chat-bot-title) > .chat-layout-header__title {
+  -webkit-app-region: drag;
+}
 .app-shell .layout-sider > .arco-layout-sider-children {
   overflow: hidden;
 }

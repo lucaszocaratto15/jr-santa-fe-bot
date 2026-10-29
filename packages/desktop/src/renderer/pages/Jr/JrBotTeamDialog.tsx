@@ -125,7 +125,7 @@ const JrBotTeamDialog: React.FC<{
                 >
                   {selected && (
                     <span className={styles.teamChoiceCheck} aria-hidden='true'>
-                      <Check size={10} />
+                      <Check size={10} fill='currentColor' strokeWidth={5} />
                     </span>
                   )}
                   <JrCharacter appearance={bot.appearance} size={36} still />

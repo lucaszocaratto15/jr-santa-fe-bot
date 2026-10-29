@@ -5,6 +5,7 @@
  */
 
 import React, { useEffect } from 'react';
+import { CHAT_SURFACE_WIDTH_CLASS } from '@renderer/pages/conversation/utils/chatSurfaceWidth';
 import { useOptionalPreviewContext } from '../../context/PreviewContext';
 import { TeachRecordingBar } from '../TeachControls';
 import DescribeCard from './DescribeCard';
@@ -58,30 +59,35 @@ const TeachCardHost: React.FC<TeachCardHostProps> = ({ conversationId }) => {
     if (intent.describe !== undefined) openDescribe(intent.describe);
   }, [conversationId, openBrowserTab, intentsVersion]);
 
-  const current = requests[0];
-  if (current) {
-    return <SecureCard key={current.id} request={current} onDone={() => dismissSecureRequest(current.id)} />;
-  }
-  const ours = teach.conversationId === null || teach.conversationId === conversationId;
-  if (ours && teach.phase === 'describing') return <DescribeCard />;
-  // Timer and controls also sit in the chat that started the recording.
-  if (teach.conversationId === conversationId && RECORDING_PHASES.has(teach.phase)) return <TeachRecordingBar inChat />;
-  if (ours && teach.phase === 'generating') return <GeneratingCard />;
-  if (ours && teach.phase === 'review' && teach.draft) {
-    return <ReviewCard key={teach.draft.markdown} event={teach.draft} prompt={teach.prompt} />;
-  }
-  // The handbook card waits behind a secure request and the teach cards.
-  if (handbook) {
-    return (
-      <HandbookCard
-        key={`${handbook.roleKey ?? ''}:${handbook.activityId}`}
-        activityId={handbook.activityId}
-        roleKey={handbook.roleKey}
-        onClose={() => closeHandbookCard(conversationId)}
-      />
-    );
-  }
-  return null;
+  const card = ((): React.ReactNode => {
+    const current = requests[0];
+    if (current) {
+      return <SecureCard key={current.id} request={current} onDone={() => dismissSecureRequest(current.id)} />;
+    }
+    const ours = teach.conversationId === null || teach.conversationId === conversationId;
+    if (ours && teach.phase === 'describing') return <DescribeCard />;
+    // Timer and controls also sit in the chat that started the recording.
+    if (teach.conversationId === conversationId && RECORDING_PHASES.has(teach.phase))
+      return <TeachRecordingBar inChat />;
+    if (ours && teach.phase === 'generating') return <GeneratingCard />;
+    if (ours && teach.phase === 'review' && teach.draft) {
+      return <ReviewCard key={teach.draft.markdown} event={teach.draft} prompt={teach.prompt} />;
+    }
+    // The handbook card waits behind a secure request and the teach cards.
+    if (handbook) {
+      return (
+        <HandbookCard
+          key={`${handbook.roleKey ?? ''}:${handbook.activityId}`}
+          activityId={handbook.activityId}
+          roleKey={handbook.roleKey}
+          onClose={() => closeHandbookCard(conversationId)}
+        />
+      );
+    }
+    return null;
+  })();
+  // Same column as the composer below it.
+  return card ? <div className={CHAT_SURFACE_WIDTH_CLASS}>{card}</div> : null;
 };
 
 export default TeachCardHost;

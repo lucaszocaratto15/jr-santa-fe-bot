@@ -492,7 +492,7 @@
   width: 100%;
   display: flex;
   justify-content: flex-start;
-  gap: 8px;
+  gap: 6px;
   padding: 8px 0;
   flex-wrap: wrap;
 }
@@ -523,6 +523,9 @@
 .colorChoice:focus-visible {
   outline: 2px solid var(--color-primary-6);
   outline-offset: 2px;
+}
+.characterDialog:global(.arco-modal) {
+  width: min(520px, calc(100vw - 32px));
 }
 .characterDialog :global(.arco-modal-header) {
   position: relative;
@@ -648,6 +651,9 @@
   border: 1px solid var(--jr-hairline);
   border-radius: 12px;
   color: var(--color-text-1);
+}
+.teamChoice:global(.arco-btn):not(.teamChoiceOn) {
+  background: transparent;
 }
 .teamChoice:global(.arco-btn):hover {
   background: var(--bg-hover);
