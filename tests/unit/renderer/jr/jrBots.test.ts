@@ -459,6 +459,25 @@ describe('JR bot conversations', () => {
     expect(mocks.removeConversation).not.toHaveBeenCalled();
   });
 
+  it('starts a fresh chat without re-binding the bot when bind is false', async () => {
+    let stored: Record<string, unknown> = {
+      [bot.id]: { workspace: bot.workspace, conversationId: conversation.id },
+    };
+    mocks.readSetting.mockImplementation(async () => stored);
+    mocks.writeSetting.mockImplementation(async (_key: string, value: Record<string, unknown>) => {
+      stored = value;
+    });
+    mocks.getConversation.mockResolvedValue(conversation);
+    await expect(startJrConversation(bot, { newConversation: true, bind: false })).resolves.toEqual({
+      id: 'real-conversation',
+    });
+    expect(mocks.conversation).toHaveBeenCalledTimes(1);
+    expect(mocks.writeSetting).not.toHaveBeenCalledWith('jr.botWorkspaces', expect.anything());
+    // The next sidebar open still lands in the employee's own chat.
+    expect(await startJrConversation(bot)).toEqual(conversation);
+    expect(mocks.conversation).toHaveBeenCalledTimes(1);
+  });
+
   it('reuses a bound conversation that is missing skills or Chrome without patching it', async () => {
     const chrome = {
       id: 'chrome-jr-1',

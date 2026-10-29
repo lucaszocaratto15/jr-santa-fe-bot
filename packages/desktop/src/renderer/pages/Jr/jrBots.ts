@@ -462,17 +462,25 @@ function reuseStoredConversation(conversation: TChatConversation): TChatConversa
 const openingConversations = new Map<string, Promise<TChatConversation>>();
 let conversationQueue: Promise<unknown> = Promise.resolve();
 
-/** Open the bot's durable conversation, coalescing concurrent navigation requests. */
+/**
+ * Open the bot's durable conversation, coalescing concurrent navigation requests.
+ * `newConversation` starts a fresh chat; it becomes the bot's bound chat unless `bind` is
+ * false (a chat created for one purpose, such as a scheduled task, must not replace the
+ * employee's own chat). `bind` only applies to new conversations.
+ */
 export function startJrConversation(
   bot: JrBot,
-  options: { newConversation?: boolean } = {}
+  options: { newConversation?: boolean; bind?: boolean } = {}
 ): Promise<TChatConversation> {
   const newConversation = options.newConversation === true;
-  const openingKey = newConversation ? `${bot.id}:new` : bot.id;
+  const bindNew = options.bind !== false;
+  const openingKey = newConversation ? `${bot.id}:new${bindNew ? '' : ':unbound'}` : bot.id;
   const pending = openingConversations.get(openingKey);
   if (pending) return pending;
   // Serialize whole-map writes so opening different bots cannot discard each other's bindings.
-  const operation = conversationQueue.then(() => resolveJrConversation(bot, newConversation));
+  const operation = conversationQueue.then(() =>
+    resolveJrConversation(bot, newConversation, newConversation ? bindNew : true)
+  );
   conversationQueue = operation.catch((): undefined => undefined);
   openingConversations.set(openingKey, operation);
   void operation.then(
@@ -482,7 +490,11 @@ export function startJrConversation(
   return operation;
 }
 
-async function resolveJrConversation(bot: JrBot, newConversation: boolean): Promise<TChatConversation> {
+async function resolveJrConversation(
+  bot: JrBot,
+  newConversation: boolean,
+  bindCreated: boolean
+): Promise<TChatConversation> {
   if (validateJrBot(bot) === 'instructions') bot = { ...bot, instructions: JR_DEFAULT_INSTRUCTIONS };
   if (validateJrBot(bot)) throw new Error('Bot configuration is incomplete');
   await ipcBridge.jr.configureWorkspace.invoke({ workspace: bot.workspace });
@@ -572,5 +584,5 @@ async function resolveJrConversation(bot: JrBot, newConversation: boolean): Prom
   } catch {
     // Navigation must continue when optional layout preferences cannot be stored.
   }
-  return bind(conversation);
+  return bindCreated ? bind(conversation) : conversation;
 }

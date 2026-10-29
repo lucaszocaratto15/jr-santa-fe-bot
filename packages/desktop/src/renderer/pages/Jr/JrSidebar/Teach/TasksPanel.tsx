@@ -6,7 +6,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import useSWR from 'swr';
-import { JR_BOTS_KEY } from '@renderer/pages/Jr/index';
 import { listJrBots, providersForNewConversation, selectJrModel, startJrConversation } from '@renderer/pages/Jr/jrBots';
 import CreateTaskDialog, { type CronTaskPrefill } from '@renderer/pages/cron/ScheduledTasksPage/CreateTaskDialog';
 import styles from '../JrSidebar.module.css';
@@ -40,7 +39,6 @@ const TasksPanel: React.FC<TasksPanelProps> = ({ onClose }) => {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const skills = useSWR('jr.teach.tasks', () => ipcBridge.fs.listAvailableSkills.invoke());
-  const bots = useSWR(JR_BOTS_KEY, listJrBots);
   const jobs = useSWR(JOBS_KEY, () => ipcBridge.cron.listJobs.invoke());
   const [running, setRunning] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
@@ -51,6 +49,13 @@ const TasksPanel: React.FC<TasksPanelProps> = ({ onClose }) => {
   const tasks = (skills.data ?? []).filter((skill) => skill.name.startsWith(TAUGHT_SKILL_PREFIX));
   const jobsBySkill = useMemo(() => taughtJobsBySkill(jobs.data ?? []), [jobs.data]);
   const refreshJobs = jobs.mutate;
+
+  /** The taught jobs as the backend has them now; rejects when the list cannot be read. */
+  const freshJobsBySkill = async (): Promise<Map<string, ICronJob[]>> => {
+    const latest = await ipcBridge.cron.listJobs.invoke();
+    void refreshJobs(latest, { revalidate: false });
+    return taughtJobsBySkill(latest);
+  };
 
   useEffect(() => {
     const refresh = (): void => {
@@ -67,10 +72,10 @@ const TasksPanel: React.FC<TasksPanelProps> = ({ onClose }) => {
   const remove = async (name: string) => {
     setRemoving(true);
     try {
-      // Jobs first: a job left behind would run a skill that no longer exists.
-      await Promise.all(
-        (jobsBySkill.get(name) ?? []).map((job) => ipcBridge.cron.removeJob.invoke({ job_id: job.id }))
-      );
+      // Jobs first: a job left behind would run a skill that no longer exists. A fresh list,
+      // because the panel's copy may still be loading or may have failed to load.
+      const taskJobs = (await freshJobsBySkill()).get(name) ?? [];
+      await Promise.all(taskJobs.map((job) => ipcBridge.cron.removeJob.invoke({ job_id: job.id })));
       await ipcBridge.fs.deleteSkill.invoke({ skill_name: name });
       setDeleting(null);
       await Promise.all([skills.mutate(), refreshJobs()]);
@@ -85,14 +90,14 @@ const TasksPanel: React.FC<TasksPanelProps> = ({ onClose }) => {
 
   const run = async (task: TaughtTaskSummary) => {
     if (running) return;
-    const bot = pickRunBot(bots.data ?? [], params.get('bot'));
-    if (!bot) {
-      Message.warning(t('common.jr.teach.tasks.noBot'));
-      return;
-    }
     setRunning(task.name);
-    onClose?.();
     try {
+      const bot = pickRunBot(await listJrBots(), params.get('bot'));
+      if (!bot) {
+        Message.warning(t('common.jr.teach.tasks.noBot'));
+        return;
+      }
+      onClose?.();
       await runTaughtTask({ bot, prompt: buildRunPrompt(t, task, 'now'), navigate: (path) => void navigate(path) });
     } catch {
       Message.error(t('common.jr.teach.tasks.runFailed'));
@@ -102,14 +107,15 @@ const TasksPanel: React.FC<TasksPanelProps> = ({ onClose }) => {
   };
 
   const schedule = async (task: TaughtTaskSummary) => {
-    const existing = jobsBySkill.get(task.name)?.[0];
-    if (existing) {
-      setScheduling({ job: existing });
-      return;
-    }
     if (preparing) return;
     setPreparing(task.name);
     try {
+      // A fresh list: a job missed while the panel's copy loads would become a duplicate.
+      const existing = (await freshJobsBySkill()).get(task.name)?.[0];
+      if (existing) {
+        setScheduling({ job: existing });
+        return;
+      }
       // Fresh list: loading bots re-syncs their fixed skill defaults to include this task.
       const bot = pickRunBot(await listJrBots(), params.get('bot'));
       if (!bot) {
@@ -132,7 +138,8 @@ const TasksPanel: React.FC<TasksPanelProps> = ({ onClose }) => {
           time: DEFAULT_TIME,
           executionMode: 'existing',
           resolveConversation: () =>
-            startJrConversation(bot, { newConversation: true }).then((conversation) => ({
+            // bind: false keeps the employee's own chat as the bot's sidebar conversation.
+            startJrConversation(bot, { newConversation: true, bind: false }).then((conversation) => ({
               id: conversation.id,
               title: conversation.name,
             })),
@@ -206,7 +213,13 @@ const TasksPanel: React.FC<TasksPanelProps> = ({ onClose }) => {
                   trigger='click'
                   position='br'
                   droplist={
-                    <Menu onClickMenuItem={() => setDeleting(task.name)}>
+                    <Menu
+                      onClickMenuItem={() => {
+                        setDeleting(task.name);
+                        // The confirmation names the schedules; make sure it reads a current list.
+                        void refreshJobs();
+                      }}
+                    >
                       <Menu.Item key='delete'>{t('common.jr.teach.tasks.delete')}</Menu.Item>
                     </Menu>
                   }

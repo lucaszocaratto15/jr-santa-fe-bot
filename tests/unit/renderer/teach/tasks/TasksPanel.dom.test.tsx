@@ -144,9 +144,9 @@ describe('TasksPanel', () => {
     const onClose = vi.fn();
     renderPanel(onClose);
     await screen.findByText('jr-tarefa-nfs');
-    await waitFor(() => expect(listJrBots).toHaveBeenCalled());
     fireEvent.click(screen.getByRole('button', { name: /common.jr.teach.tasks.run$/ }));
     await waitFor(() => expect(Message.warning).toHaveBeenCalledWith('common.jr.teach.tasks.noBot'));
+    expect(listJrBots).toHaveBeenCalledTimes(1);
     expect(startJrConversation).not.toHaveBeenCalled();
     expect(navigate).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
@@ -161,15 +161,28 @@ describe('TasksPanel', () => {
     const onClose = vi.fn();
     renderPanel(onClose);
     await screen.findByText('jr-tarefa-nfs');
-    await waitFor(() => expect(listJrBots).toHaveBeenCalled());
-    await waitFor(() => {
-      fireEvent.click(screen.getByRole('button', { name: /common.jr.teach.tasks.run$/ }));
-      expect(startJrConversation).toHaveBeenCalled();
-    });
+    fireEvent.click(screen.getByRole('button', { name: /common.jr.teach.tasks.run$/ }));
+    await waitFor(() => expect(startJrConversation).toHaveBeenCalled());
     expect(onClose).toHaveBeenCalled();
     expect(startJrConversation.mock.calls[0][0]).toMatchObject({ id: 'b2' });
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/conversation/c9?bot=b2'));
     expect(sessionStorage.getItem('aionrs_initial_message_c9')).toContain('`jr-tarefa-nfs`');
+  });
+
+  it('Executar waits for the bot list instead of reporting noBot while it loads', async () => {
+    let resolveBots: (bots: unknown[]) => void = () => {};
+    const bots = new Promise((resolve) => {
+      resolveBots = resolve;
+    });
+    listJrBots.mockReturnValue(bots);
+    startJrConversation.mockResolvedValue({ id: 'c9', name: 'B2' });
+    renderPanel();
+    await screen.findByText('jr-tarefa-nfs');
+    fireEvent.click(screen.getByRole('button', { name: /common.jr.teach.tasks.run$/ }));
+    resolveBots([{ id: 'b2', name: 'B2', instructions: 'x', workspace: '/w' }]);
+    await waitFor(() => expect(startJrConversation).toHaveBeenCalled());
+    expect(Message.warning).not.toHaveBeenCalled();
+    expect(startJrConversation.mock.calls[0][0]).toMatchObject({ id: 'b2' });
   });
 
   it('Executar shows runFailed when the conversation cannot be opened', async () => {
@@ -206,7 +219,7 @@ describe('TasksPanel', () => {
     await screen.findByText('Dias úteis às 09:00');
     fireEvent.click(screen.getByRole('button', { name: /common.jr.teach.tasks.schedule$/ }));
     expect(await screen.findByTestId('cron-dialog')).toHaveTextContent('edit:j1');
-    expect(listJrBots).toHaveBeenCalledTimes(1);
+    expect(listJrBots).not.toHaveBeenCalled();
   });
 
   it('Agendar prefills a new job for the bot open in the sidebar, weekdays at 09:00', async () => {
@@ -230,7 +243,37 @@ describe('TasksPanel', () => {
     expect(prefill?.prompt).toContain('common.jr.teach.tasks.scheduledPrompt|`jr-tarefa-nfs`');
     expect(startJrConversation).not.toHaveBeenCalled();
     expect(await prefill?.resolveConversation()).toEqual({ id: 'c7', title: 'B2' });
-    expect(startJrConversation).toHaveBeenCalledWith(expect.objectContaining({ id: 'b2' }), { newConversation: true });
+    // The dedicated conversation must not replace the bot's own chat binding.
+    expect(startJrConversation).toHaveBeenCalledWith(expect.objectContaining({ id: 'b2' }), {
+      newConversation: true,
+      bind: false,
+    });
+  });
+
+  it('Agendar waits for the jobs list and opens edit mode instead of a duplicate', async () => {
+    let resolveJobs: (jobs: unknown[]) => void = () => {};
+    listJobs.mockReturnValue(
+      new Promise((resolve) => {
+        resolveJobs = resolve;
+      })
+    );
+    renderPanel();
+    await screen.findByText('jr-tarefa-nfs');
+    fireEvent.click(screen.getByRole('button', { name: /common.jr.teach.tasks.schedule$/ }));
+    resolveJobs([taughtJob('j1', 'jr-tarefa-nfs')]);
+    expect(await screen.findByTestId('cron-dialog')).toHaveTextContent('edit:j1');
+    expect(dialogProps.some((props) => props.prefill)).toBe(false);
+  });
+
+  it('Agendar shows scheduleFailed and opens no dialog when the jobs list cannot be read', async () => {
+    listJrBots.mockResolvedValue([{ id: 'b1', name: 'B1', instructions: 'x', workspace: '/w1' }]);
+    providersForNewConversation.mockResolvedValue({ providers: [{ id: 'p1' }] });
+    listJobs.mockRejectedValue(new Error('offline'));
+    renderPanel();
+    await screen.findByText('jr-tarefa-nfs');
+    fireEvent.click(screen.getByRole('button', { name: /common.jr.teach.tasks.schedule$/ }));
+    await waitFor(() => expect(Message.error).toHaveBeenCalledWith('common.jr.teach.tasks.scheduleFailed'));
+    expect(screen.queryByTestId('cron-dialog')).not.toBeInTheDocument();
   });
 
   it('Agendar without the JR model shows scheduleFailed and opens no dialog', async () => {
@@ -273,6 +316,39 @@ describe('TasksPanel', () => {
     removeJob.mockRejectedValue(new Error('offline'));
     renderPanel();
     await screen.findByText('Dias úteis às 09:00');
+    await openDelete();
+    fireEvent.click(await screen.findByRole('button', { name: 'common.jr.teach.tasks.delete' }));
+    await waitFor(() => expect(Message.error).toHaveBeenCalledWith('common.jr.teach.tasks.deleteFailed'));
+    expect(deleteSkill).not.toHaveBeenCalled();
+  });
+
+  it('Excluir removes the jobs even when the list had not loaded when the row was clicked', async () => {
+    let resolveFirst: (jobs: unknown[]) => void = () => {};
+    listJobs
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveFirst = resolve;
+        })
+      )
+      .mockResolvedValue([taughtJob('j1', 'jr-tarefa-nfs')]);
+    removeJob.mockImplementation(async ({ job_id }: { job_id: string }) => {
+      calls.push(`removeJob:${job_id}`);
+    });
+    deleteSkill.mockImplementation(async () => {
+      calls.push('deleteSkill');
+    });
+    renderPanel();
+    await screen.findByText('jr-tarefa-nfs');
+    await openDelete();
+    fireEvent.click(await screen.findByRole('button', { name: 'common.jr.teach.tasks.delete' }));
+    await waitFor(() => expect(calls).toEqual(['removeJob:j1', 'deleteSkill']));
+    resolveFirst([]);
+  });
+
+  it('Excluir keeps the skill when the jobs list cannot be read', async () => {
+    listJobs.mockRejectedValue(new Error('offline'));
+    renderPanel();
+    await screen.findByText('jr-tarefa-nfs');
     await openDelete();
     fireEvent.click(await screen.findByRole('button', { name: 'common.jr.teach.tasks.delete' }));
     await waitFor(() => expect(Message.error).toHaveBeenCalledWith('common.jr.teach.tasks.deleteFailed'));
