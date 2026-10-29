@@ -131,3 +131,43 @@ test('evicted in-flight request is aborted', async (t) => {
   assert.notEqual(result, 'timeout');
   assert.notEqual(result, 200);
 });
+
+async function handoverSetup(t, { revoke, firstDevice = 'pc1' }) {
+  const app = await startControl(t);
+  const admin = (await app.login()).token;
+  const a = await app.invite(admin, 'Funcionário A');
+  const b = await app.invite(admin, 'Funcionário B');
+  const loginOn = async (code, device, employeeId) =>
+    app.request('/auth/login', {
+      method: 'POST',
+      body: { code, deviceId: `device-test-${device}`, deviceName: device, ...(employeeId ? { employeeId } : {}) },
+    });
+  assert.equal((await loginOn(a.code, firstDevice)).status, 200);
+  if (revoke) {
+    assert.equal((await app.request(`/admin/employees/${a.id}/revoke`, { method: 'POST', token: admin })).status, 200);
+  }
+  return { loginOn, a, b };
+}
+
+test('PC passes to a new employee after the old one is revoked', async (t) => {
+  const s = await handoverSetup(t, { revoke: true });
+  const response = await s.loginOn(s.b.code, 'pc1', s.a.id);
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.handover, true);
+  assert.equal(body.user.id, s.b.id);
+});
+
+test('PC still bound while the old owner is active', async (t) => {
+  const s = await handoverSetup(t, { revoke: false });
+  const response = await s.loginOn(s.b.code, 'pc1', s.a.id);
+  assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), { error: { code: 'device_bound_to_other_employee' } });
+});
+
+test('revoked employee who never used this PC cannot be claimed', async (t) => {
+  const s = await handoverSetup(t, { revoke: true, firstDevice: 'pc9' });
+  const response = await s.loginOn(s.b.code, 'pc1', s.a.id);
+  assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), { error: { code: 'device_bound_to_other_employee' } });
+});

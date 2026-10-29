@@ -285,7 +285,15 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
             .get(keyHash(code), timestamp);
         }
         if (!user) throw httpError(401, 'invalid_credentials');
-        if (employeeId && user.id !== employeeId) throw httpError(403, 'device_bound_to_other_employee');
+        let handover = false;
+        if (employeeId && user.id !== employeeId) {
+          const previous = db.prepare('SELECT revoked_at FROM users WHERE id = ?').get(employeeId);
+          const usedDevice =
+            previous?.revoked_at != null &&
+            db.prepare('SELECT 1 FROM sessions WHERE user_id = ? AND device_id = ? LIMIT 1').get(employeeId, deviceId);
+          if (!usedDevice) throw httpError(403, 'device_bound_to_other_employee');
+          handover = true;
+        }
         if (user.blocked_at !== null) throw httpError(403, 'employee_blocked');
         if (!isWithinAccessHours(user.access_start, user.access_end, timestamp))
           throw httpError(403, 'outside_access_hours');
@@ -320,7 +328,7 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
         db.prepare(
           'INSERT INTO sessions (hash,user_id,device_id,device_name,created_at,last_seen_at,expires_at) VALUES (?,?,?,?,?,?,?)'
         ).run(keyHash(token), user.id, deviceId, deviceName, timestamp, timestamp, timestamp + 30 * DAY);
-        return { token, user: publicUser(user), replacedSessions };
+        return { token, user: publicUser(user), replacedSessions, ...(handover ? { handover: true } : {}) };
       });
     },
     session(token) {
