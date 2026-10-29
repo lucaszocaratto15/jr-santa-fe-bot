@@ -54,6 +54,7 @@ export function createControlServer(options = {}) {
   const authenticate = (request) => {
     const match = /^Bearer ([a-zA-Z0-9_-]{43})$/u.exec(request.headers.authorization ?? '');
     const session = match ? store.session(match[1]) : null;
+    if (session?.denied === 'session_replaced') throw httpError(401, 'session_replaced');
     if (!session) throw httpError(401, 'invalid_session');
     if (session.denied === 'employee_blocked') throw httpError(403, 'employee_blocked');
     if (session.denied === 'outside_access_hours') throw httpError(403, 'outside_access_hours');
@@ -76,7 +77,9 @@ export function createControlServer(options = {}) {
             deviceName: textField(body.deviceName, 1, 120),
             ...(body.employeeId === undefined ? {} : { employeeId: textField(body.employeeId, 1, 128) }),
           };
-          return json(response, 200, store.login(login));
+          const { replacedSessions, ...result } = store.login(login);
+          for (const hash of replacedSessions) proxy.revokeSession(hash);
+          return json(response, 200, result);
         }
         const session = authenticate(request);
         if (request.method === 'GET' && path === '/auth/session') return json(response, 200, { user: session.user });
@@ -93,6 +96,12 @@ export function createControlServer(options = {}) {
             const body = await readJson(request, 16_384);
             authenticate(request);
             return json(response, 201, store.invite(textField(body.name, 1, 120), body));
+          }
+          const device =
+            /^\/admin\/employees\/([a-zA-Z0-9-]{1,64})\/devices\/([a-zA-Z0-9_-]{8,128})\/disconnect$/u.exec(path);
+          if (request.method === 'POST' && device) {
+            for (const hash of store.disconnectDevice(device[1], device[2])) proxy.revokeSession(hash);
+            return json(response, 200, { disconnected: true });
           }
           const employee = /^\/admin\/employees\/([a-zA-Z0-9-]{1,64})\/(revoke|invite|block|policy)$/u.exec(path);
           if (request.method === 'POST' && employee) {

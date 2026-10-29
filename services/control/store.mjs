@@ -61,7 +61,9 @@ function validatePolicy(value = {}) {
   ) {
     throw httpError(400, 'invalid_policy');
   }
-  return { tokenLimit, accessStart, accessEnd };
+  const maxDevices = value.maxDevices ?? 1;
+  if (!Number.isSafeInteger(maxDevices) || maxDevices < 1 || maxDevices > 5) throw httpError(400, 'invalid_policy');
+  return { tokenLimit, accessStart, accessEnd, maxDevices };
 }
 
 function isWithinAccessHours(start, end, timestamp) {
@@ -176,6 +178,17 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
   ]) {
     if (!userColumns.has(name)) db.exec(`ALTER TABLE users ADD COLUMN ${name} ${type}`);
   }
+  if (!userColumns.has('max_devices')) {
+    db.exec('ALTER TABLE users ADD COLUMN max_devices INTEGER NOT NULL DEFAULT 1');
+    db.prepare("UPDATE users SET max_devices = 2 WHERE name = 'Bruno Yanes' AND max_devices = 1").run();
+  }
+  const sessionColumns = new Set(
+    db
+      .prepare('PRAGMA table_info(sessions)')
+      .all()
+      .map((column) => column.name)
+  );
+  if (!sessionColumns.has('revoked_reason')) db.exec('ALTER TABLE sessions ADD COLUMN revoked_reason TEXT');
   db.prepare("INSERT OR IGNORE INTO users (id,name,role,created_at) VALUES ('owner',?,'admin',?)").run(
     OWNER_PROFILE_NAME,
     now()
@@ -277,16 +290,46 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
         if (!isWithinAccessHours(user.access_start, user.access_end, timestamp))
           throw httpError(403, 'outside_access_hours');
         if (!isOwner) db.prepare('UPDATE invites SET used_at = ? WHERE hash = ?').run(timestamp, user.invite_hash);
+        const replacedSessions = [];
+        if (!isOwner) {
+          const active = 'user_id = ? AND revoked_at IS NULL AND expires_at > ?';
+          const evictDevice = (device) => {
+            const rows = db
+              .prepare(`SELECT hash FROM sessions WHERE ${active} AND device_id = ?`)
+              .all(user.id, timestamp, device);
+            for (const row of rows) {
+              db.prepare("UPDATE sessions SET revoked_at = ?, revoked_reason = 'replaced' WHERE hash = ?").run(
+                timestamp,
+                row.hash
+              );
+              replacedSessions.push(row.hash);
+            }
+          };
+          evictDevice(deviceId);
+          for (;;) {
+            const devices = db
+              .prepare(
+                `SELECT device_id, MAX(last_seen_at) AS seen FROM sessions WHERE ${active} GROUP BY device_id ORDER BY seen, device_id`
+              )
+              .all(user.id, timestamp);
+            if (devices.length < user.max_devices) break;
+            evictDevice(devices[0].device_id);
+          }
+        }
         const token = randomBytes(32).toString('base64url');
         db.prepare(
           'INSERT INTO sessions (hash,user_id,device_id,device_name,created_at,last_seen_at,expires_at) VALUES (?,?,?,?,?,?,?)'
         ).run(keyHash(token), user.id, deviceId, deviceName, timestamp, timestamp, timestamp + 30 * DAY);
-        return { token, user: publicUser(user) };
+        return { token, user: publicUser(user), replacedSessions };
       });
     },
     session(token) {
       if (typeof token !== 'string' || !/^[a-zA-Z0-9_-]{43}$/u.test(token)) return null;
       const sessionHash = keyHash(token);
+      const replaced = db
+        .prepare("SELECT 1 FROM sessions WHERE hash = ? AND revoked_at IS NOT NULL AND revoked_reason = 'replaced'")
+        .get(sessionHash);
+      if (replaced) return { denied: 'session_replaced' };
       const user = db
         .prepare(`SELECT users.*, sessions.hash AS session_hash FROM sessions JOIN users ON users.id = sessions.user_id
         WHERE sessions.hash = ? AND sessions.revoked_at IS NULL AND sessions.expires_at > ? AND users.revoked_at IS NULL`)
@@ -298,7 +341,22 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
       return { user: publicUser(user), sessionHash: user.session_hash };
     },
     logout(sessionHash) {
-      db.prepare('UPDATE sessions SET revoked_at = ? WHERE hash = ?').run(now(), sessionHash);
+      db.prepare(
+        "UPDATE sessions SET revoked_at = ?, revoked_reason = 'logout' WHERE hash = ? AND revoked_at IS NULL"
+      ).run(now(), sessionHash);
+    },
+    disconnectDevice(userId, deviceId) {
+      return transaction(() => {
+        const rows = db
+          .prepare('SELECT hash FROM sessions WHERE user_id = ? AND device_id = ? AND revoked_at IS NULL')
+          .all(userId, deviceId);
+        for (const row of rows)
+          db.prepare("UPDATE sessions SET revoked_at = ?, revoked_reason = 'admin' WHERE hash = ?").run(
+            now(),
+            row.hash
+          );
+        return rows.map((row) => row.hash);
+      });
     },
     invite(name, input = {}) {
       const policy = validatePolicy(input);
@@ -306,8 +364,8 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
       const title = optionalTitle(input.title);
       return transaction(() => {
         const id = randomUUID();
-        db.prepare(`INSERT INTO users (id,name,role,created_at,token_limit,access_start,access_end,email,title)
-          VALUES (?,?,'employee',?,?,?,?,?,?)`).run(
+        db.prepare(`INSERT INTO users (id,name,role,created_at,token_limit,access_start,access_end,email,title,max_devices)
+          VALUES (?,?,'employee',?,?,?,?,?,?,?)`).run(
           id,
           name,
           now(),
@@ -315,7 +373,8 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
           policy.accessStart,
           policy.accessEnd,
           email,
-          title
+          title,
+          policy.maxDevices
         );
         return issueInvite(id);
       });
@@ -334,7 +393,9 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
         if (!user) throw httpError(404, 'not_found');
         const timestamp = now();
         db.prepare('UPDATE users SET revoked_at = COALESCE(revoked_at,?) WHERE id = ?').run(timestamp, id);
-        db.prepare('UPDATE sessions SET revoked_at = COALESCE(revoked_at,?) WHERE user_id = ?').run(timestamp, id);
+        db.prepare(
+          "UPDATE sessions SET revoked_at = COALESCE(revoked_at,?), revoked_reason = COALESCE(revoked_reason,'revoked') WHERE user_id = ?"
+        ).run(timestamp, id);
         db.prepare('DELETE FROM invites WHERE user_id = ?').run(id);
       });
     },
@@ -355,13 +416,12 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
         const user = db.prepare("SELECT * FROM users WHERE id = ? AND role = 'employee'").get(id);
         if (!user) throw httpError(404, 'not_found');
         if (user.revoked_at !== null) throw httpError(409, 'employee_revoked');
-        db.prepare('UPDATE users SET token_limit = ?, access_start = ?, access_end = ? WHERE id = ?').run(
-          policy.tokenLimit,
-          policy.accessStart,
-          policy.accessEnd,
-          id
-        );
-        return policy;
+        // An update that does not mention maxDevices keeps the stored value instead of resetting it.
+        const maxDevices = input?.maxDevices === undefined ? user.max_devices : policy.maxDevices;
+        db.prepare(
+          'UPDATE users SET token_limit = ?, access_start = ?, access_end = ?, max_devices = ? WHERE id = ?'
+        ).run(policy.tokenLimit, policy.accessStart, policy.accessEnd, maxDevices, id);
+        return { ...policy, maxDevices };
       });
     },
     tokenPolicy(userId) {
@@ -393,6 +453,7 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
           tokenLimit: row.token_limit,
           accessStart: row.access_start,
           accessEnd: row.access_end,
+          maxDevices: row.max_devices,
           devices: db
             .prepare(
               'SELECT device_id,device_name,last_seen_at,expires_at,revoked_at FROM sessions WHERE user_id = ? ORDER BY last_seen_at DESC'
