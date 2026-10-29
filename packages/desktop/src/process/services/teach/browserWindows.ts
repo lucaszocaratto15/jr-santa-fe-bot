@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
-import type { WebContents } from 'electron';
-import { session } from 'electron';
+import type { Session, WebContents } from 'electron';
+import { app, session } from 'electron';
 import { BROWSER_SESSION_PARTITION } from '@/common/config/constants';
 
 export type DownloadInfo = { fileName: string; path: string; origin: string };
@@ -21,6 +21,23 @@ export function uniqueFileName(dir: string, name: string, exists: (p: string) =>
     const candidate = `${base} (${i})${ext}`;
     if (!exists(path.join(dir, candidate))) return candidate;
   }
+}
+
+/** True for webviews that belong to the in-app browser partition (and nothing else). */
+export function shouldManageBrowserContents(
+  wc: Pick<WebContents, 'getType' | 'session'>,
+  browserSession: Session
+): boolean {
+  return wc.getType() === 'webview' && wc.session === browserSession;
+}
+
+/** Wire popup/download handling for every in-app browser webview as soon as it is created. */
+export function registerBrowserWindowHandlers(deps: BrowserWindowDeps): void {
+  app.on('web-contents-created', (_event, wc) => {
+    if (shouldManageBrowserContents(wc, session.fromPartition(BROWSER_SESSION_PARTITION))) {
+      installBrowserWindowHandlers(wc, deps);
+    }
+  });
 }
 
 const installedContents = new WeakSet<object>();
@@ -58,9 +75,14 @@ export function installBrowserWindowHandlers(contents: WebContents, deps: Browse
   if (installedSessions.has(ses)) return;
   installedSessions.add(ses);
   ses.on('will-download', (_event, item) => {
-    mkdirSync(deps.downloadsDir, { recursive: true });
-    const fileName = uniqueFileName(deps.downloadsDir, item.getFilename(), existsSync);
-    const savePath = path.join(deps.downloadsDir, fileName);
+    let dir = deps.downloadsDir;
+    try {
+      mkdirSync(dir, { recursive: true });
+    } catch {
+      dir = app.getPath('downloads');
+    }
+    const fileName = uniqueFileName(dir, item.getFilename(), existsSync);
+    const savePath = path.join(dir, fileName);
     item.setSavePath(savePath);
     const origin = safeOrigin(item.getURL());
     item.once('done', (_e, state) => {

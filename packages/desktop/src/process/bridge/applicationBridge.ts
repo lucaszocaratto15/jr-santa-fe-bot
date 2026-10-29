@@ -5,8 +5,7 @@
  */
 
 import type { BrowserWindow } from 'electron';
-import { app, session, webContents as electronWebContents } from 'electron';
-import path from 'node:path';
+import { app, session } from 'electron';
 import { ipcBridge } from '@/common';
 import { BROWSER_SESSION_PARTITION } from '@/common/config/constants';
 import { ProcessConfig } from '@process/utils/initStorage';
@@ -20,7 +19,6 @@ import { restartApplication } from './restartApplication';
 import { getJrConnectionStatus } from '@process/services/jr/usage';
 import { configureJrWorkspaceContext, createJrWorkspace, readLoopbackProviders } from '@process/services/jr/bootstrap';
 import { getJrAccessController } from '@process/services/jr/auth';
-import { installBrowserWindowHandlers } from '@process/services/teach/browserWindows';
 import { appendJrOpenLog } from '@process/services/jr/openLog';
 
 let mainWindowRef: BrowserWindow | null = null;
@@ -281,14 +279,6 @@ export function initApplicationBridge(): void {
     try {
       const handle = getCdpBridgeHandle();
       if (!handle) return { success: false, msg: 'Agent browser control is not enabled.' };
-      const wc = electronWebContents.fromId(webContentsId);
-      if (wc && !wc.isDestroyed()) {
-        installBrowserWindowHandlers(wc, {
-          emitOpenTab: (url, openerWebContentsId) => ipcBridge.teach.openTab.emit({ url, openerWebContentsId }),
-          downloadsDir: path.join(app.getPath('downloads'), 'JR Bot'),
-          onDownload: (info) => ipcBridge.teach.downloaded.emit(info),
-        });
-      }
       const result = handle.attach(webContentsId);
       if (result.ok === false) return { success: false, msg: result.reason };
       return { success: true };

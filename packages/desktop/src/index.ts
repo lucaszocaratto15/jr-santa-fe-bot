@@ -22,6 +22,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { initMainAdapterWithWindow } from './common/adapter/main';
 import { ipcBridge } from './common';
+import { registerBrowserWindowHandlers } from './process/services/teach/browserWindows';
 import { initializeProcess } from './process';
 import { startBackendOrExit } from './process/startup/backendStartup';
 import { bootstrapJrConnection, configureJrProvider } from './process/services/jr/bootstrap';
@@ -1197,6 +1198,14 @@ if (process.defaultApp) {
 } else {
   app.setAsDefaultProtocolClient(PROTOCOL_SCHEME);
 }
+
+// In-app browser webviews: route popups to tabs and downloads to <Downloads>/JR Bot.
+// Not gated by CDP/agent control: allowpopups=true needs a handler regardless.
+registerBrowserWindowHandlers({
+  emitOpenTab: (url, openerWebContentsId) => ipcBridge.teach.openTab.emit({ url, openerWebContentsId }),
+  downloadsDir: path.join(app.getPath('downloads'), 'JR Bot'),
+  onDownload: (info) => ipcBridge.teach.downloaded.emit(info),
+});
 
 // macOS: handle aionui:// URLs via the open-url event
 app.on('open-url', (event, url) => {

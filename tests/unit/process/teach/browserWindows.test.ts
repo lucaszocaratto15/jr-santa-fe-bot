@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const { sessions } = vi.hoisted(() => ({ sessions: new Map<string, unknown>() }));
 
 vi.mock('electron', () => ({
+  app: { on: vi.fn(), getPath: () => '/tmp' },
   session: {
     fromPartition: (name: string) => {
       if (!sessions.has(name)) sessions.set(name, new (require('node:events').EventEmitter)());
@@ -15,16 +16,23 @@ vi.mock('electron', () => ({
   },
 }));
 
-import { installBrowserWindowHandlers, uniqueFileName } from '@process/services/teach/browserWindows';
+import {
+  installBrowserWindowHandlers,
+  shouldManageBrowserContents,
+  uniqueFileName,
+} from '@process/services/teach/browserWindows';
 import { BROWSER_SESSION_PARTITION } from '@/common/config/constants';
 
 type Handler = (d: { url: string }) => { action: string };
 
 const makeContents = (id = 7) => {
   let handler: Handler | undefined;
+  const setCalls: Handler[] = [];
   return {
+    setCalls,
     id,
     setWindowOpenHandler: (h: Handler) => {
+      setCalls.push(h);
       handler = h;
     },
     open: (url: string) => handler!({ url }),
@@ -113,8 +121,18 @@ describe('installBrowserWindowHandlers', () => {
     const a = makeContents(1);
     installBrowserWindowHandlers(a as never, d);
     installBrowserWindowHandlers(a as never, d);
+    expect(a.setCalls).toHaveLength(1);
     installBrowserWindowHandlers(makeContents(2) as never, d);
     const ses = sessions.get(BROWSER_SESSION_PARTITION) as EventEmitter;
     expect(ses.listenerCount('will-download')).toBe(1);
+  });
+});
+
+describe('shouldManageBrowserContents', () => {
+  const browser = {} as never;
+  it('accepts webviews on the browser session only', () => {
+    expect(shouldManageBrowserContents({ getType: () => 'webview', session: browser } as never, browser)).toBe(true);
+    expect(shouldManageBrowserContents({ getType: () => 'webview', session: {} } as never, browser)).toBe(false);
+    expect(shouldManageBrowserContents({ getType: () => 'window', session: browser } as never, browser)).toBe(false);
   });
 });
