@@ -145,7 +145,7 @@ describe('teach session', () => {
       name: 'jr-tarefa-nfs-prefeitura',
     });
     expect(skillPath).toBe(join(dir, ID, 'skill', 'jr-tarefa-nfs-prefeitura'));
-    expect(await readFile(join(skillPath, 'SKILL.md'), 'utf8')).toContain('name: jr-tarefa-nfs-prefeitura');
+    expect(await readFile(join(skillPath, 'SKILL.md'), 'utf8')).toContain('name: "jr-tarefa-nfs-prefeitura"');
   });
 
   it('applies an edited description as one frontmatter line', async () => {
@@ -158,7 +158,7 @@ describe('teach session', () => {
       description: 'Baixa as NFs\n do mês',
     });
     const saved = await readFile(join(skillPath, 'SKILL.md'), 'utf8');
-    expect(saved).toContain('description: Baixa as NFs do mês\nsource: taught');
+    expect(saved).toContain('description: "Baixa as NFs do mês"\nsource: taught');
   });
 
   it('refuses to save for another recording or an invalid name', async () => {

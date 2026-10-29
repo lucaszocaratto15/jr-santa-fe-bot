@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { IMAGE_GEN_ENV_KEYS } from '@/common/config/imageGenerationMcpEnv';
+import { BUILTIN_BROWSER_MCP_NAME, BUILTIN_TEACH_MCP_NAME } from '@/common/config/constants';
 import { BUILTIN_IMAGE_GEN_NAME, type IMcpServer, type IProvider } from '@/common/config/storage';
 import { resolveImageGenerationMigrationConfig, runBackendMigrations } from '@/process/utils/runBackendMigrations';
 
@@ -214,5 +215,38 @@ describe('runBackendMigrations', () => {
       'yes',
       'yes'
     );
+  });
+
+  it('repairs a drifted script path for the browser and jr-teach built-in MCP servers', async () => {
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    const stale = (id: string, name: string): IMcpServer => ({
+      id,
+      name,
+      description: '',
+      enabled: true,
+      builtin: true,
+      transport: { type: 'stdio', command: 'node', args: [`/old/app/${name}.js`] },
+      created_at: 1,
+      updated_at: 1,
+      original_json: '{}',
+    });
+    listServersMock.mockResolvedValue([
+      imageServer(),
+      stale('browser-id', BUILTIN_BROWSER_MCP_NAME),
+      stale('teach-id', BUILTIN_TEACH_MCP_NAME),
+    ]);
+
+    await runBackendMigrations(configFile as never);
+
+    const teachUpdate = updateServerMock.mock.calls.find(([arg]) => arg.id === 'teach-id')?.[0];
+    expect(teachUpdate?.data.transport).toEqual({
+      type: 'stdio',
+      command: 'node',
+      args: ['/mock/builtin-mcp-teach.js'],
+    });
+    expect(JSON.parse(teachUpdate?.data.original_json).mcpServers[BUILTIN_TEACH_MCP_NAME].args).toEqual([
+      '/mock/builtin-mcp-teach.js',
+    ]);
+    expect(updateServerMock.mock.calls.some(([arg]) => arg.id === 'browser-id')).toBe(true);
   });
 });

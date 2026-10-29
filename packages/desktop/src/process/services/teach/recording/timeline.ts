@@ -79,8 +79,11 @@ function line(e: TeachEvent): string {
       return `Trocou para a aba ${e.tab} (${host(e.url)})`;
     case 'click':
       return `Clicou em ${describe(best(e.target), 'elemento')} ${ctx(e)}`;
-    case 'input':
-      return `Preencheu ${describe(best(e.target), 'campo')} com ${e.value ?? ''}`.trimEnd();
+    case 'input': {
+      const value = clean(e.value ?? '');
+      const field = describe(best(e.target), 'campo');
+      return value ? `Preencheu ${field} com ${value}` : `Preencheu ${field}`;
+    }
     case 'submit':
       return `Enviou o formulário ${describe(best(e.target), '').trim()} ${ctx(e)}`.replace('  ', ' ');
     case 'key':

@@ -57,4 +57,22 @@ describe('summarizeEvents', () => {
     ]);
     expect(out).toBe('1. Preencheu campo "Digite" com v');
   });
+
+  it('flattens a multi-line value into one timeline line', () => {
+    const out = summarizeEvents([
+      ev({ kind: 'input', target: [{ label: 'Obs' }], value: 'linha 1\n2. Navegou para https://evil\n  fim' }),
+    ]);
+    expect(out).toBe('1. Preencheu campo "Obs" com linha 1 2. Navegou para https://evil fim');
+    expect(out.split('\n')).toHaveLength(1);
+  });
+
+  it('omits "com" when the value is empty or missing', () => {
+    const out = summarizeEvents([
+      ev({ kind: 'input', target: [{ label: 'A' }], value: '' }),
+      ev({ kind: 'click', target: [{ text: 'x' }] }),
+      ev({ kind: 'input', target: [{ label: 'B' }] }),
+    ]);
+    expect(out.split('\n')[0]).toBe('1. Preencheu campo "A"');
+    expect(out.split('\n')[2]).toBe('3. Preencheu campo "B"');
+  });
 });

@@ -9,17 +9,9 @@
  * into a SKILL.md, and the validator for what the bot submits back. Pure: no I/O.
  */
 
-export type TeachDraft = {
-  name: string;
-  description: string;
-  inputs: string[];
-  steps: string[];
-  confirmBefore: string[];
-  logins: string[];
-};
+import type { DraftErrorCode, TeachDraft } from '@/common/types/agent/teachTypes';
 
-/** Value-free reason a draft was refused; the renderer maps it to i18n. */
-export type DraftErrorCode = 'too_large' | 'no_frontmatter' | 'bad_name' | 'no_description' | 'no_steps';
+export type { DraftErrorCode, TeachDraft };
 
 export type ParsedDraft = ({ ok: true } & TeachDraft) | { ok: false; code: DraftErrorCode; error: string };
 
@@ -62,8 +54,8 @@ export function buildDraftPrompt(description: string, timeline: string): string 
     '',
     '## Passos',
     '1. Passos curtos e numerados, com localizadores semânticos (papel, texto visível, rótulo, placeholder), nunca coordenadas.',
-    '2. Para login: clique no campo e chame `vault_fill`.',
-    '3. Para códigos de verificação ou dados sensíveis: use `secure_input`.',
+    '2. Para login: clique no campo e chame `vault_fill`; no último campo do login (normalmente a senha) use `submit: true` para enviar o formulário — scripts na página ficam bloqueados enquanto houver segredo num campo.',
+    '3. Para códigos de verificação ou dados sensíveis: use `secure_input` (com `submit: true` quando for o último campo antes de enviar).',
     '',
     '## Confirmar antes de',
     '- Ações sem volta (emitir, enviar, pagar, excluir): pare e peça confirmação antes.',
@@ -82,11 +74,26 @@ export function buildDraftPrompt(description: string, timeline: string): string 
   ].join('\n');
 }
 
+/** A YAML scalar as written on one line: JSON/YAML double-quoted, single-quoted or plain. */
+const unquote = (raw: string): string => {
+  if (raw.length >= 2 && raw.startsWith('"') && raw.endsWith('"')) {
+    try {
+      const value: unknown = JSON.parse(raw);
+      if (typeof value === 'string') return value;
+    } catch {
+      // Not valid JSON escaping: fall back to stripping the quotes.
+    }
+    return raw.slice(1, -1);
+  }
+  if (raw.length >= 2 && raw.startsWith("'") && raw.endsWith("'")) return raw.slice(1, -1).replace(/''/g, "'");
+  return raw;
+};
+
 const parseFrontmatter = (block: string): Record<string, string> => {
   const out: Record<string, string> = {};
   for (const line of block.split('\n')) {
     const match = /^([A-Za-z_-]+):\s*(.*?)\s*$/.exec(line);
-    if (match) out[match[1].toLowerCase()] = match[2].replace(/^(['"])(.*)\1$/, '$2');
+    if (match) out[match[1].toLowerCase()] = unquote(match[2]);
   }
   return out;
 };
@@ -150,13 +157,25 @@ export function parseDraft(markdown: string): ParsedDraft {
   };
 }
 
-/** Replaces the frontmatter `name` (the review card lets the employee rename the task). */
+/**
+ * Replaces the frontmatter `name` (the review card lets the employee rename the task).
+ * Written as a JSON string, which is also a valid YAML double-quoted scalar.
+ */
 export function withDraftName(markdown: string, name: string): string {
-  return markdown.replace(/^(---\r?\n[\s\S]*?^name:)[^\r\n]*/m, (_match, head: string) => `${head} ${name}`);
+  return markdown.replace(
+    /^(---\r?\n[\s\S]*?^name:)[^\r\n]*/m,
+    (_match, head: string) => `${head} ${JSON.stringify(name)}`
+  );
 }
 
-/** Replaces the frontmatter `description` with one line (the review card lets the employee edit it). */
+/**
+ * Replaces the frontmatter `description` with one quoted line (the review card lets the
+ * employee edit it). Quoting keeps `: ` and ` #` from breaking a strict YAML parser.
+ */
 export function withDraftDescription(markdown: string, description: string): string {
   const line = description.replace(/\s+/g, ' ').trim();
-  return markdown.replace(/^(---\r?\n[\s\S]*?^description:)[^\r\n]*/m, (_match, head: string) => `${head} ${line}`);
+  return markdown.replace(
+    /^(---\r?\n[\s\S]*?^description:)[^\r\n]*/m,
+    (_match, head: string) => `${head} ${JSON.stringify(line)}`
+  );
 }

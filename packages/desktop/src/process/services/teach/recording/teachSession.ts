@@ -23,24 +23,15 @@ import {
   type TeachDraft,
 } from './skillDraft';
 import { summarizeEvents } from './timeline';
+import type {
+  TeachDraftEvent,
+  TeachDraftRejectedEvent,
+  TeachSaveDraftInput,
+  TeachStateEvent,
+  TeachStopResult,
+} from '@/common/types/agent/teachTypes';
 
-export type TeachStateEvent = { state: RecorderState; elapsedMs: number };
-
-export type TeachStopResult = {
-  id: string;
-  timeline: string;
-  description: string;
-  secretOrigins: string[];
-  /** The fixed draft prompt, sent by the renderer as a normal user message. */
-  prompt: string;
-};
-
-export type TeachDraftEvent = { markdown: string; recordingId: string; draft: TeachDraft };
-
-/** Main → renderer when the bot's draft was refused. Carries a code, never the draft. */
-export type TeachDraftRejectedEvent = { recordingId: string; error: DraftErrorCode };
-
-export type TeachSaveDraftInput = { markdown: string; recordingId: string; name?: string; description?: string };
+export type { TeachDraftEvent, TeachDraftRejectedEvent, TeachSaveDraftInput, TeachStateEvent, TeachStopResult };
 
 /** Error messages of saveDraft are codes the renderer maps to i18n. */
 export type TeachSaveErrorCode = DraftErrorCode | 'no_review';
@@ -202,8 +193,13 @@ export function createTeachSession(deps: TeachSessionDeps): TeachSession {
 
     async saveDraft({ markdown, recordingId, name, description: edited }) {
       if (!awaiting || awaiting.id !== recordingId) throw fail('no_review');
-      let text = name ? withDraftName(markdown, name) : markdown;
-      if (edited !== undefined) text = withDraftDescription(text, edited);
+      const submitted = parseDraft(markdown);
+      if (submitted.ok === false) throw fail(submitted.code);
+      // Always rewrite both as quoted scalars so the saved SKILL.md is strict-YAML safe.
+      const text = withDraftDescription(
+        withDraftName(markdown, name || submitted.name),
+        edited ?? submitted.description
+      );
       const parsed = parseDraft(text);
       if (parsed.ok === false) throw fail(parsed.code);
       // recordingId came from the recorder (a UUID) and the name passed TAUGHT_SKILL_NAME_RE.

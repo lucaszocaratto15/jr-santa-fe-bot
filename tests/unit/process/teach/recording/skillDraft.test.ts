@@ -108,7 +108,11 @@ describe('withDraftName', () => {
     const renamed = withDraftName(VALID, 'jr-tarefa-nfs-prefeitura');
     const parsed = parseDraft(renamed);
     expect(parsed.ok && parsed.name).toBe('jr-tarefa-nfs-prefeitura');
-    expect(renamed.replace('jr-tarefa-nfs-prefeitura', 'jr-tarefa-relatorio-nfs')).toBe(VALID);
+    expect(renamed.replace('"jr-tarefa-nfs-prefeitura"', 'jr-tarefa-relatorio-nfs')).toBe(VALID);
+  });
+
+  it('writes the name as a quoted scalar', () => {
+    expect(withDraftName(VALID, 'jr-tarefa-nfs')).toContain('\nname: "jr-tarefa-nfs"\n');
   });
 });
 
@@ -116,6 +120,27 @@ describe('withDraftDescription', () => {
   it('replaces the frontmatter description with a single line, keeping $ patterns literal', () => {
     const parsed = parseDraft(withDraftDescription(VALID, 'Baixa\n  as NFs $1 do mês'));
     expect(parsed.ok && parsed.description).toBe('Baixa as NFs $1 do mês');
+  });
+
+  it('quotes YAML-hostile descriptions and round-trips them', () => {
+    const hostile = 'Emite a NF: mensal # rápido';
+    const text = withDraftDescription(VALID, hostile);
+    expect(text).toContain('\ndescription: "Emite a NF: mensal # rápido"\n');
+    const parsed = parseDraft(text);
+    expect(parsed.ok && parsed.description).toBe(hostile);
+  });
+
+  it('round-trips a description containing double quotes and backslashes', () => {
+    const quoted = 'Baixa o "Relatório \\ mensal" da prefeitura';
+    const text = withDraftDescription(VALID, quoted);
+    expect(text).toContain(`description: ${JSON.stringify(quoted)}`);
+    const parsed = parseDraft(text);
+    expect(parsed.ok && parsed.description).toBe(quoted);
+  });
+
+  it('still reads plain and single-quoted descriptions', () => {
+    const single = parseDraft(VALID.replace(/^description: .*$/m, "description: 'It''s mensal'"));
+    expect(single.ok && single.description).toBe("It's mensal");
   });
 });
 
@@ -133,6 +158,7 @@ describe('buildDraftPrompt', () => {
   it('asks for the required frontmatter and sections', () => {
     for (const piece of [
       'name: jr-tarefa-',
+      'submit: true',
       'description:',
       'source: taught',
       'created: ',
