@@ -11,8 +11,8 @@ afterEach(async () => {
 
 const fakeEncryption = (available = true) => ({
   isEncryptionAvailable: () => available,
-  encryptString: (text: string) => Buffer.from(text.split('').reverse().join('')),
-  decryptString: (buffer: Buffer) => buffer.toString().split('').reverse().join(''),
+  encryptString: (text: string) => Buffer.from(text.split('').toReversed().join('')),
+  decryptString: (buffer: Buffer) => buffer.toString().split('').toReversed().join(''),
 });
 
 const setup = async (available = true) => {

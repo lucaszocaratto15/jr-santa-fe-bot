@@ -563,7 +563,7 @@ export class JrAccessController {
           publicError === 'JR_ACCESS_STORAGE_UNAVAILABLE' ? 'storage' : null
         );
       }
-      if (publicError !== 'JR_ACCESS_UNAVAILABLE') throw new Error(publicError);
+      if (publicError !== 'JR_ACCESS_UNAVAILABLE') throw new Error(publicError, { cause: error });
       return fail('JR_ACCESS_UNAVAILABLE');
     } finally {
       this.authenticating = false;

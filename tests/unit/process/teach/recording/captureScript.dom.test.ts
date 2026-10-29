@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildCaptureScript } from '@/process/services/teach/recording/captureScript';
-import { SECRET_AUTOCOMPLETE_RE, SECRET_TEXT_RE, isSecretField } from '@/process/services/teach/recording/fieldClassifier';
+import {
+  SECRET_AUTOCOMPLETE_RE,
+  SECRET_TEXT_RE,
+  isSecretField,
+} from '@/process/services/teach/recording/fieldClassifier';
 
 type Payload = Record<string, unknown> & { kind: string; value?: string; secret?: boolean; target?: unknown[] };
 
