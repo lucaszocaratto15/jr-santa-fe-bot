@@ -1,14 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createSampler, parseSampleLine } from '@/process/services/teach/learn/sampler';
-import { samplerCommand } from '@/process/services/teach/learn/samplerScripts';
+import { MAC_SCRIPT, samplerCommand, WINDOWS_SCRIPT } from '@/process/services/teach/learn/samplerScripts';
 import { fakeSpawn } from './fakes';
 
-const make = (spawn: unknown, extra: { now?: () => number; timeoutMs?: number } = {}) =>
+const make = (spawn: unknown, extra: { now?: () => number; timeoutMs?: number; firstTimeoutMs?: number } = {}) =>
   createSampler({
     spawn: spawn as never,
     platform: 'darwin',
     now: extra.now ?? (() => Date.now()),
     timeoutMs: extra.timeoutMs ?? 50,
+    firstTimeoutMs: extra.firstTimeoutMs ?? 50,
   });
 
 describe('parseSampleLine', () => {
@@ -43,6 +44,25 @@ describe('samplerCommand', () => {
     const command = samplerCommand('darwin');
     expect(command?.command).toBe('/usr/bin/osascript');
     expect(command?.args.slice(0, 3)).toEqual(['-l', 'JavaScript', '-e']);
+  });
+});
+
+describe('sampler script bodies', () => {
+  it('Windows reads one line per request, answers compact JSON and never hooks input', () => {
+    expect(WINDOWS_SCRIPT).toContain('[Console]::In.ReadLine()');
+    expect(WINDOWS_SCRIPT).toContain('if ($null -eq $request) { break }');
+    expect(WINDOWS_SCRIPT).toContain('ConvertTo-Json -Compress');
+    expect(WINDOWS_SCRIPT).toContain('GetWindowText');
+    expect(WINDOWS_SCRIPT).toContain('GetWindowThreadProcessId');
+    expect(WINDOWS_SCRIPT).not.toMatch(/SetWindowsHookEx|GetAsyncKeyState|GetKeyState|CopyFromScreen|Clipboard/);
+  });
+  it('macOS answers through stdout with JSON.stringify, reads only app and window name, never input', () => {
+    expect(MAC_SCRIPT).toContain('JSON.stringify(obj)');
+    expect(MAC_SCRIPT).toContain('fileHandleWithStandardOutput');
+    expect(MAC_SCRIPT).toContain("'kCGWindowName'");
+    expect(MAC_SCRIPT).toContain('frontmostApplication');
+    expect(MAC_SCRIPT).toContain('if (data.length === 0) break;');
+    expect(MAC_SCRIPT).not.toMatch(/CGEventTap|keystroke|CGWindowListCreateImage|NSPasteboard/);
   });
 });
 
@@ -111,6 +131,45 @@ describe('createSampler', () => {
     expect(sampler.failed()).toBe(true);
     expect(await sampler.sample()).toBeNull();
     expect(spawn).toHaveBeenCalledTimes(3);
+  });
+
+  it('once it gave up it stays failed after the 10-minute window and never respawns', async () => {
+    let clock = 0;
+    const { spawn } = fakeSpawn(null);
+    const sampler = make(spawn, { now: () => clock })!;
+    for (let i = 0; i < 3; i += 1) {
+      clock += 60_000;
+      await sampler.sample();
+    }
+    clock += 11 * 60_000;
+    expect(sampler.failed()).toBe(true);
+    expect(await sampler.sample()).toBeNull();
+    expect(spawn).toHaveBeenCalledTimes(3);
+  });
+
+  it('old failures decay: two failures, then a third after 10 minutes, do not give up', async () => {
+    let clock = 0;
+    const { spawn } = fakeSpawn(null);
+    const sampler = make(spawn, { now: () => clock })!;
+    await sampler.sample();
+    clock += 60_000;
+    await sampler.sample();
+    clock += 10 * 60_000;
+    await sampler.sample();
+    expect(sampler.failed()).toBe(false);
+    expect(spawn).toHaveBeenCalledTimes(3);
+  });
+
+  it('the first reply after a spawn gets the longer startup timeout', async () => {
+    const { spawn, children } = fakeSpawn(null);
+    const sampler = make(spawn, { timeoutMs: 20, firstTimeoutMs: 1_000 })!;
+    const first = sampler.sample();
+    setTimeout(() => children[0].stdout.write('{"app":"A","title":null}\n'), 100);
+    expect(await first).toEqual({ app: 'A', title: null });
+    expect(children[0].kill).not.toHaveBeenCalled();
+    // Later requests use the short timeout.
+    expect(await sampler.sample()).toBeNull();
+    expect(children[0].kill).toHaveBeenCalled();
   });
 
   it('failures spread over more than 10 minutes do not trip failed()', async () => {

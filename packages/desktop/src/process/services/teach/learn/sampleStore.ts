@@ -17,8 +17,9 @@ const HOUR_FILE_RE = /^(\d{4}-\d{2}-\d{2}T\d{2})\.log$/;
 
 export type SampleStore = {
   append(sample: LearnSample): Promise<void>;
-  readSince(sinceMs: number): Promise<LearnSample[]>;
-  count(sinceMs: number): Promise<number>;
+  /** Samples at or after `sinceMs`; with `nowMs`, never one older than the 48 h retention. */
+  readSince(sinceMs: number, nowMs?: number): Promise<LearnSample[]>;
+  count(sinceMs: number, nowMs?: number): Promise<number>;
   hours(): Promise<number>;
   purge(nowMs: number): Promise<void>;
   wipe(): Promise<void>;
@@ -110,8 +111,9 @@ export function createSampleStore(root: string, encryption: OsEncryption): Sampl
     }
   };
 
-  const readSince = async (sinceMs: number): Promise<LearnSample[]> => {
+  const readSince = async (requestedSince: number, nowMs?: number): Promise<LearnSample[]> => {
     if (!encryptionUsable(encryption)) return [];
+    const sinceMs = nowMs === undefined ? requestedSince : Math.max(requestedSince, nowMs - RAW_RETENTION_MS);
     const files = (await hourFiles()).filter(({ start }) => start + HOUR_MS > sinceMs);
     const contents = await Promise.all(files.map(({ file }) => readFile(file, 'utf8').catch(() => '')));
     return contents
@@ -133,14 +135,16 @@ export function createSampleStore(root: string, encryption: OsEncryption): Sampl
       await appendFile(join(dir, `${hourKey(sample.t)}.log`), `${line}\n`, { mode: 0o600 });
     },
     readSince,
-    async count(sinceMs) {
-      return (await readSince(sinceMs)).length;
+    async count(sinceMs, nowMs) {
+      return (await readSince(sinceMs, nowMs)).length;
     },
     async hours() {
       return (await hourFiles()).length;
     },
     async purge(nowMs) {
-      const expired = (await hourFiles()).filter(({ start }) => nowMs - (start + HOUR_MS) > RAW_RETENTION_MS);
+      // A file holds up to an hour of samples: drop it once its first sample is 47 h old, so with
+      // up to an hour between purges no sample outlives the 48 h promise.
+      const expired = (await hourFiles()).filter(({ start }) => nowMs - start >= RAW_RETENTION_MS - HOUR_MS);
       await Promise.all(expired.map(({ file }) => rm(file, { force: true })));
     },
     async wipe() {

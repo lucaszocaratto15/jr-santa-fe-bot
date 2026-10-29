@@ -28,13 +28,12 @@ export type LearnSummary = {
   periodEnd: number;
 };
 
+/** Control bytes and line separators that untrusted window titles may carry. */
+// eslint-disable-next-line no-control-regex -- Matching control characters is the point.
+const CONTROL_CHARS_RE = /[\u0000-\u001f\u007f\u2028\u2029]+/g;
+
 /** Collapse whitespace and control characters so a title can never start a new line. */
-const flat = (text: string): string =>
-  // eslint-disable-next-line no-control-regex -- Untrusted window titles may carry control bytes.
-  text
-    .replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+const flat = (text: string): string => text.replace(CONTROL_CHARS_RE, ' ').replace(/\s+/g, ' ').trim();
 
 /** App names keep their wording but lose e-mails, documents and long numbers. */
 const cleanApp = (app: string): string => {

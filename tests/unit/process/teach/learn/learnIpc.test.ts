@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { handlers, channel, openExternal, powerListeners, emitState } = vi.hoisted(() => {
+const { handlers, channel, openExternal, powerListeners, emitState, contentsById, rebuildTrayMenu } = vi.hoisted(() => {
   const handlers: Record<string, (arg?: unknown) => Promise<unknown>> = {};
   const channel = (name: string) => ({
     provider: (fn: (arg?: unknown) => Promise<unknown>) => {
@@ -13,8 +13,20 @@ const { handlers, channel, openExternal, powerListeners, emitState } = vi.hoiste
     openExternal: vi.fn(async () => {}),
     powerListeners: new Map<string, () => void>(),
     emitState: vi.fn(),
+    contentsById: new Map<number, unknown>(),
+    rebuildTrayMenu: vi.fn(),
   };
 });
+
+vi.mock('@process/utils/tray', () => ({
+  hasTray: () => false,
+  isMainWindowOnScreen: () => true,
+  rebuildTrayMenu,
+}));
+vi.mock('@process/services/i18n', () => ({ default: { t: (key: string) => key, language: 'pt-BR' } }));
+vi.mock('@process/utils/cdpBridgeRegistry', () => ({
+  getCdpBridgeHandle: () => ({ attachedWebContentsId: () => (contentsById.size ? 7 : null) }),
+}));
 
 vi.mock('electron', () => ({
   shell: { openExternal },
@@ -30,7 +42,9 @@ vi.mock('electron', () => ({
     decryptString: (buffer: Buffer) => buffer.toString(),
   },
   BrowserWindow: { getFocusedWindow: () => null },
-  webContents: { fromId: () => null },
+  webContents: { fromId: (id: number) => contentsById.get(id) ?? null },
+  app: {},
+  Menu: { buildFromTemplate: (items: unknown) => items },
   systemPreferences: { getMediaAccessStatus: () => 'granted' },
 }));
 
@@ -63,7 +77,12 @@ vi.mock('@/common', () => ({
 import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { initLearnBridge, startLearnService, UNAVAILABLE_LEARN_STATE } from '@process/services/teach/learn/learnIpc';
+import {
+  initLearnBridge,
+  jrBrowserPage,
+  startLearnService,
+  UNAVAILABLE_LEARN_STATE,
+} from '@process/services/teach/learn/learnIpc';
 import { getLearnService, setLearnService } from '@process/services/teach/registry';
 import type { LearnService } from '@process/services/teach/learn/learnService';
 
@@ -127,6 +146,39 @@ describe('startLearnService', () => {
       expect([...powerListeners.keys()].toSorted()).toEqual(['lock-screen', 'unlock-screen']);
       expect(emitState).toHaveBeenCalled();
       await expect(stat(join(dir, 'jr-learn'))).rejects.toThrow();
+      service.dispose();
+    } finally {
+      setLearnService(null);
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('jrBrowserPage', () => {
+  const page = (focused: boolean) => ({
+    isDestroyed: () => false,
+    isFocused: () => focused,
+    getURL: () => 'https://nfse.exemplo.gov.br/emitir',
+    getTitle: () => 'Emitir NF',
+  });
+
+  it('reports the attached page only while it has focus', () => {
+    contentsById.set(7, page(true));
+    expect(jrBrowserPage()).toEqual({ url: 'https://nfse.exemplo.gov.br/emitir', title: 'Emitir NF' });
+    contentsById.set(7, page(false));
+    expect(jrBrowserPage()).toBeNull();
+    contentsById.clear();
+    expect(jrBrowserPage()).toBeNull();
+  });
+});
+
+describe('learn menus', () => {
+  it('a state change also rebuilds the tray menu', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'learn-menu-'));
+    try {
+      rebuildTrayMenu.mockClear();
+      const service = await startLearnService(dir);
+      expect(rebuildTrayMenu).toHaveBeenCalled();
       service.dispose();
     } finally {
       setLearnService(null);

@@ -60,14 +60,33 @@ describe('sample store', () => {
     expect(await store.hours()).toBe(3);
   });
 
-  it('purge deletes hour files older than 48 h and keeps the current hour', async () => {
+  it('purge deletes hour files that started 47 h ago or more and keeps the current hour', async () => {
     const store = createSampleStore(root, encryption);
     await store.append({ t: at('2026-10-29T09:30:00Z'), app: 'old', title: null });
-    await store.append({ t: at('2026-10-29T11:30:00Z'), app: 'kept', title: null });
+    await store.append({ t: at('2026-10-29T11:30:00Z'), app: 'old too', title: null });
+    await store.append({ t: at('2026-10-29T12:30:00Z'), app: 'kept', title: null });
     await store.append({ t: at('2026-10-31T10:10:00Z'), app: 'now', title: null });
     await store.purge(at('2026-10-31T10:30:00Z'));
     const files = await readdir(join(root, 'samples'));
-    expect(files.toSorted()).toEqual(['2026-10-29T11.log', '2026-10-31T10.log']);
+    expect(files.toSorted()).toEqual(['2026-10-29T12.log', '2026-10-31T10.log']);
+  });
+
+  it('a sample at the start of an hour is gone by 48 h even with an hour of purge delay', async () => {
+    const store = createSampleStore(root, encryption);
+    const t = at('2026-10-29T10:00:00Z');
+    await store.append({ t, app: 'edge', title: null });
+    await store.purge(t + 47 * 3_600_000 - 1);
+    expect(await store.readSince(0)).toHaveLength(1);
+    await store.purge(t + 47 * 3_600_000);
+    expect(await store.readSince(0)).toEqual([]);
+  });
+
+  it('readSince never returns a sample older than 48 h, even before a purge', async () => {
+    const store = createSampleStore(root, encryption);
+    const now = at('2026-10-31T10:30:00Z');
+    await store.append({ t: now - 48 * 3_600_000 - 1, app: 'stale', title: null });
+    await store.append({ t: now - 60_000, app: 'fresh', title: null });
+    expect((await store.readSince(0, now)).map((s) => s.app)).toEqual(['fresh']);
   });
 
   it('purge with no samples dir does not create it', async () => {

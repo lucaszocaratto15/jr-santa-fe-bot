@@ -6,14 +6,17 @@
 
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
-import { BrowserWindow, powerMonitor, safeStorage, shell, systemPreferences, webContents } from 'electron';
+import { app, BrowserWindow, Menu, powerMonitor, safeStorage, shell, systemPreferences, webContents } from 'electron';
 import { ipcBridge } from '@/common';
 import type { LearnState } from '@/common/types/agent/learnTypes';
 import { getJrAccessController } from '@process/services/jr/auth';
 import { getJrModelConnection } from '@process/services/jr/modelConnection';
 import { getCdpBridgeHandle } from '@process/utils/cdpBridgeRegistry';
+import i18n from '@process/services/i18n';
+import { hasTray, isMainWindowOnScreen, rebuildTrayMenu } from '@process/utils/tray';
 import { sanitizeUrl } from '../recording/urlSanitizer';
 import { getLearnService, setLearnService } from '../registry';
+import { learnIndicatorReachable, learnServiceMenuItems } from './learnMenu';
 import { createLearnService, type LearnService } from './learnService';
 
 export const LEARN_UNAVAILABLE = 'LEARN_UNAVAILABLE';
@@ -63,15 +66,44 @@ export function initLearnBridge(): void {
   });
 }
 
-/** The page attached to the JR Bot browser (never the JR window title, which names the conversation). */
-function jrBrowserPage(): { url: string; title: string } | null {
+/**
+ * The page attached to the JR Bot browser (never the JR window title, which names the
+ * conversation). Only while that page has focus: an attached tab behind a chat view is not
+ * what the employee is working on.
+ */
+export function jrBrowserPage(): { url: string; title: string } | null {
   const id = getCdpBridgeHandle()?.attachedWebContentsId();
   if (id === null || id === undefined) return null;
   const contents = webContents.fromId(id);
-  if (!contents || contents.isDestroyed()) return null;
+  if (!contents || contents.isDestroyed() || !contents.isFocused()) return null;
   const url = sanitizeUrl(contents.getURL());
   if (!/^https?:\/\//.test(url)) return null;
   return { url, title: contents.getTitle() };
+}
+
+/** Keep the 🧠 entries of the tray and the macOS dock menu in step with the state. */
+function syncLearnMenus(): void {
+  try {
+    rebuildTrayMenu();
+    if (process.platform === 'darwin' && app?.dock) {
+      const items = learnServiceMenuItems(
+        getLearnService(),
+        (key, options) => String(i18n.t(key, options)),
+        i18n.language || 'pt-BR'
+      );
+      app.dock.setMenu(Menu.buildFromTemplate(items));
+    }
+  } catch {
+    // A menu refresh never breaks the state update.
+  }
+}
+
+function indicatorVisible(): boolean {
+  return learnIndicatorReachable({
+    mainWindowOnScreen: isMainWindowOnScreen(),
+    tray: hasTray(),
+    dockVisible: process.platform === 'darwin' && Boolean(app?.dock?.isVisible()),
+  });
 }
 
 function currentUser(): { id: string; name: string } | null {
@@ -115,7 +147,11 @@ export async function startLearnService(userDataDir: string): Promise<LearnServi
       process.platform !== 'darwin' || systemPreferences.getMediaAccessStatus('screen') === 'granted',
     currentUser,
     connection: getJrModelConnection,
-    emit: (state) => ipcBridge.learn.stateChanged.emit(state),
+    indicatorVisible,
+    emit: (state) => {
+      ipcBridge.learn.stateChanged.emit(state);
+      syncLearnMenus();
+    },
     // Wired by the "Manual da função" plan to withdraw observation items from the server.
     onRevoke: async () => {},
   });

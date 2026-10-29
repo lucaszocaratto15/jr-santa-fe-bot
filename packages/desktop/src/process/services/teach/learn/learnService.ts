@@ -24,7 +24,7 @@ import {
   type ConsentEvent,
   type LearnSettingsData,
 } from './learnSettings';
-import { DEFAULT_EXCLUSIONS, isExcluded } from './privacyFilter';
+import { DEFAULT_EXCLUSIONS, isExcluded, redactTitle, redactUrl } from './privacyFilter';
 import { createSampler, type Sampler } from './sampler';
 import { createInsightStore, createSampleStore, encryptionUsable } from './sampleStore';
 import { JR_APP_LABEL, LEARN_TICK_MS } from './summary';
@@ -37,6 +37,8 @@ export const MIN_DAILY_SAMPLES = 120;
 export const MIN_MANUAL_SAMPLES = 20;
 export const MAX_DAILY_ATTEMPTS = 3;
 const MAX_PAUSE_MINUTES = 24 * 60;
+/** darwin: this many title-less OS samples in a row with the permission granted → report app-only. */
+export const TITLELESS_SAMPLES_FOR_APP_ONLY = 20;
 
 export type LearnServiceDeps = {
   /** `userData/jr-learn`. */
@@ -55,6 +57,11 @@ export type LearnServiceDeps = {
   jrBrowserPage: () => { url: string; title: string } | null;
   /** darwin: Screen Recording granted (window titles readable). */
   screenTitlesGranted: () => boolean;
+  /**
+   * The 🧠 status and its Pausar/Desligar are reachable: a visible JR window, the tray menu or
+   * the macOS dock menu. Without one, nothing is sampled.
+   */
+  indicatorVisible: () => boolean;
   currentUser: () => { id: string; name: string } | null;
   connection: () => JrRelayConfig | null;
   emit: (state: LearnState) => void;
@@ -125,6 +132,10 @@ export function createLearnService(deps: LearnServiceDeps): LearnService {
   let lastEmitted = '';
   let activeSince: number | null = null;
   let disposed = false;
+  /** turnOff/revoke in progress: no new insights run may start, even before settings are written. */
+  let stopping = 0;
+  /** darwin: consecutive OS samples without a title although the permission reads as granted. */
+  let titlelessRun = 0;
 
   const unavailableReason = (): LearnState['unavailableReason'] => {
     if (deps.platform !== 'win32' && deps.platform !== 'darwin') return 'platform';
@@ -154,7 +165,10 @@ export function createLearnService(deps: LearnServiceDeps): LearnService {
       status,
       unavailableReason: status === 'unavailable' ? unavailableReason() : null,
       pausedUntil: status === 'paused' ? (data?.pausedUntil ?? null) : null,
-      titles: deps.platform === 'darwin' && !deps.screenTitlesGranted() ? 'app-only' : 'full',
+      titles:
+        deps.platform === 'darwin' && (!deps.screenTitlesGranted() || titlelessRun >= TITLELESS_SAMPLES_FOR_APP_ONLY)
+          ? 'app-only'
+          : 'full',
       samplerError,
       rawHours,
       acceptedVersion: accept?.termVersion ?? null,
@@ -231,9 +245,17 @@ export function createLearnService(deps: LearnServiceDeps): LearnService {
     await runInFlight?.catch(() => {});
   };
 
+  const trackTitles = (title: string | null) => {
+    if (deps.platform !== 'darwin') return;
+    const before = titlelessRun >= TITLELESS_SAMPLES_FOR_APP_ONLY;
+    titlelessRun = title === null ? titlelessRun + 1 : 0;
+    if (before !== titlelessRun >= TITLELESS_SAMPLES_FOR_APP_ONLY) publish();
+  };
+
   const collect = async (gen: number): Promise<void> => {
     if (deriveStatus() !== 'active') return;
     if (deps.isLocked() || deps.idleSeconds() >= LEARN_IDLE_SKIP_S) return;
+    if (!deps.indicatorVisible()) return;
     let sample: Omit<LearnSample, 't'>;
     if (deps.jrFocused()) {
       // Never the JR window title (it shows the conversation name): only the browser page.
@@ -250,12 +272,16 @@ export function createLearnService(deps: LearnServiceDeps): LearnService {
         publish();
       }
       if (!foreground) return;
+      trackTitles(foreground.title);
       sample = { app: foreground.app, title: foreground.title };
     }
     // Paused, turned off or revoked while the child answered: drop it.
     if (gen !== generation || deriveStatus() !== 'active' || !data) return;
+    // Exclusions match the raw sample (an e-mail rule needs the address), then secrets are
+    // redacted before anything is written: no codes, documents or url parameters on disk.
     if (isExcluded(sample, data.exclusions)) return;
-    await samples.append({ ...sample, t: deps.now() });
+    const url = redactUrl(sample.url);
+    await samples.append({ app: sample.app, title: redactTitle(sample.title), ...(url ? { url } : {}), t: deps.now() });
     await refreshRawHours();
     publish();
   };
@@ -267,8 +293,11 @@ export function createLearnService(deps: LearnServiceDeps): LearnService {
     runAbort = abort;
     const run = (async (): Promise<LearnGenerateResult> => {
       const now = deps.now();
-      const recent = await samples.readSince(now - DAY_MS);
+      // Exclusions added after collection also cover what is already on disk.
+      const exclusions = data?.exclusions ?? [];
+      const recent = (await samples.readSince(now - DAY_MS, now)).filter((sample) => !isExcluded(sample, exclusions));
       if (recent.length < minSamples) return { ok: false, code: 'no-data' };
+      if (gen !== generation || stopping > 0) return { ok: false, code: 'unavailable' };
       const result = await generateInsights({
         samples: recent,
         connection: deps.connection(),
@@ -294,14 +323,14 @@ export function createLearnService(deps: LearnServiceDeps): LearnService {
   };
 
   const dailyCheck = async () => {
-    if (!data || !currentAccept() || !data.enabled || deriveStatus() === 'unavailable') return;
+    if (!data || stopping > 0 || !currentAccept() || !data.enabled || deriveStatus() === 'unavailable') return;
     const now = deps.now();
     const since = data.lastSummaryAt ?? Date.parse(currentAccept()!.at);
     if (Number.isFinite(since) && now - since < DAY_MS) return;
     const day = localDay(now);
     const attempts = data.attempts.day === day ? data.attempts.count : 0;
     if (attempts >= MAX_DAILY_ATTEMPTS) return;
-    if ((await samples.count(now - DAY_MS)) < MIN_DAILY_SAMPLES) return;
+    if ((await samples.count(now - DAY_MS, now)) < MIN_DAILY_SAMPLES) return;
     await write({ attempts: { day, count: attempts + 1 } });
     await runInsights(MIN_DAILY_SAMPLES);
   };
@@ -368,40 +397,53 @@ export function createLearnService(deps: LearnServiceDeps): LearnService {
     },
 
     async turnOff() {
+      stopping += 1;
       invalidate();
-      await write({ enabled: false, paused: false, pausedUntil: null });
-      await quiesce();
-      samplerError = false;
-      return publish();
+      try {
+        await write({ enabled: false, paused: false, pausedUntil: null });
+        await quiesce();
+        samplerError = false;
+        return publish();
+      } finally {
+        stopping -= 1;
+      }
     },
 
     async revoke() {
+      stopping += 1;
       invalidate();
-      if (!data) await load();
-      await write({ enabled: false, paused: false, pausedUntil: null });
-      await quiesce();
-      await samples.wipe();
-      await insights.wipe();
-      const accepted = latestAccept(events);
-      if (accepted) {
-        const user = deps.currentUser();
-        await settings.appendConsent({
-          type: 'revoke',
-          termVersion: accepted.termVersion,
-          at: new Date(deps.now()).toISOString(),
-          user: user ? { id: user.id, name: user.name } : null,
-        });
-        events = await settings.consent();
-      }
-      await write({ lastSummaryAt: null, attempts: { day: '', count: 0 } });
-      rawHours = 0;
-      samplerError = false;
       try {
-        await deps.onRevoke();
-      } catch {
-        // Best effort: the local wipe already happened.
+        if (!data) await load();
+        await write({ enabled: false, paused: false, pausedUntil: null });
+        await quiesce();
+        await samples.wipe();
+        await insights.wipe();
+        const accepted = latestAccept(events);
+        if (accepted) {
+          const user = deps.currentUser();
+          await settings.appendConsent({
+            type: 'revoke',
+            termVersion: accepted.termVersion,
+            at: new Date(deps.now()).toISOString(),
+            user: user ? { id: user.id, name: user.name } : null,
+          });
+          events = await settings.consent();
+        }
+        await write({ lastSummaryAt: null, attempts: { day: '', count: 0 } });
+        rawHours = 0;
+        samplerError = false;
+        titlelessRun = 0;
+        try {
+          await deps.onRevoke();
+        } catch {
+          // Best effort: the local wipe already happened.
+        }
+        // Anything that slipped in during the awaits above belongs to the old generation.
+        invalidate();
+        return publish();
+      } finally {
+        stopping -= 1;
       }
-      return publish();
     },
 
     async getExclusions() {
@@ -431,7 +473,10 @@ export function createLearnService(deps: LearnServiceDeps): LearnService {
     },
 
     async generateNow() {
-      if (unavailableReason() || !currentAccept()) return { ok: false, code: 'unavailable' };
+      const status = deriveStatus();
+      if (stopping > 0 || !currentAccept() || (status !== 'active' && status !== 'paused')) {
+        return { ok: false, code: 'unavailable' };
+      }
       return runInsights(MIN_MANUAL_SAMPLES);
     },
 
@@ -447,6 +492,8 @@ export function createLearnService(deps: LearnServiceDeps): LearnService {
       const gen = generation;
       const run = (async () => {
         if (!data) await load();
+        // Retention is enforced on every tick too, not only by the hourly timer.
+        await samples.purge(deps.now()).catch(() => {});
         // A timed pause that ended (also after sleep) resumes here.
         if (data?.paused && data.pausedUntil !== null && deps.now() >= data.pausedUntil) {
           await write({ paused: false, pausedUntil: null });

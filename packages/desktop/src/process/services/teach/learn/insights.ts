@@ -13,6 +13,7 @@ import type {
 } from '@/common/types/agent/learnTypes';
 import { chatCompletion, CHAT_COMPLETION_TIMEOUT_MS } from '@process/services/jr/modelConnection';
 import type { JrRelayConfig } from '@process/services/jr/bootstrap';
+import { redactUrl } from './privacyFilter';
 import { buildLearnSummary, LEARN_TICK_MS, SUMMARY_MAX_BYTES } from './summary';
 
 export const INSIGHTS_SYSTEM_PROMPT = [
@@ -69,13 +70,13 @@ function firstJsonObject(reply: string): Record<string, unknown> | null {
   return null;
 }
 
-/** https url whose origin is one the JR Bot browser showed; returned as origin + path. */
+/** https url whose origin is one the JR Bot browser showed; returned as origin + redacted path. */
 function seenUrl(value: unknown, origins: string[]): string | null {
   if (typeof value !== 'string') return null;
   try {
     const url = new URL(value.trim());
     if (url.protocol !== 'https:' || url.username || url.password || !origins.includes(url.origin)) return null;
-    return `${url.origin}${url.pathname}`;
+    return redactUrl(url.href);
   } catch {
     return null;
   }

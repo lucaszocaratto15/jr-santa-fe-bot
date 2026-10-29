@@ -14,6 +14,8 @@ import {
 import * as path from 'path';
 import { ipcBridge } from '@/common';
 import i18n from '@process/services/i18n';
+import { learnServiceMenuItems } from '@process/services/teach/learn/learnMenu';
+import { getLearnService } from '@process/services/teach/registry';
 
 let tray: TrayInstance | null = null;
 let closeToTrayEnabled = false;
@@ -26,6 +28,13 @@ export const setTrayMainWindow = (win: BrowserWindow): void => {
 };
 
 export const getCloseToTrayEnabled = (): boolean => closeToTrayEnabled;
+
+/** The tray icon exists (its menu carries the 🧠 status while "Aprender" is on). */
+export const hasTray = (): boolean => tray !== null;
+
+/** The main window, which has the 🧠 in its titlebar, is shown and not minimized. */
+export const isMainWindowOnScreen = (): boolean =>
+  Boolean(mainWindowRef && !mainWindowRef.isDestroyed() && mainWindowRef.isVisible() && !mainWindowRef.isMinimized());
 
 export const setCloseToTrayEnabled = (enabled: boolean): void => {
   closeToTrayEnabled = enabled;
@@ -113,6 +122,12 @@ const buildTrayContextMenu = async (): Promise<Electron.Menu> => {
   const runningTasksCount = getRunningTasksCount();
 
   const template: Electron.MenuItemConstructorOptions[] = [
+    // "Aprender com seu trabalho": status and Pausar/Desligar while it is on.
+    ...learnServiceMenuItems(
+      getLearnService(),
+      (key, options) => String(i18n.t(key, options)),
+      i18n.language || 'pt-BR'
+    ),
     {
       label: i18n.t('common.tray.showWindow'),
       click: showAndFocusMainWindow,
@@ -289,7 +304,7 @@ export const createOrUpdateTray = (): void => {
 /**
  * Rebuild tray menu with current cached state (synchronous wrapper).
  */
-const rebuildTrayMenu = (): void => {
+export const rebuildTrayMenu = (): void => {
   if (!tray) return;
   void buildTrayContextMenu().then((menu) => tray?.setContextMenu(menu));
 };

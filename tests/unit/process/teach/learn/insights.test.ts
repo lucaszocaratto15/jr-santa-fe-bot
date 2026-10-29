@@ -72,6 +72,26 @@ describe('parseInsightReply', () => {
     ]);
   });
 
+  it('redacts numbers and e-mails in a model-returned teach path', () => {
+    const parsed = parseInsightReply(
+      reply({
+        sugestoes: [
+          {
+            tipo: 'ensinar',
+            titulo: 'Abrir cliente',
+            url: 'https://nfse.prefeitura.sp.gov.br/clientes/12345678909/ana@exemplo.com',
+          },
+        ],
+      }),
+      ctx
+    );
+    const url = parsed?.suggestions[0].teach?.url ?? '';
+    expect(url.startsWith('https://nfse.prefeitura.sp.gov.br/clientes/')).toBe(true);
+    expect(url).not.toContain('12345678909');
+    expect(url).not.toContain('ana@exemplo.com');
+    expect(url).not.toMatch(/[?#]/);
+  });
+
   it('caps lists at 10 and texts at 300 chars', () => {
     const long = 'x'.repeat(500);
     const parsed = parseInsightReply(

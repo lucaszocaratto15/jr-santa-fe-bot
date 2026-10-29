@@ -42,6 +42,9 @@ export const DEFAULT_EXCLUSIONS: readonly LearnExclusion[] = Object.freeze([
   rule('bank-title-sicredi', 'title', 'Sicredi'),
   rule('bank-title-c6', 'title', 'C6 Bank'),
   rule('bank-title-internet-banking', 'title', 'Internet Banking'),
+  rule('bank-title-mercadopago', 'title', 'Mercado Pago'),
+  rule('bank-title-picpay', 'title', 'PicPay'),
+  rule('bank-title-btg', 'title', 'BTG Pactual'),
   // Banks: apps
   rule('bank-app-itau', 'app', 'Itaú'),
   rule('bank-app-nubank', 'app', 'Nubank'),
@@ -51,10 +54,12 @@ export const DEFAULT_EXCLUSIONS: readonly LearnExclusion[] = Object.freeze([
   rule('whatsapp-title', 'title', 'WhatsApp'),
   // Personal e-mail: domains
   rule('mail-domain-outlook-live', 'domain', 'outlook.live.com'),
+  rule('mail-domain-outlook', 'domain', 'outlook.com'),
   rule('mail-domain-yahoo', 'domain', 'mail.yahoo.com'),
   rule('mail-domain-uol', 'domain', 'mail.uol.com.br'),
   rule('mail-domain-bol', 'domain', 'email.bol.uol.com.br'),
   // Personal e-mail: account in the tab title
+  rule('mail-title-outlook-com', 'title', 'Outlook.com'),
   rule('mail-title-gmail', 'title', '@gmail.com'),
   rule('mail-title-hotmail', 'title', '@hotmail.com'),
   rule('mail-title-outlook', 'title', '@outlook.com'),
@@ -116,15 +121,80 @@ export function isExcluded(
   });
 }
 
-/** Titles mentioning a secret keep only the app. `pin` needs a boundary so "shopping" survives. */
-const SECRET_TITLE_RE = /senha|password|codigo|code|token|2fa|verificacao|cvv|cartao|\bpin(?![a-z])/;
+/**
+ * Titles mentioning a secret, or LGPD art. 11 sensitive data (health, salary, union, religion…),
+ * keep only the app. Matched on the normalized title; short words need a boundary so ordinary
+ * words ("shopping", "medição", "cardápio", "crédito") survive.
+ */
+const SECRET_TITLE_RE = new RegExp(
+  [
+    // Secrets and sign-in screens.
+    'senha',
+    'password',
+    'passcode',
+    'codigo',
+    'code',
+    'token',
+    '2fa',
+    'verificacao',
+    'cvv',
+    'cartao',
+    '\\bcards?\\b',
+    'credit card',
+    'login',
+    'log in',
+    '\\bsign[ -]?in\\b',
+    '\\botp\\b',
+    '\\bmfa\\b',
+    'autenticacao',
+    'authenticat',
+    'chave pix',
+    '\\bpin(?![a-z])',
+    // LGPD art. 11 sensitive data.
+    'saude',
+    'atestado',
+    '\\bexames?\\b',
+    '\\bcid\\b',
+    'holerite',
+    'contracheque',
+    'salario',
+    'sindicato',
+    'religiao',
+    'igreja',
+    'doenca',
+    'hospital',
+    'clinica',
+    '\\bmedic[oa]s?\\b',
+    'diagnostic',
+    'psicolog',
+    'psiquiatr',
+    'terapia',
+    'gravidez',
+    'gestante',
+    '\\bhiv\\b',
+    'biometri',
+    'orientacao sexual',
+    'partido politico',
+    'filiacao partidaria',
+    'etnia',
+    'racial',
+  ].join('|')
+);
 const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 const CNPJ_RE = /\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}/g;
 const CPF_RE = /\d{3}\.?\d{3}\.?\d{3}-?\d{2}/g;
-const DIGITS_RE = /\d{4,}/g;
+/** Brazilian plates, old (ABC-1234) and Mercosul (ABC1D23). */
+const PLATE_RE = /\b[A-Za-z]{3}-?\d[A-Za-z0-9]\d{2}\b/g;
+/** A run of digits joined by `.`, `-`, `/` or spaces. */
+const NUMBER_RUN_RE = /\d(?:[\d./ -]*\d)?/g;
+const MIN_ID_DIGITS = 7;
 const MAX_TITLE = 120;
 
-/** Clean a window title before it reaches a summary. null = keep only the app. */
+/** `#` for a run with 4+ digits in a row or 7+ digits in all (RG, CPF prefix, phone, card). */
+const maskNumberRun = (run: string): string =>
+  /\d{4,}/.test(run) || run.replace(/\D/g, '').length >= MIN_ID_DIGITS ? '#' : run;
+
+/** Clean a window title before it is stored or summarized. null = keep only the app. */
 export function redactTitle(title: string | null): string | null {
   if (title === null) return null;
   const trimmed = title.trim();
@@ -133,8 +203,35 @@ export function redactTitle(title: string | null): string | null {
     .replace(EMAIL_RE, '[email]')
     .replace(CNPJ_RE, '[doc]')
     .replace(CPF_RE, '[doc]')
-    .replace(DIGITS_RE, '#')
+    .replace(PLATE_RE, '[placa]')
+    .replace(NUMBER_RUN_RE, maskNumberRun)
     .slice(0, MAX_TITLE)
     .trim();
   return cleaned || null;
+}
+
+/**
+ * http(s) url → origin + redacted path, never the query, fragment or credentials. A path that
+ * names a secret keeps only the origin. null for anything that is not a web url.
+ */
+export function redactUrl(url: string | undefined): string | null {
+  if (!url) return null;
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null;
+  let path: string;
+  try {
+    path = decodeURIComponent(parsed.pathname);
+  } catch {
+    path = parsed.pathname;
+  }
+  const cleaned = path === '/' ? '' : (redactTitle(path) ?? '');
+  if (!cleaned) return parsed.origin;
+  const withSlash = cleaned.startsWith('/') ? cleaned : `/${cleaned}`;
+  // `#` (a masked number) and `?` must not start a fragment or a query when the url is parsed again.
+  return `${parsed.origin}${encodeURI(withSlash).replace(/[?#]/g, encodeURIComponent)}`;
 }

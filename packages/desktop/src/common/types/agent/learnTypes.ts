@@ -10,7 +10,7 @@
  */
 
 /** Version of the binding LGPD term. A stored accept of another version pauses the feature. */
-export const LEARN_TERM_VERSION = '1.2';
+export const LEARN_TERM_VERSION = '1.3';
 
 export type LearnStatus = 'off' | 'needs-consent' | 'active' | 'paused' | 'unavailable';
 

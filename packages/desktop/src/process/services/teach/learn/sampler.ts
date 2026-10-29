@@ -15,7 +15,7 @@ export type Sampler = {
   sample(): Promise<ForegroundSample | null>;
   /** Kills the child; later calls resolve null without spawning. */
   stop(): void;
-  /** 3 failures within 10 minutes: the sampler gives up until it is recreated. */
+  /** 3 failures within 10 minutes: the sampler gives up for good, until it is recreated. */
   failed(): boolean;
 };
 
@@ -24,9 +24,12 @@ export type SamplerDeps = {
   platform: NodeJS.Platform;
   now: () => number;
   timeoutMs?: number;
+  /** First reply after a spawn: PowerShell `Add-Type` compiles C# and antivirus may scan it. */
+  firstTimeoutMs?: number;
 };
 
 export const SAMPLER_TIMEOUT_MS = 5_000;
+export const SAMPLER_FIRST_TIMEOUT_MS = 30_000;
 const FAILURE_WINDOW_MS = 10 * 60_000;
 const MAX_FAILURES = 3;
 const MAX_FIELD = 300;
@@ -63,17 +66,24 @@ export function createSampler(deps: SamplerDeps): Sampler | null {
   const command = samplerCommand(deps.platform);
   if (!command) return null;
   const timeoutMs = deps.timeoutMs ?? SAMPLER_TIMEOUT_MS;
+  const firstTimeoutMs = deps.firstTimeoutMs ?? SAMPLER_FIRST_TIMEOUT_MS;
   let child: ChildProcess | null = null;
   let lines: Interface | null = null;
   let pending: Pending | null = null;
   let stopped = false;
   let failures: number[] = [];
+  /** Sticky: once given up, no respawn until a new sampler ("Tentar de novo"). */
+  let gaveUp = false;
+  /** The current child has not answered yet. */
+  let awaitingFirstReply = false;
 
-  const failed = () => {
+  const recordFailure = () => {
     const now = deps.now();
-    failures = failures.filter((at) => now - at < FAILURE_WINDOW_MS);
-    return failures.length >= MAX_FAILURES;
+    failures = [...failures.filter((at) => now - at < FAILURE_WINDOW_MS), now];
+    if (failures.length >= MAX_FAILURES) gaveUp = true;
   };
+
+  const failed = () => gaveUp;
 
   const kill = () => {
     const current = child;
@@ -92,7 +102,7 @@ export function createSampler(deps: SamplerDeps): Sampler | null {
   };
 
   const fail = () => {
-    failures.push(deps.now());
+    recordFailure();
     kill();
   };
 
@@ -105,6 +115,7 @@ export function createSampler(deps: SamplerDeps): Sampler | null {
       return null;
     }
     child = next;
+    awaitingFirstReply = true;
     next.stdin?.on('error', () => {});
     next.on('error', () => {
       if (child === next) {
@@ -132,17 +143,18 @@ export function createSampler(deps: SamplerDeps): Sampler | null {
       if (pending) return pending.promise;
       const proc = ensureChild();
       if (!proc?.stdin) {
-        failures.push(deps.now());
+        recordFailure();
         kill();
         return Promise.resolve(null);
       }
       let settle!: (line: string | null) => void;
       const promise = new Promise<ForegroundSample | null>((resolve) => {
-        const timer = setTimeout(() => settle(null), timeoutMs);
+        const timer = setTimeout(() => settle(null), awaitingFirstReply ? firstTimeoutMs : timeoutMs);
         settle = (line) => {
           clearTimeout(timer);
           if (pending?.promise !== promise) return;
           pending = null;
+          if (line !== null) awaitingFirstReply = false;
           if (line === null || !parseObject(line)) {
             if (!stopped) fail();
             resolve(null);
