@@ -15,7 +15,10 @@ vi.mock('react-router-dom', () => ({
   useNavigate: () => vi.fn(),
 }));
 vi.mock('@/common', () => ({
-  ipcBridge: { conversation: { get: { invoke: vi.fn() } } },
+  ipcBridge: {
+    conversation: { get: { invoke: vi.fn() } },
+    learn: { state: { invoke: async () => null }, stateChanged: { on: () => () => {} } },
+  },
 }));
 vi.mock('@/common/config/constants', () => ({ TEAM_MODE_ENABLED: false }));
 vi.mock('@renderer/pages/conversation/GroupedHistory/ConversationSearchPopover', () => ({ default: () => null }));

@@ -122,6 +122,7 @@ export function createLearnService(deps: LearnServiceDeps): LearnService {
   let runInFlight: Promise<LearnGenerateResult> | null = null;
   let runAbort: AbortController | null = null;
   let lastEmitted = '';
+  let activeSince: number | null = null;
   let disposed = false;
 
   const unavailableReason = (): LearnState['unavailableReason'] => {
@@ -158,6 +159,7 @@ export function createLearnService(deps: LearnServiceDeps): LearnService {
       acceptedVersion: accept?.termVersion ?? null,
       acceptedAt: accept?.at ?? null,
       lastInsightsAt: data?.lastSummaryAt ?? null,
+      activeSince: status === 'active' ? activeSince : null,
     };
   };
 
@@ -180,6 +182,9 @@ export function createLearnService(deps: LearnServiceDeps): LearnService {
   };
 
   const publish = (): LearnState => {
+    const status = deriveStatus();
+    if (status !== 'active') activeSince = null;
+    else activeSince ??= deps.now();
     const state = computeState();
     syncTimers(state.status);
     const serialized = JSON.stringify(state);

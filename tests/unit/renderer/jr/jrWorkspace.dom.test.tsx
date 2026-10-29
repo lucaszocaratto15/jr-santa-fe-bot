@@ -28,7 +28,10 @@ vi.mock('swr', () => ({
   mutate: vi.fn(),
 }));
 vi.mock('@/common', () => ({
-  ipcBridge: { conversation: { listChanged: { on: () => () => {} }, artifactStream: { on: () => () => {} } } },
+  ipcBridge: {
+    conversation: { listChanged: { on: () => () => {} }, artifactStream: { on: () => () => {} } },
+    learn: { state: { invoke: async () => null }, stateChanged: { on: () => () => {} } },
+  },
 }));
 vi.mock('@/renderer/pages/Jr/jrBots', () => ({
   listJrBots: vi.fn(),
@@ -61,7 +64,7 @@ vi.mock('@/renderer/pages/conversation/GroupedHistory/ConversationSearchPopover'
     renderTrigger: (props: { onClick: () => void; isActive: boolean }) => React.ReactNode;
   }) => renderTrigger({ onClick: mocks.search, isActive: false }),
 }));
-vi.mock('@/renderer/utils/emitter', () => ({ emitter: { emit: vi.fn() } }));
+vi.mock('@/renderer/utils/emitter', () => ({ emitter: { emit: vi.fn() }, useAddEventListener: () => {} }));
 
 import JrWorkspace from '@/renderer/pages/Jr';
 import JrSidebar from '@/renderer/pages/Jr/JrSidebar';

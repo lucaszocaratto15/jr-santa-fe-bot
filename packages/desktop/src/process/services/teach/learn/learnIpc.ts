@@ -30,6 +30,7 @@ export const UNAVAILABLE_LEARN_STATE: LearnState = {
   acceptedVersion: null,
   acceptedAt: null,
   lastInsightsAt: null,
+  activeSince: null,
 };
 
 const requireService = () => {

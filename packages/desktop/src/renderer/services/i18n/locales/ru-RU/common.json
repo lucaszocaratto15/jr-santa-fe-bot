@@ -796,6 +796,19 @@
         "revoke": "Revoke consent and delete everything",
         "revokeConfirm": "This deletes the raw records and insights now and turns the feature off. To turn it on again you will need to accept the term again.",
         "revokeDone": "Consent revoked. Your data was deleted."
+      },
+      "indicator": {
+        "label": "Learn from your work",
+        "learningSince": "Learning · since {{time}}",
+        "learning": "Learning",
+        "pausedUntil": "Paused until {{time}}",
+        "paused": "Paused",
+        "pause1h": "Pause for 1 hour",
+        "pauseUntilResume": "Pause until I resume",
+        "resume": "Resume",
+        "open": "View insights and settings",
+        "turnOff": "Turn off",
+        "reviewTerm": "The term changed: review"
       }
     }
   }

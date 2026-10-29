@@ -794,6 +794,19 @@
         "revoke": "Revogar consentimento e apagar tudo",
         "revokeConfirm": "Isto apaga agora os registros brutos e os insights e desliga o recurso. Para religar, será preciso aceitar o termo de novo.",
         "revokeDone": "Consentimento revogado. Seus dados foram apagados."
+      },
+      "indicator": {
+        "label": "Aprender com seu trabalho",
+        "learningSince": "Aprendendo · desde {{time}}",
+        "learning": "Aprendendo",
+        "pausedUntil": "Pausado até {{time}}",
+        "paused": "Pausado",
+        "pause1h": "Pausar por 1 hora",
+        "pauseUntilResume": "Pausar até eu retomar",
+        "resume": "Retomar",
+        "open": "Ver insights e ajustes",
+        "turnOff": "Desligar",
+        "reviewTerm": "O termo mudou: revisar"
       }
     }
   }

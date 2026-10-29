@@ -28,6 +28,8 @@ export type LearnState = {
   /** ISO time of the latest accept. */
   acceptedAt: string | null;
   lastInsightsAt: number | null;
+  /** When the current 'active' stretch started (for "Aprendendo · desde 08:12"); null otherwise. */
+  activeSince: number | null;
 };
 
 export type LearnExclusionKind = 'app' | 'domain' | 'title';

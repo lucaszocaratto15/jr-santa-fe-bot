@@ -16,7 +16,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { LinkOne, Peoples, Plus, Search } from '@icon-park/react';
 import { useAuth } from '@renderer/hooks/context/AuthContext';
 import { loadLatestConversationMessages } from '@renderer/utils/chat/messagePagination';
-import React, { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import React, { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -44,6 +44,7 @@ import { initialsFromName, sidebarProfile } from './sidebarProfile';
 import { readSidebarLayout, writeSidebarLayout } from './preferences';
 import styles from './JrSidebar.module.css';
 import { useTaughtRunWatcher } from './Teach/useTaughtRunWatcher';
+import { useLearnSettingsRequests } from './Learn/useLearnState';
 
 const JrConnections = lazy(() => import('../Connections'));
 const JrBotTeamDialog = lazy(() => import('../JrBotTeamDialog'));
@@ -139,6 +140,12 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
   const { user } = useAuth();
   const [connectionsOpen, setConnectionsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
+  const [settingsAutoConsent, setSettingsAutoConsent] = useState(false);
+  const openLearnSettings = useCallback((autoConsent: boolean) => {
+    setSettingsAutoConsent(autoConsent);
+    setSettingsTab('learn');
+  }, []);
+  useLearnSettingsRequests(openLearnSettings);
   const [teamDialogOpen, setTeamDialogOpen] = useState(false);
   const [botToDelete, setBotToDelete] = useState<JrBot | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -434,7 +441,20 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
         <p>{t('common.jr.deleteBotHint')}</p>
         {deleteFailed && <Alert type='error' content={t('common.jr.saveError')} />}
       </Modal>
-      {settingsTab && <JrSettingsModal tab={settingsTab} onTab={setSettingsTab} onClose={() => setSettingsTab(null)} />}
+      {settingsTab && (
+        <JrSettingsModal
+          tab={settingsTab}
+          autoConsent={settingsTab === 'learn' && settingsAutoConsent}
+          onTab={(tab) => {
+            setSettingsAutoConsent(false);
+            setSettingsTab(tab);
+          }}
+          onClose={() => {
+            setSettingsAutoConsent(false);
+            setSettingsTab(null);
+          }}
+        />
+      )}
       {connectionsOpen && (
         <Suspense fallback={<Spin size={16} aria-label={t('common.loading')} />}>
           <JrConnections onClose={() => setConnectionsOpen(false)} />

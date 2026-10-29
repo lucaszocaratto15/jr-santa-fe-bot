@@ -40,7 +40,34 @@ vi.mock('@arco-design/web-react', async () => {
   return { ...actual, Message: message };
 });
 
+const { listJrBots, startJrConversation, queueConversationIntent, navigate } = vi.hoisted(() => ({
+  listJrBots: vi.fn(),
+  startJrConversation: vi.fn(),
+  queueConversationIntent: vi.fn(),
+  navigate: vi.fn(),
+}));
+
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return { ...actual, useNavigate: () => navigate };
+});
+vi.mock('@renderer/pages/Jr/index', () => ({ JR_BOTS_KEY: 'jr.bots' }));
+vi.mock('@renderer/pages/Jr/jrBots', () => ({ listJrBots, startJrConversation }));
+vi.mock('@renderer/pages/conversation/Preview/browser/TeachCards/teachStore', () => ({ queueConversationIntent }));
+vi.mock('@renderer/pages/Jr/JrSidebar/panels', () => ({
+  ComputerPanel: () => null,
+  GeneralPanel: () => null,
+  UpdatesPanel: () => null,
+}));
+vi.mock('@renderer/pages/Jr/JrSidebar/Teach/TasksPanel', () => ({ __esModule: true, default: () => null }));
+vi.mock('@renderer/pages/Jr/JrSidebar/Teach/VaultPanel', () => ({ __esModule: true, default: () => null }));
+vi.mock('@renderer/pages/Jr/JrSidebar/Usage/UsagePanel', () => ({ __esModule: true, default: () => null }));
+
+import { MemoryRouter } from 'react-router-dom';
 import LearnPanel from '@renderer/pages/Jr/JrSidebar/Learn/LearnPanel';
+import JrSettingsModal from '@renderer/pages/Jr/JrSidebar/SettingsModal';
+import { useLearnSettingsRequests } from '@renderer/pages/Jr/JrSidebar/Learn/useLearnState';
+import { emitter } from '@renderer/utils/emitter';
 
 const base: LearnState = {
   status: 'off',
@@ -52,6 +79,7 @@ const base: LearnState = {
   acceptedVersion: null,
   acceptedAt: null,
   lastInsightsAt: null,
+  activeSince: null,
 };
 const active: LearnState = {
   ...base,
@@ -231,5 +259,101 @@ describe('LearnPanel', () => {
     renderPanel(active);
     fireEvent.click(await screen.findByRole('button', { name: 'Pausar' }));
     await waitFor(() => expect(learn.pause.invoke).toHaveBeenCalledWith({ minutes: null }));
+  });
+});
+
+describe('Ensinar esta tarefa (through the settings modal)', () => {
+  const bot = { id: 'bot-nf', name: 'Fiscal', workspace: '/w' };
+
+  const renderSettings = () => {
+    learn.state.invoke.mockResolvedValue(active);
+    learn.listInsights.invoke.mockResolvedValue([batch]);
+    const onClose = vi.fn();
+    render(
+      withI18n(
+        i18n,
+        <MemoryRouter initialEntries={['/conversation/old?bot=bot-nf']}>
+          <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+            <JrSettingsModal tab='learn' onTab={() => {}} onClose={onClose} />
+          </SWRConfig>
+        </MemoryRouter>
+      )
+    );
+    return { onClose };
+  };
+
+  beforeEach(() => {
+    listJrBots.mockReset().mockResolvedValue([{ id: 'other', name: 'Outro' }, bot]);
+    startJrConversation.mockReset().mockResolvedValue({ id: 'conv-9', name: 'Nova' });
+    queueConversationIntent.mockReset();
+    navigate.mockReset();
+  });
+
+  it('opens the bot conversation with a describe intent for the suggestion url', async () => {
+    const { onClose } = renderSettings();
+    fireEvent.click(await screen.findByRole('button', { name: 'Ensinar esta tarefa' }));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/conversation/conv-9?bot=bot-nf'));
+    expect(onClose).toHaveBeenCalled();
+    expect(startJrConversation).toHaveBeenCalledWith(bot, { newConversation: true });
+    expect(queueConversationIntent).toHaveBeenCalledWith('conv-9', {
+      openBrowser: true,
+      url: 'https://nfse.exemplo.gov.br/emitir',
+      describe: 'Emitir a NF do dia',
+    });
+  });
+
+  it('without a bot it warns and keeps the modal open', async () => {
+    listJrBots.mockResolvedValue([]);
+    const { onClose } = renderSettings();
+    fireEvent.click(await screen.findByRole('button', { name: 'Ensinar esta tarefa' }));
+    await waitFor(() => expect(message.warning).toHaveBeenCalled());
+    expect(onClose).not.toHaveBeenCalled();
+    expect(startJrConversation).not.toHaveBeenCalled();
+  });
+});
+
+describe('useLearnSettingsRequests', () => {
+  const Probe: React.FC<{ open: (autoConsent: boolean) => void }> = ({ open }) => {
+    useLearnSettingsRequests(open);
+    return null;
+  };
+  const mount = (state: LearnState, open: (autoConsent: boolean) => void) => {
+    learn.state.invoke.mockResolvedValue(state);
+    return render(
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <Probe open={open} />
+      </SWRConfig>
+    );
+  };
+
+  beforeEach(() => {
+    sessionStorage.clear();
+  });
+
+  it('asks once per session after a prior accept of another version', async () => {
+    const open = vi.fn();
+    const first = mount({ ...base, status: 'needs-consent', acceptedVersion: '1.1' }, open);
+    await waitFor(() => expect(open).toHaveBeenCalledWith(true));
+    first.unmount();
+    const again = vi.fn();
+    mount({ ...base, status: 'needs-consent', acceptedVersion: '1.1' }, again);
+    await waitFor(() => expect(learn.state.invoke).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(again).not.toHaveBeenCalled();
+  });
+
+  it('never asks when nothing was accepted before', async () => {
+    const open = vi.fn();
+    mount({ ...base, status: 'needs-consent', acceptedVersion: null }, open);
+    await waitFor(() => expect(learn.state.invoke).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it('opens the tab on jr.settings.open', async () => {
+    const open = vi.fn();
+    mount(active, open);
+    emitter.emit('jr.settings.open', { tab: 'learn' });
+    expect(open).toHaveBeenCalledWith(false);
   });
 });

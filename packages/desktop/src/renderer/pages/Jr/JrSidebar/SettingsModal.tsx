@@ -1,12 +1,19 @@
-import { Button } from '@arco-design/web-react';
+import { Button, Message } from '@arco-design/web-react';
 import { Brain, ChartHistogram, Close, Computer, Download, ListCheckbox, Lock, SettingTwo } from '@icon-park/react';
 import React, { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import useSWR from 'swr';
+import type { LearnSuggestion } from '@/common/types/agent/learnTypes';
+import { JR_BOTS_KEY } from '@renderer/pages/Jr/index';
+import { listJrBots, startJrConversation } from '@renderer/pages/Jr/jrBots';
+import { queueConversationIntent } from '@renderer/pages/conversation/Preview/browser/TeachCards/teachStore';
 import { isMacOS } from '@/renderer/utils/platform';
 import { ComputerPanel, GeneralPanel, UpdatesPanel } from './panels';
 import LearnPanel from './Learn/LearnPanel';
 import TasksPanel from './Teach/TasksPanel';
+import { pickRunBot } from './Teach/taskActions';
 import UsagePanel from './Usage/UsagePanel';
 import VaultPanel from './Teach/VaultPanel';
 import styles from './JrSidebar.module.css';
@@ -42,6 +49,31 @@ const JrSettingsModal: React.FC<{
   autoConsent?: boolean;
 }> = ({ tab, onTab, onClose, autoConsent }) => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const bots = useSWR(tab === 'learn' ? JR_BOTS_KEY : null, listJrBots);
+
+  /** "Ensinar esta tarefa": a new conversation of the active bot, browser on the url, Ensinar prefilled. */
+  const teachSuggestion = async (suggestion: LearnSuggestion) => {
+    if (!suggestion.teach) return;
+    const bot = pickRunBot(bots.data ?? (await listJrBots()), params.get('bot'));
+    if (!bot) {
+      Message.warning(t('common.jr.teach.tasks.noBot'));
+      return;
+    }
+    onClose();
+    try {
+      const conversation = await startJrConversation(bot, { newConversation: true });
+      queueConversationIntent(conversation.id, {
+        openBrowser: true,
+        url: suggestion.teach.url,
+        describe: suggestion.teach.description,
+      });
+      void navigate(`/conversation/${conversation.id}?bot=${encodeURIComponent(bot.id)}`);
+    } catch {
+      Message.error(t('common.jr.teach.tasks.runFailed'));
+    }
+  };
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -97,7 +129,7 @@ const JrSettingsModal: React.FC<{
           {tab === 'usage' && <UsagePanel />}
           {tab === 'vault' && <VaultPanel />}
           {tab === 'tasks' && <TasksPanel onClose={onClose} />}
-          {tab === 'learn' && <LearnPanel autoConsent={autoConsent} onTeach={() => {}} />}
+          {tab === 'learn' && <LearnPanel autoConsent={autoConsent} onTeach={(suggestion) => void teachSuggestion(suggestion)} />}
           {tab === 'updates' && <UpdatesPanel />}
         </div>
       </div>

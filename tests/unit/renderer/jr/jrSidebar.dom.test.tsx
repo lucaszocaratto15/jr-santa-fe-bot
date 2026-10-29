@@ -35,6 +35,7 @@ vi.mock('@/common', () => ({
     conversation: { listChanged: { on: () => () => {} }, artifactStream: { on: () => () => {} } },
     team: { list: { invoke: vi.fn() } },
     database: { getConversationMessages: { invoke: mocks.messages } },
+    learn: { state: { invoke: async () => null }, stateChanged: { on: () => () => {} } },
   },
 }));
 vi.mock('@/renderer/pages/Jr/jrBots', () => ({

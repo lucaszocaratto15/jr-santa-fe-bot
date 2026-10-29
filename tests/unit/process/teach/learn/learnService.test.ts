@@ -263,6 +263,18 @@ describe('pause, off and revoke', () => {
     expect(await stored()).toHaveLength(1);
   });
 
+  it('reports activeSince for the current active stretch only', async () => {
+    const h = harness();
+    await h.service.init();
+    expect(h.service.state().activeSince).toBeNull();
+    await h.service.accept(LEARN_TERM_VERSION);
+    expect(h.service.state().activeSince).toBe(T0);
+    await h.service.pause(null);
+    expect(h.service.state().activeSince).toBeNull();
+    h.clock.now += 60_000;
+    expect((await h.service.resume()).activeSince).toBe(T0 + 60_000);
+  });
+
   it('pause(null) stays paused until resume()', async () => {
     const h = harness();
     await h.service.init();

@@ -75,6 +75,8 @@ interface EventTypes {
    * the send box of that conversation may react.
    */
   'sendbox.mention.session': [{ id: string; name: string }, string | undefined];
+  /** Opens the JR settings overlay on a tab; `autoConsent` also opens the "Aprender" term modal. */
+  'jr.settings.open': [{ tab: 'learn'; autoConsent?: boolean }];
 }
 
 export const emitter = new EventEmitter<EventTypes>();
