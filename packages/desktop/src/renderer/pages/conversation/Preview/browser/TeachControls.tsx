@@ -17,7 +17,7 @@ import {
   resyncTakeOver,
   setTakenOver,
   useTeachUi,
-} from '@/renderer/pages/conversation/components/TeachCards/teachStore';
+} from '@/renderer/pages/conversation/Preview/browser/TeachCards/teachStore';
 import styles from './TeachControls.module.css';
 
 /** Hard limit shown next to the timer; main enforces it (recorder RECORDING_LIMIT_MS). */

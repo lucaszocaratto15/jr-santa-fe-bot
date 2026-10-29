@@ -26,9 +26,9 @@ vi.mock('@/common', () => ({
   },
 }));
 
-import SecureCard from '@renderer/pages/conversation/components/TeachCards/SecureCard';
-import TeachCardHost from '@renderer/pages/conversation/components/TeachCards/TeachCardHost';
-import { resyncSecureRequests } from '@renderer/pages/conversation/components/TeachCards/useSecureRequests';
+import SecureCard from '@renderer/pages/conversation/Preview/browser/TeachCards/SecureCard';
+import TeachCardHost from '@renderer/pages/conversation/Preview/browser/TeachCards/TeachCardHost';
+import { resyncSecureRequests } from '@renderer/pages/conversation/Preview/browser/TeachCards/useSecureRequests';
 import { Message } from '@arco-design/web-react';
 import type { SecureRequest } from '@/common/adapter/ipcBridge';
 

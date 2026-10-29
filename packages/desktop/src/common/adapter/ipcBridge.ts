@@ -1542,8 +1542,8 @@ export const theme = {
 // Vault — local encrypted credentials. No channel ever returns a secret.
 // ---------------------------------------------------------------------------
 
-export type VaultItemPublic = import('@process/services/teach/vault/vault').VaultItemPublic;
-export type VaultUpsert = import('@process/services/teach/vault/vault').VaultUpsert;
+export type VaultItemPublic = import('@/common/types/agent/teachTypes').VaultItemPublic;
+export type VaultUpsert = import('@/common/types/agent/teachTypes').VaultUpsert;
 
 export const vault = {
   available: bridge.buildProvider<boolean, void>('vault:available'),
@@ -2557,15 +2557,15 @@ export const sidebar = {
   ),
 };
 
-export type SecureRequest = import('@process/services/teach/control/secureInput').SecureRequest;
-export type SecureResponse = import('@process/services/teach/control/secureInput').SecureResponse;
-export type SecureRespondResult = import('@process/services/teach/control/secureInput').SecureRespondResult;
-export type TeachDraft = import('@process/services/teach/recording/skillDraft').TeachDraft;
-export type TeachStateEvent = import('@process/services/teach/recording/teachSession').TeachStateEvent;
-export type TeachStopResult = import('@process/services/teach/recording/teachSession').TeachStopResult;
-export type TeachDraftEvent = import('@process/services/teach/recording/teachSession').TeachDraftEvent;
-export type TeachSaveDraftInput = import('@process/services/teach/recording/teachSession').TeachSaveDraftInput;
-export type TeachDraftRejectedEvent = import('@process/services/teach/recording/teachSession').TeachDraftRejectedEvent;
+export type SecureRequest = import('@/common/types/agent/teachTypes').SecureRequest;
+export type SecureResponse = import('@/common/types/agent/teachTypes').SecureResponse;
+export type SecureRespondResult = import('@/common/types/agent/teachTypes').SecureRespondResult;
+export type TeachDraft = import('@/common/types/agent/teachTypes').TeachDraft;
+export type TeachStateEvent = import('@/common/types/agent/teachTypes').TeachStateEvent;
+export type TeachStopResult = import('@/common/types/agent/teachTypes').TeachStopResult;
+export type TeachDraftEvent = import('@/common/types/agent/teachTypes').TeachDraftEvent;
+export type TeachSaveDraftInput = import('@/common/types/agent/teachTypes').TeachSaveDraftInput;
+export type TeachDraftRejectedEvent = import('@/common/types/agent/teachTypes').TeachDraftRejectedEvent;
 
 export const teach = {
   openTab: bridge.buildEmitter<{ url: string; openerWebContentsId: number }>('teach:open-tab'),

@@ -12,7 +12,7 @@ import { initWindowControlsBridge } from './windowControlsBridge';
 import { initNotificationBridge } from './notificationBridge';
 import { initWebuiBridge } from './webuiBridge';
 import { initThemeBridge } from './themeBridge';
-import { initSecureInputBridge, initTeachBridge, initVaultBridge } from './vaultBridge';
+import { initSecureInputBridge, initTeachBridge, initVaultBridge } from '@process/services/teach/control/teachIpc';
 
 export type BridgeDependencies = Record<string, never>;
 

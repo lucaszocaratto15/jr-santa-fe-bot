@@ -2,25 +2,10 @@ import { randomUUID } from 'node:crypto';
 import { chmod, constants, lstat, mkdir, open, rename, unlink } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import type { OsEncryption } from '../../jr/auth';
+import type { VaultItemPublic, VaultUpsert } from '@/common/types/agent/teachTypes';
 import { normalizeOrigin } from './originMatch';
 
-export type VaultItemPublic = {
-  id: string;
-  name: string;
-  origins: string[];
-  username: string;
-  hasPassword: boolean;
-  hints: string;
-};
-/** Omitted `password` keeps the stored one. */
-export type VaultUpsert = {
-  id?: string;
-  name: string;
-  origins: string[];
-  username: string;
-  password?: string;
-  hints?: string;
-};
+export type { VaultItemPublic, VaultUpsert };
 export type VaultStore = {
   available(): boolean;
   list(): Promise<VaultItemPublic[]>;

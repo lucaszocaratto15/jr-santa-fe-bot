@@ -61,15 +61,15 @@ vi.mock('@/common', () => ({
 
 import { Message } from '@arco-design/web-react';
 import type { TeachDraftEvent } from '@/common/adapter/ipcBridge';
-import ReviewCard from '@renderer/pages/conversation/components/TeachCards/ReviewCard';
-import TeachCardHost from '@renderer/pages/conversation/components/TeachCards/TeachCardHost';
+import ReviewCard from '@renderer/pages/conversation/Preview/browser/TeachCards/ReviewCard';
+import TeachCardHost from '@renderer/pages/conversation/Preview/browser/TeachCards/TeachCardHost';
 import {
   beginRecording,
   openDescribe,
   resetTeachUiForTests,
   sendToTeachConversation,
   useTeachUi,
-} from '@renderer/pages/conversation/components/TeachCards/teachStore';
+} from '@renderer/pages/conversation/Preview/browser/TeachCards/teachStore';
 import { emitter, type SendBoxSendRequest } from '@renderer/utils/emitter';
 
 const event: TeachDraftEvent = {

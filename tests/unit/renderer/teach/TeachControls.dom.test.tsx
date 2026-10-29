@@ -29,7 +29,7 @@ import TeachControls, {
   formatElapsed,
   TeachRecordingBar,
 } from '@renderer/pages/conversation/Preview/browser/TeachControls';
-import { resetTeachUiForTests, useTeachUi } from '@renderer/pages/conversation/components/TeachCards/teachStore';
+import { resetTeachUiForTests, useTeachUi } from '@renderer/pages/conversation/Preview/browser/TeachCards/teachStore';
 
 const Phase: React.FC = () => <span data-testid='phase'>{useTeachUi().phase}</span>;
 

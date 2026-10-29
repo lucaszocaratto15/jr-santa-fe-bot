@@ -1,6 +1,12 @@
+/**
+ * @license
+ * Copyright 2025 AionUi (aionui.com)
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import { ipcBridge } from '@/common';
-import { getSecureInputBroker, getTeachServices, getTeachSession } from '@process/services/teach/registry';
-import { TEACH_ERRORS } from '@process/services/teach/recording/teachSession';
+import { getSecureInputBroker, getTeachServices, getTeachSession } from '../registry';
+import { TEACH_ERRORS } from '../recording/teachSession';
 
 const requireVault = () => {
   const services = getTeachServices();

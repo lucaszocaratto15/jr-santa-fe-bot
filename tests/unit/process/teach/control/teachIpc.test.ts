@@ -34,7 +34,7 @@ vi.mock('@/common', () => ({
   },
 }));
 
-import { initSecureInputBridge, initTeachBridge, initVaultBridge } from '@process/bridge/vaultBridge';
+import { initSecureInputBridge, initTeachBridge, initVaultBridge } from '@process/services/teach/control/teachIpc';
 import { setSecureInputBroker, setTeachServices, setTeachSession } from '@process/services/teach/registry';
 import type { TeachSession } from '@process/services/teach/recording/teachSession';
 import type { SecureInputBroker } from '@process/services/teach/control/secureInput';
@@ -51,7 +51,7 @@ const makeStore = () =>
     readSecret: vi.fn(),
   }) as unknown as VaultStore & Record<string, ReturnType<typeof vi.fn>>;
 
-describe('vaultBridge', () => {
+describe('teachIpc', () => {
   let store: ReturnType<typeof makeStore>;
   beforeEach(() => {
     store = makeStore();
