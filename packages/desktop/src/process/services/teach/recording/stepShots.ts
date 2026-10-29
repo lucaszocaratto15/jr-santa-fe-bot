@@ -11,7 +11,7 @@
  * the delay still skips it. Images stay on disk: only `[tela N]` markers ever reach the model.
  */
 
-export type ShotSkipReason = 'secret-event' | 'secret-dirty' | 'live-secret' | 'limit';
+export type ShotSkipReason = 'secret-event' | 'secret-dirty' | 'live-secret' | 'paused' | 'limit';
 export type ShotDecision = { take: true } | { take: false; reason: ShotSkipReason };
 
 export const SHOT_DELAY_MS = 800;
@@ -25,12 +25,15 @@ export function decideShot(input: {
   eventSecret: boolean;
   secretDirty: boolean;
   liveSecret: boolean;
+  /** The recording is paused: whatever is on screen is not part of the task. */
+  paused?: boolean;
   taken: number;
   max: number;
 }): ShotDecision {
   if (input.eventSecret) return { take: false, reason: 'secret-event' };
   if (input.secretDirty) return { take: false, reason: 'secret-dirty' };
   if (input.liveSecret) return { take: false, reason: 'live-secret' };
+  if (input.paused) return { take: false, reason: 'paused' };
   if (input.taken >= input.max) return { take: false, reason: 'limit' };
   return { take: true };
 }

@@ -17,6 +17,7 @@ describe('decideShot', () => {
     expect(decideShot({ ...base, eventSecret: true })).toEqual({ take: false, reason: 'secret-event' });
     expect(decideShot({ ...base, secretDirty: true })).toEqual({ take: false, reason: 'secret-dirty' });
     expect(decideShot({ ...base, liveSecret: true })).toEqual({ take: false, reason: 'live-secret' });
+    expect(decideShot({ ...base, paused: true })).toEqual({ take: false, reason: 'paused' });
     expect(decideShot({ ...base, taken: 40 })).toEqual({ take: false, reason: 'limit' });
     expect(decideShot(base)).toEqual({ take: true });
   });

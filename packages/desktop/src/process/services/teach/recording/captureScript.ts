@@ -8,7 +8,9 @@
  *
  * Secret fields are classified with the regexes exported by fieldClassifier.ts (embedded
  * below), and their values never leave the page: the event only carries `secret: true`.
- * Paste events are never listened to.
+ * Paste events are never listened to. A click on a field carries its attributes (and
+ * `secret: true` for a secret one), and focusing a secret field sends a `focus-secret` notice,
+ * so main stops photographing the tab before any value is typed.
  */
 
 import { SECRET_AUTOCOMPLETE_RE, SECRET_TEXT_RE } from './fieldClassifier';
@@ -199,7 +201,21 @@ const PAGE_SOURCE = String.raw`(function (RULES) {
       var el = element(e);
       if (!el) return;
       var hit = (el.closest && el.closest(INTERACTIVE)) || el;
-      send({ kind: 'click', target: locators(hit) });
+      var evt = { kind: 'click', target: locators(hit) };
+      if (isField(hit)) {
+        evt.field = fieldAttrs(hit);
+        if (isSecret(evt.field)) evt.secret = true;
+      }
+      send(evt);
+    } catch (err) {}
+  }, true);
+
+  window.addEventListener('focusin', function (e) {
+    try {
+      var el = element(e);
+      if (!el || !isField(el)) return;
+      var f = fieldAttrs(el);
+      if (isSecret(f)) send({ kind: 'focus-secret', field: f, secret: true });
     } catch (err) {}
   }, true);
 

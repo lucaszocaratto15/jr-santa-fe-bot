@@ -25,6 +25,13 @@ describe('isSecretField', () => {
     expect(isSecretField({ tag: 'input', type: 'text', label: 'PIN' })).toBe(true);
   });
 
+  it('flags CPF fields (personal data, never photographed or recorded)', () => {
+    expect(isSecretField({ tag: 'input', type: 'text', name: 'cpf' })).toBe(true);
+    expect(isSecretField({ tag: 'input', type: 'text', label: 'CPF do titular' })).toBe(true);
+    expect(isSecretField({ tag: 'input', type: 'text', id: 'nr_cpf' })).toBe(true);
+    expect(isPasswordField({ tag: 'input', type: 'text', name: 'cpf' })).toBe(false);
+  });
+
   it('flags codigo/code as a separate token and verificação anywhere', () => {
     expect(isSecretField({ tag: 'input', type: 'text', name: 'codigo' })).toBe(true);
     expect(isSecretField({ tag: 'input', type: 'text', label: 'Código' })).toBe(true);

@@ -449,6 +449,84 @@ describe('teach recorder step screenshots', () => {
     expect(events.find((e) => e.kind === 'click')?.shot).toBeUndefined();
   });
 
+  // Text fields classified as secret: the browser shows their value in plain text.
+  const secretTextFields = {
+    OTP: { tag: 'input', type: 'text', name: 'codigo', placeholder: 'Código de verificação' },
+    CPF: { tag: 'input', type: 'text', name: 'cpf', label: 'CPF' },
+    card: { tag: 'input', type: 'text', name: 'numero', placeholder: 'Número do cartão' },
+  };
+  const shotCount = (fake: { sent: Array<{ method: string }> }) =>
+    fake.sent.filter((s) => s.method === 'Page.captureScreenshot').length;
+
+  for (const [label, field] of Object.entries(secretTextFields)) {
+    it(`clicking a ${label} text field and typing before change takes no shot until the next navigation`, async () => {
+      const { dir, fake, recorder } = await setup({ shots: true });
+      const { id } = await recorder.start('pagar');
+      await wait(20);
+      const before = shotCount(fake);
+      // The page reports the click on the field; keystrokes produce no event before blur.
+      fake.page({ ...click(label), field });
+      await wait(20);
+      fake.page(click('Continuar'));
+      await wait(20);
+      expect(shotCount(fake)).toBe(before);
+      const { events } = await recorder.stop();
+      expect(events.filter((e) => e.kind === 'click').map((e) => e.shot)).toEqual([undefined, undefined]);
+      const names = await readdir(join(dir, id, 'shots')).catch((): string[] => []);
+      expect(names).toHaveLength(before);
+    });
+
+    it(`focusing a ${label} text field marks the tab so the next click takes no shot`, async () => {
+      const { fake, recorder } = await setup({ shots: true });
+      await recorder.start('pagar');
+      await wait(20);
+      const before = shotCount(fake);
+      fake.page({ kind: 'focus-secret', url: 'https://portal.example.com/login', field });
+      fake.page(click('Continuar'));
+      await wait(20);
+      expect(shotCount(fake)).toBe(before);
+      const { events } = await recorder.stop();
+      expect(events.some((e) => (e.kind as string) === 'focus-secret')).toBe(false);
+      expect(events.find((e) => e.kind === 'click')?.shot).toBeUndefined();
+    });
+  }
+
+  it('a click on an ordinary text field still takes its shot and offers no vault save', async () => {
+    const { fake, recorder } = await setup({ shots: true });
+    await recorder.start('buscar');
+    await wait(20);
+    fake.page({ ...click('Busca'), field: { tag: 'input', type: 'text', name: 'q', label: 'Buscar nota' } });
+    await wait(20);
+    const { events, secretOrigins } = await recorder.stop();
+    expect(events.find((e) => e.kind === 'click')?.shot).toBeGreaterThan(0);
+    expect(secretOrigins).toEqual([]);
+    expect(JSON.stringify(events)).not.toContain('"field"');
+  });
+
+  it('a click on a password field is not a vault save offer by itself', async () => {
+    const { fake, recorder } = await setup({ shots: true });
+    await recorder.start('login');
+    await wait(20);
+    fake.page({ ...click('Senha'), field: { tag: 'input', type: 'password', name: 'pw' } });
+    await wait(20);
+    const { secretOrigins } = await recorder.stop();
+    expect(secretOrigins).toEqual([]);
+  });
+
+  it('skips a pending shot when the recording is paused before it is due', async () => {
+    const { fake, recorder } = await setup({ shots: true });
+    await recorder.start('emitir');
+    await wait(20);
+    const before = shotCount(fake);
+    fake.page(click('Emitir'));
+    recorder.pause();
+    await wait(20);
+    expect(shotCount(fake)).toBe(before);
+    const { events } = await recorder.stop();
+    expect(shotCount(fake)).toBe(before);
+    expect(events.find((e) => e.kind === 'click')?.shot).toBeUndefined();
+  });
+
   it('takes no screenshot at all without the shots option', async () => {
     const { fake, recorder } = await setup();
     await recorder.start('x');

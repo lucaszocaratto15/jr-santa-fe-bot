@@ -9,9 +9,9 @@
  * can offer to save a credential (the employee retypes it there).
  *
  * Screenshots ("telas", stepShots.ts): taken after click/submit/navigate into
- * `<dir>/<id>/shots/<n>.jpg`, and skipped when the step is secret, when a secret field of the
- * tab got a value since its last navigation, or when the bridge holds a live secret for the
- * page. The images never reach the model; the timeline only carries `[tela N]` markers.
+ * `<dir>/<id>/shots/<n>.jpg`, and skipped when the step is secret (including a click on a
+ * secret field), when a secret field of the tab was clicked, focused or got a value since its
+ * last navigation, when the bridge holds a live secret for the page, or while paused. The images never reach the model; the timeline only carries `[tela N]` markers.
  */
 
 import { randomUUID } from 'node:crypto';
@@ -91,6 +91,8 @@ const ID_RE = /^[0-9a-f-]{36}$/;
 const LOCATOR_KEYS = ['role', 'name', 'label', 'text', 'placeholder', 'attr', 'css'] as const;
 const PAGE_KINDS = new Set(['click', 'input', 'submit', 'key']);
 const SHOT_KINDS = new Set<TeachEventKind>(['click', 'submit', 'navigate']);
+/** Page events that mark the tab secret-dirty when they concern a secret field. */
+const SECRET_TRACK_KINDS = new Set(['input', 'click', 'key', 'focus-secret']);
 /** Shots live next to events.jsonl in the recording dir. */
 export const SHOTS_DIRNAME = 'shots';
 
@@ -110,6 +112,8 @@ type Session = {
   pendingTabEvents: Array<Pick<TeachEvent, 'kind' | 'tab' | 'url'>>;
   /** Tabs where a secret field got a value since the tab's last top-frame navigation. */
   secretDirty: Set<number>;
+  /** True while paused (kept through stop, so a shot pending at pause is never taken). */
+  paused: boolean;
   shots: ShotTaker | null;
 };
 
@@ -217,6 +221,7 @@ export function createRecorder(deps: RecorderDeps): Recorder {
         eventSecret,
         secretDirty: s.secretDirty.has(tab) || s.secretDirty.has(s.currentTab),
         liveSecret: liveSecret(),
+        paused: s.paused,
         taken: taker.count(),
         max,
       })
@@ -293,8 +298,9 @@ export function createRecorder(deps: RecorderDeps): Recorder {
     if (kind === 'input') {
       event.value = secret ? REDACTED : (str(payload.value) ?? '').slice(0, MAX_VALUE);
     }
-    // Only real password fields earn a save offer; OTP and card fields are masked but not offered.
-    if (secret && field !== null && isPasswordField(field)) {
+    // Only a typed real password earns a save offer (not a click on the field); OTP and card
+    // fields are masked but not offered.
+    if (secret && kind !== 'click' && field !== null && isPasswordField(field)) {
       const origin = originOf(sanitizeUrl(url));
       if (origin) s.secretOrigins.add(origin);
     }
@@ -314,7 +320,8 @@ export function createRecorder(deps: RecorderDeps): Recorder {
     } catch {
       return;
     }
-    if (!isRecord(payload) || payload.kind !== 'input') return;
+    // A value, a click or a focus on a secret field: the page may show it before any change.
+    if (!isRecord(payload) || !SECRET_TRACK_KINDS.has(str(payload.kind) ?? '')) return;
     const field = sanitizeField(payload.field);
     if (payload.secret === true || (field !== null && isSecretField(field))) s.secretDirty.add(s.currentTab);
   };
@@ -413,6 +420,7 @@ export function createRecorder(deps: RecorderDeps): Recorder {
         writes: Promise.resolve(),
         pendingTabEvents: [],
         secretDirty: new Set(),
+        paused: false,
         shots: createShots(dir),
       };
       session = s;
@@ -443,11 +451,14 @@ export function createRecorder(deps: RecorderDeps): Recorder {
       return { id };
     },
     pause() {
-      if (current === 'recording') current = 'paused';
+      if (current !== 'recording') return;
+      current = 'paused';
+      if (session) session.paused = true;
     },
     resume() {
       if (current !== 'paused' || !session) return;
       current = 'recording';
+      session.paused = false;
       for (const event of session.pendingTabEvents.splice(0)) push(session, event);
     },
     stop: finish,

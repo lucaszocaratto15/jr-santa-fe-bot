@@ -87,6 +87,42 @@ describe('capture script', () => {
     expect(calls[1]).toMatchObject({ key: 'Enter' });
   });
 
+  it('a click on a secret text field carries its attributes and secret, never its value', () => {
+    const fields: Array<Record<string, string>> = [
+      { name: 'codigo', placeholder: 'Código de verificação' },
+      { name: 'cpf' },
+      { name: 'numero', placeholder: 'Número do cartão' },
+    ];
+    for (const attrs of fields) {
+      calls = [];
+      const el = document.createElement('input');
+      el.setAttribute('type', 'text');
+      for (const [key, value] of Object.entries(attrs)) el.setAttribute(key, value);
+      document.body.appendChild(el);
+      el.value = '987654';
+      el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      expect(calls[0], JSON.stringify(attrs)).toMatchObject({ kind: 'click', secret: true, field: { tag: 'input' } });
+      expect(JSON.stringify(calls)).not.toContain('987654');
+      el.remove();
+    }
+  });
+
+  it('a click on an ordinary field carries its attributes without secret', () => {
+    document.getElementById('u')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(calls[0]).toMatchObject({ kind: 'click', field: { name: 'user' } });
+    expect(calls[0].secret).toBeUndefined();
+  });
+
+  it('focusing a secret field sends a focus-secret notice; an ordinary field sends nothing', () => {
+    document.getElementById('u')!.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    expect(calls).toEqual([]);
+    const otp = document.getElementById('otp') as HTMLInputElement;
+    otp.value = '123456';
+    otp.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    expect(calls).toEqual([expect.objectContaining({ kind: 'focus-secret', secret: true })]);
+    expect(JSON.stringify(calls)).not.toContain('123456');
+  });
+
   it('never uses text of an element containing an editable region as a locator', () => {
     const box = document.createElement('div');
     box.setAttribute('role', 'group');

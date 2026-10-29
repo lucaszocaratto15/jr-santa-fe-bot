@@ -21,9 +21,10 @@ export const SECRET_AUTOCOMPLETE_RE = /^(?:current-password|new-password|one-tim
  * Matched against name, id, label and placeholder. `código`/`code` count only as a separate
  * token (anything but a letter or digit around it, so `_` and `-` are boundaries): `codigo`,
  * `sms-code` and `codigo_produto` match (false positives only mask), `zipcode` does not.
+ * `cpf` (Brazilian personal id) is masked and never photographed either.
  */
 export const SECRET_TEXT_RE =
-  /senha|password|passwd|pwd|otp|token|verifica[cç][aã]o|verification code|cvv|cvc|cart[aã]o|card number|pin\b|(?:^|[^a-z0-9])(?:c[oó]digo|code)(?:$|[^a-z0-9])/i;
+  /senha|password|passwd|pwd|otp|token|verifica[cç][aã]o|verification code|cvv|cvc|cart[aã]o|card number|pin\b|cpf|(?:^|[^a-z0-9])(?:c[oó]digo|code)(?:$|[^a-z0-9])/i;
 
 const PASSWORD_AUTOCOMPLETE_RE = /^(?:current-password|new-password)$/i;
 
