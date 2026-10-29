@@ -25,6 +25,8 @@ const SEPARATOR = '(?:\\\\u[0-9a-fA-F]{4}|\\\\.|[^A-Za-z0-9])';
  * Replace every live secret (and simple transforms of it) with a placeholder.
  * Operates on serialized (JSON) text, so secrets are matched in their JSON-escaped form.
  *
+ * Ceiling: base64 bodies at arbitrary byte offsets (e.g. Network.getResponseBody) are NOT matched.
+ *
  * ponytail: exact + simple transforms only; a determined in-page encoding (e.g. charCode math) can still leak — upgrade path: block Runtime.evaluate from clients while a secret is live.
  */
 export const redactSecrets = (text: string, secrets: readonly string[]): string => {
@@ -37,8 +39,12 @@ export const redactSecrets = (text: string, secrets: readonly string[]): string 
     out = out.replace(new RegExp(chars.join(SEPARATOR), 'g'), REDACTED);
 
     const b64 = Buffer.from(secret).toString('base64');
+    const enc = encodeURIComponent(secret);
     const variants = new Set([
       jsonInner(secret),
+      jsonInner(jsonInner(secret)),
+      enc,
+      enc.replace(/%20/g, '+'),
       jsonInner(Array.from(secret).reverse().join('')),
       b64,
       b64.replace(/=+$/, ''),
@@ -50,11 +56,17 @@ export const redactSecrets = (text: string, secrets: readonly string[]): string 
   return out;
 };
 
-/** True for a main-frame navigation (no parentId), after which page-held secrets are gone. */
-export const shouldClearSecretsOn = (method: string, params: unknown): boolean => {
-  if (method !== 'Page.frameNavigated') return false;
-  const frame = (params as { frame?: { parentId?: unknown } } | undefined)?.frame;
-  return !!frame && frame.parentId === undefined;
+/**
+ * Drop request bodies from Network events so a typed secret cannot leave via postData /
+ * postDataEntries (the latter is base64 at arbitrary offsets, which redaction cannot match).
+ */
+export const stripPostData = (params: unknown): unknown => {
+  if (!params || typeof params !== 'object') return params;
+  const p = params as { request?: unknown };
+  const req = p.request;
+  if (!req || typeof req !== 'object') return params;
+  const { postData: _a, postDataEntries: _b, ...rest } = req as Record<string, unknown>;
+  return { ...p, request: rest };
 };
 
 /** True for recorder-internal binding calls that must not reach bridge clients. */

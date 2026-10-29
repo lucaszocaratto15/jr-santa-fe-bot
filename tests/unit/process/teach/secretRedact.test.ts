@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  isInternalBindingEvent,
-  redactSecrets,
-  shouldClearSecretsOn,
-} from '@process/resources/builtinMcp/secretRedact';
+import { isInternalBindingEvent, redactSecrets, stripPostData } from '@process/resources/builtinMcp/secretRedact';
 
 const s = 'S3nh@Forte9';
 
@@ -30,12 +26,28 @@ describe('redactSecrets', () => {
   });
 });
 
-describe('shouldClearSecretsOn', () => {
-  it('clears on main-frame navigation only', () => {
-    expect(shouldClearSecretsOn('Page.frameNavigated', { frame: { id: '1' } })).toBe(true);
-    expect(shouldClearSecretsOn('Page.frameNavigated', { frame: { id: '2', parentId: '1' } })).toBe(false);
-    expect(shouldClearSecretsOn('Page.loadEventFired', {})).toBe(false);
-    expect(shouldClearSecretsOn('Page.frameNavigated', undefined)).toBe(false);
+describe('redaction variants', () => {
+  it('matches urlencoded, form-encoded and double-JSON forms', () => {
+    const p = 'p@ss word9';
+    expect(redactSecrets(`a=${encodeURIComponent(p)}&b=1`, [p])).toBe('a=«segredo»&b=1');
+    expect(redactSecrets(`a=${encodeURIComponent(p).replace(/%20/g, '+')}`, [p])).toBe('a=«segredo»');
+    const q = 'a"b\\c9';
+    expect(redactSecrets(JSON.stringify(JSON.stringify({ v: q })), [q])).not.toContain('b\\\\\\\\c9');
+    expect(redactSecrets(JSON.stringify(JSON.stringify({ v: q })), [q])).toContain('«segredo»');
+  });
+});
+
+describe('stripPostData', () => {
+  it('removes postData and postDataEntries from request', () => {
+    const out = stripPostData({
+      requestId: '1',
+      request: { url: 'u', postData: 'x', postDataEntries: [{ bytes: 'eA==' }] },
+    });
+    expect(out).toEqual({ requestId: '1', request: { url: 'u' } });
+  });
+  it('passes through params without a request', () => {
+    expect(stripPostData({ a: 1 })).toEqual({ a: 1 });
+    expect(stripPostData(undefined)).toBeUndefined();
   });
 });
 

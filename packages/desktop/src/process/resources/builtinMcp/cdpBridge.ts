@@ -32,7 +32,7 @@ import {
   tokensMatch,
   type CdpRequest,
 } from './cdpTargetProtocol';
-import { isInternalBindingEvent, redactSecrets, shouldClearSecretsOn } from './secretRedact';
+import { isInternalBindingEvent, redactSecrets, stripPostData } from './secretRedact';
 
 const HOST = '127.0.0.1';
 const WS_PATH = '/aionui-cdp';
@@ -55,7 +55,7 @@ export type CdpBridgeHandle = {
   onEvent: (listener: (method: string, params: unknown) => void) => () => void;
   /** Called after a webContents is newly attached. */
   onAttach: (listener: (webContentsId: number) => void) => () => void;
-  /** Register a live secret to be redacted from all client-bound traffic until navigation/destroy/detach. */
+  /** Register a live secret to be redacted from all client-bound traffic until the webContents is destroyed. */
   addSecret: (webContentsId: number, value: string) => void;
   /** While locked, bridge clients get a CDP error for every command and nothing is forwarded. */
   setClientsLocked: (locked: boolean, reason?: string) => void;
@@ -76,10 +76,8 @@ const attachListeners = new Set<(webContentsId: number) => void>();
 const secretsByContents = new Map<number, Set<string>>();
 let clientsLocked: { reason?: string } | null = null;
 
-const currentSecrets = (): string[] => {
-  if (!attached) return [];
-  return [...(secretsByContents.get(attached.contents.id) ?? [])];
-};
+/** All live secrets (any contents): fail closed across detach/re-attach. */
+const currentSecrets = (): string[] => [...secretsByContents.values()].flatMap((set) => [...set]);
 
 /** Serialize and redact; every client-bound frame goes through here. */
 const serializeForClient = (payload: unknown): string => {
@@ -107,7 +105,6 @@ const broadcast = (payload: Record<string, unknown>) => {
 const detachInternal = () => {
   if (!attached) return;
   const { contents, dbg, onMessage, onDestroyed } = attached;
-  secretsByContents.delete(contents.id);
   attached = null;
   try {
     dbg.removeListener('message', onMessage);
@@ -177,10 +174,10 @@ const attachInternal = (webContentsId: number): { ok: true } | { ok: false; reas
       }
     }
     if (!isInternalBindingEvent(method, params)) {
-      broadcast({ method, params: params ?? {}, sessionId: SINGLE_SESSION_ID });
+      // While a secret is live, request bodies (login POST) never reach clients.
+      const safe = method.startsWith('Network.') && currentSecrets().length > 0 ? stripPostData(params) : params;
+      broadcast({ method, params: safe ?? {}, sessionId: SINGLE_SESSION_ID });
     }
-    // Navigating the main frame discards page-held secrets; clear after this event is relayed.
-    if (shouldClearSecretsOn(method, params)) secretsByContents.delete(contents.id);
   };
 
   const onDestroyed = () => {
@@ -192,8 +189,6 @@ const attachInternal = (webContentsId: number): { ok: true } | { ok: false; reas
   dbg.on('message', onMessage);
   contents.once('destroyed', onDestroyed);
   attached = { contents, dbg, onMessage, onDestroyed };
-  // Needed so Page.frameNavigated reaches us even if no client enabled Page (secret clearing).
-  void dbg.sendCommand('Page.enable').catch((): void => undefined);
   for (const listener of [...attachListeners]) {
     try {
       listener(webContentsId);
@@ -257,6 +252,15 @@ const handleSocketMessage = async (ws: WebSocket, raw: string, announcedSessions
     sendToClient(ws, {
       id: id ?? 0,
       error: { code: -32000, message: `browser locked: ${clientsLocked.reason ?? 'recording in progress'}` },
+      sessionId,
+    });
+    return;
+  }
+
+  if (method === 'Network.getRequestPostData' && currentSecrets().length > 0) {
+    sendToClient(ws, {
+      id: id ?? 0,
+      error: { code: -32000, message: 'post data hidden: vault secret on this page' },
       sessionId,
     });
     return;
@@ -473,6 +477,10 @@ export const startCdpBridge = async (): Promise<CdpBridgeHandle> => {
     },
     addSecret: (webContentsId, value) => {
       if (!value) return;
+      if (!secretsByContents.has(webContentsId)) {
+        // Secrets live until the webContents is destroyed (survive navigation, detach, re-attach).
+        webContents.fromId(webContentsId)?.once('destroyed', () => secretsByContents.delete(webContentsId));
+      }
       const set = secretsByContents.get(webContentsId) ?? new Set<string>();
       set.add(value);
       secretsByContents.set(webContentsId, set);
