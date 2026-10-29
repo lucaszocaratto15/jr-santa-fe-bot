@@ -412,7 +412,11 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
     () => providers.filter((p) => !p.platform?.toLowerCase().includes('gemini-with-google-auth')),
     [providers]
   );
-  const hasAionrsProvider = aionrsProviders.length > 0;
+  // A prefilled task always runs in the conversation created for it on submit. It carries its
+  // JR model, resolved by the caller from a list that also covers providers the renderer
+  // catalog can miss (see providersForNewConversation).
+  const isPrefillCreate = Boolean(prefill) && !isEditMode;
+  const hasAionrsProvider = aionrsProviders.length > 0 || isPrefillCreate;
 
   const filteredProviders = useMemo(
     () => (resolvedBackend === 'aionrs' ? aionrsProviders : providers),
@@ -533,8 +537,6 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
   const isCheckingTeamOwnership = teamOwnershipStatus === 'checking';
   const isTeamOwnedTask = teamOwnershipStatus === 'team';
   const isExecutionModeLocked = isCheckingTeamOwnership || isTeamOwnedTask;
-  // A prefilled task always runs in the conversation created for it on submit.
-  const isPrefillCreate = Boolean(prefill) && !isEditMode;
   const canEditAgentConfig =
     !isExecutionModeLocked && !isOriginalExistingConversationTask && (!isEditMode || execution_mode !== 'existing');
 
@@ -577,6 +579,11 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
         if (!assistantValue) {
           throw new Error(t('cron.page.form.assistantRequired'));
         }
+        // The prefilled provider stands in while the employee keeps the prefilled bot and model.
+        const prefillProvider =
+          isPrefillCreate && prefill && assistantValue === prefill.assistantId && model_id === prefill.model.modelId
+            ? { id: prefill.model.providerId }
+            : undefined;
         agent_config = resolveCronAgentConfig({
           agentValue: assistantValue,
           presetAssistants,
@@ -585,7 +592,7 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
                 id: geminiCurrentModel.id as string | undefined,
                 name: geminiCurrentModel.name,
               }
-            : undefined,
+            : prefillProvider,
           model_id,
           config_options,
           workspace,
@@ -637,7 +644,13 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
           queue_enabled: queueEnabled,
           agent_config,
         };
-        await ipcBridge.cron.addJob.invoke(params);
+        try {
+          await ipcBridge.cron.addJob.invoke(params);
+        } catch (error) {
+          // The conversation was created only for this job: do not leave it behind empty.
+          if (target) await ipcBridge.conversation.remove.invoke({ id: target.id }).catch(() => false);
+          throw error;
+        }
         Message.success(t('cron.page.createSuccess'));
       }
 

@@ -41,18 +41,32 @@ vi.mock('@/common', () => ({
     },
     conversation: {
       get: { invoke: vi.fn() },
+      remove: { invoke: vi.fn() },
     },
   },
 }));
 
 vi.mock('@renderer/components/base/AionModal', () => ({
   __esModule: true,
-  default: ({ visible, children, onOk }: { visible: boolean; children: React.ReactNode; onOk?: () => void }) =>
+  default: ({
+    visible,
+    children,
+    onOk,
+    onCancel,
+  }: {
+    visible: boolean;
+    children: React.ReactNode;
+    onOk?: () => void;
+    onCancel?: () => void;
+  }) =>
     visible ? (
       <div>
         {children}
         <button type='button' data-testid='modal-ok' onClick={onOk}>
           OK
+        </button>
+        <button type='button' data-testid='modal-cancel' onClick={onCancel}>
+          Cancel
         </button>
       </div>
     ) : null,
@@ -437,13 +451,83 @@ describe('CreateTaskDialog prefill', () => {
   });
 
   it('cancel with prefill never calls resolveConversation', async () => {
+    const user = userEvent.setup();
     const resolveConversation = vi.fn(async () => ({ id: 'c1', title: 'Bot' }));
-    const { unmount } = render(
-      <CreateTaskDialog visible onClose={() => {}} prefill={prefill({ resolveConversation })} />
-    );
+    const onClose = vi.fn();
+    render(<CreateTaskDialog visible onClose={onClose} prefill={prefill({ resolveConversation })} />);
     await screen.findByDisplayValue('Relatório de NFs');
-    unmount();
+    await user.click(screen.getByTestId('modal-cancel'));
+    expect(onClose).toHaveBeenCalledTimes(1);
     expect(resolveConversation).not.toHaveBeenCalled();
+    expect(ipcBridge.cron.addJob.invoke).not.toHaveBeenCalled();
+  });
+
+  it('removes the dedicated conversation when addJob fails', async () => {
+    const user = userEvent.setup();
+    vi.mocked(ipcBridge.cron.addJob.invoke).mockRejectedValue(new Error('backend down'));
+    vi.mocked(ipcBridge.conversation.remove.invoke).mockResolvedValue(true);
+    const onClose = vi.fn();
+    render(<CreateTaskDialog visible onClose={onClose} prefill={prefill()} />);
+
+    await screen.findByDisplayValue('Relatório de NFs');
+    await user.click(screen.getByTestId('modal-ok'));
+
+    await waitFor(() => expect(Message.error).toHaveBeenCalled());
+    expect(ipcBridge.conversation.remove.invoke).toHaveBeenCalledWith({ id: 'c1' });
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('keeps the error when removing the orphan conversation also fails', async () => {
+    const user = userEvent.setup();
+    vi.mocked(ipcBridge.cron.addJob.invoke).mockRejectedValue(new Error('backend down'));
+    vi.mocked(ipcBridge.conversation.remove.invoke).mockRejectedValue(new Error('offline'));
+    const onClose = vi.fn();
+    render(<CreateTaskDialog visible onClose={onClose} prefill={prefill()} />);
+
+    await screen.findByDisplayValue('Relatório de NFs');
+    await user.click(screen.getByTestId('modal-ok'));
+
+    await waitFor(() => expect(Message.error).toHaveBeenCalled());
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('submits the prefilled JR model when the renderer catalog misses its provider (real resolveCronAgentConfig)', async () => {
+    const actual = await vi.importActual<
+      typeof import('@/renderer/pages/cron/ScheduledTasksPage/resolveCronAgentConfig')
+    >('@/renderer/pages/cron/ScheduledTasksPage/resolveCronAgentConfig');
+    vi.mocked(resolveCronAgentConfig).mockImplementation(actual.resolveCronAgentConfig);
+    currentAssistants = [jrBotAssistant()];
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    // useModelProviderList is mocked with an empty catalog: provider p1 is missing.
+    render(<CreateTaskDialog visible onClose={onClose} prefill={prefill({ assistantId: 'jr-bot-1' })} />);
+
+    await screen.findByDisplayValue('Relatório de NFs');
+    await user.click(screen.getByTestId('modal-ok'));
+
+    await waitFor(() => expect(ipcBridge.cron.addJob.invoke).toHaveBeenCalledTimes(1));
+    expect(Message.error).not.toHaveBeenCalled();
+    expect(ipcBridge.cron.addJob.invoke).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agent_config: expect.objectContaining({
+          assistant_id: 'jr-bot-1',
+          model_id: 'MiniMax-M3.1-Flash',
+          model: expect.objectContaining({ provider_id: 'p1', model: 'MiniMax-M3.1-Flash' }),
+          workspace: '/w',
+        }),
+      })
+    );
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('does not offer the prefilled JR bot as disabled when the catalog has no aionrs provider', async () => {
+    currentAssistants = [jrBotAssistant()];
+    const user = userEvent.setup();
+    render(<CreateTaskDialog visible onClose={() => {}} prefill={prefill({ assistantId: 'jr-bot-1' })} />);
+
+    await screen.findByDisplayValue('Relatório de NFs');
+    await user.click(screen.getByTestId('cron-assistant-select'));
+    expect(screen.queryByText('cron.page.form.aionrsNoProvider')).not.toBeInTheDocument();
   });
 
   it('resolveConversation failure does not call addJob', async () => {
@@ -572,6 +656,16 @@ function assistants(): Assistant[] {
       models: [],
     } as Assistant,
   ];
+}
+
+function jrBotAssistant(): Assistant {
+  return {
+    ...assistants()[0],
+    id: 'jr-bot-1',
+    name: 'Bot JR',
+    agent_id: 'agent-aionrs',
+    agent: { type: 'aionrs', source: 'builtin' },
+  } as Assistant;
 }
 
 function bareAssistant(): Assistant {
