@@ -18,7 +18,7 @@ const ThemeToggle: React.FC = () => {
       className='app-titlebar__theme'
       aria-label={t('common.jr.look.toggleTheme')}
       title={t('common.jr.look.toggleTheme')}
-      icon={dark ? <SunOne theme='outline' size={16} /> : <Moon theme='outline' size={16} />}
+      icon={dark ? <SunOne theme='outline' size={18} /> : <Moon theme='outline' size={18} />}
       onClick={() => void setTheme(dark ? LIGHT_THEME_ID : DARK_THEME_ID)}
     />
   );
