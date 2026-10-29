@@ -23,7 +23,7 @@ export type JrSessionStore = {
   read: () => Promise<JrStoredSession | null>;
   write: (session: JrStoredSession) => Promise<void>;
 };
-type OsEncryption = {
+export type OsEncryption = {
   isEncryptionAvailable: () => boolean;
   getSelectedStorageBackend?: () => string;
   encryptString: (text: string) => Buffer;
