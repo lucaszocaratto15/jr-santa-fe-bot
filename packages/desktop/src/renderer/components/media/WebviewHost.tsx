@@ -43,6 +43,8 @@ export interface WebviewHostProps {
    * which keeps existing embedded consumers behaving exactly as before.
    */
   resolveUrlInput?: (raw: string) => string | null;
+  /** Extra controls rendered at the end of the navigation bar */
+  navBarExtra?: React.ReactNode;
 }
 
 const MIN_ZOOM_FACTOR = 0.75;
@@ -71,6 +73,7 @@ const WebviewHost: React.FC<WebviewHostProps> = ({
   onTitleChange,
   onFaviconChange,
   resolveUrlInput,
+  navBarExtra,
 }) => {
   const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -767,6 +770,7 @@ const WebviewHost: React.FC<WebviewHostProps> = ({
               placeholder={t('preview.browser.addressPlaceholder')}
             />
           </form>
+          {navBarExtra}
         </div>
       )}
 

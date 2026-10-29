@@ -7,6 +7,7 @@
 import React, { useCallback } from 'react';
 import type { PreviewTab, PreviewTabPatch } from '../context/PreviewContext';
 import BrowserViewer from './BrowserViewer';
+import TeachControls, { TeachRecordingBar } from './TeachControls';
 
 export interface BrowserTabLayerProps {
   /** 所有浏览器类型的 tab / Every browser-type tab */
@@ -56,29 +57,34 @@ const BrowserTabLayer: React.FC<BrowserTabLayerProps> = ({ browserTabs, activeTa
   const isBrowserActive = browserTabs.some((tab) => tab.id === activeTabId);
 
   return (
-    <div className='relative flex-1 overflow-hidden' style={{ display: isBrowserActive ? undefined : 'none' }}>
-      {browserTabs.map((tab) => {
-        const isActive = tab.id === activeTabId;
-        return (
-          <div
-            key={tab.id}
-            className='absolute inset-0 flex flex-col'
-            style={{
-              visibility: isActive ? 'visible' : 'hidden',
-              pointerEvents: isActive ? undefined : 'none',
-              zIndex: isActive ? 1 : 0,
-            }}
-          >
-            <BrowserViewer
-              url={tab.content}
-              tabId={tab.id}
-              onUrlChange={handleUrlChange}
-              onTitleChange={handleTitleChange}
-              onFaviconChange={handleFaviconChange}
-            />
-          </div>
-        );
-      })}
+    <div className='flex-1 flex flex-col overflow-hidden' style={{ display: isBrowserActive ? undefined : 'none' }}>
+      {/* 录制中显示在浏览器顶部的细条 / Thin bar on top of the browser while teaching */}
+      <TeachRecordingBar />
+      <div className='relative flex-1 overflow-hidden'>
+        {browserTabs.map((tab) => {
+          const isActive = tab.id === activeTabId;
+          return (
+            <div
+              key={tab.id}
+              className='absolute inset-0 flex flex-col'
+              style={{
+                visibility: isActive ? 'visible' : 'hidden',
+                pointerEvents: isActive ? undefined : 'none',
+                zIndex: isActive ? 1 : 0,
+              }}
+            >
+              <BrowserViewer
+                url={tab.content}
+                tabId={tab.id}
+                onUrlChange={handleUrlChange}
+                onTitleChange={handleTitleChange}
+                onFaviconChange={handleFaviconChange}
+                navBarExtra={<TeachControls agentActive={Boolean(tab.metadata?.agentActive)} />}
+              />
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 };

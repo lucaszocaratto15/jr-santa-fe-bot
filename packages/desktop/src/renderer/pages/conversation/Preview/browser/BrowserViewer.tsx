@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useCallback } from 'react';
+import React, { useCallback, type ReactNode } from 'react';
 import WebviewHost from '@/renderer/components/media/WebviewHost';
 import {
   BROWSER_BLANK_URL,
@@ -24,6 +24,8 @@ export interface BrowserViewerProps {
   onTitleChange: (tabId: string, title: string) => void;
   /** 站点图标变化时回写 tab / Persist the site favicon back onto the tab */
   onFaviconChange: (tabId: string, favicon: string) => void;
+  /** Extra controls at the end of the nav bar (teach controls) */
+  navBarExtra?: ReactNode;
 }
 
 /**
@@ -39,7 +41,14 @@ export interface BrowserViewerProps {
  * the address bar, and writing address/title/favicon back onto the owning tab so
  * the browser can be restored after a restart.
  */
-const BrowserViewer: React.FC<BrowserViewerProps> = ({ url, tabId, onUrlChange, onTitleChange, onFaviconChange }) => {
+const BrowserViewer: React.FC<BrowserViewerProps> = ({
+  url,
+  tabId,
+  onUrlChange,
+  onTitleChange,
+  onFaviconChange,
+  navBarExtra,
+}) => {
   const handleUrlChange = useCallback((next: string) => onUrlChange(tabId, next), [tabId, onUrlChange]);
 
   const handleTitleChange = useCallback(
@@ -70,6 +79,7 @@ const BrowserViewer: React.FC<BrowserViewerProps> = ({ url, tabId, onUrlChange, 
       url={url || BROWSER_BLANK_URL}
       partition={BROWSER_SESSION_PARTITION}
       showNavBar
+      navBarExtra={navBarExtra}
       className='bg-bg-1'
       resolveUrlInput={resolveAddressBarInput}
       onUrlChange={handleUrlChange}

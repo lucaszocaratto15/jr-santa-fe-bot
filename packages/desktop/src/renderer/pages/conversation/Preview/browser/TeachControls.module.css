@@ -1,0 +1,50 @@
+.slot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 10px;
+  flex-shrink: 0;
+  background: var(--color-bg-2);
+  border-bottom: 1px solid var(--color-border-1);
+  color: var(--color-text-1);
+  font-size: 12px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgb(var(--danger-6));
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+.dotPaused {
+  background: var(--color-text-3);
+  animation: none;
+}
+
+.timer {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.barActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-inline-start: auto;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
