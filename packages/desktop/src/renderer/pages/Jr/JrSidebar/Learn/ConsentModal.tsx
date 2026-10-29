@@ -7,7 +7,7 @@ import { Trans, useTranslation } from 'react-i18next';
 
 const BOLD = { b: <strong /> };
 
-/** The full v1.2 term, rendered from its markdown i18n key. */
+/** The full term (LEARN_TERM_VERSION), rendered from its markdown i18n key. */
 export const TermModal: React.FC<{ visible: boolean; onClose: () => void }> = ({ visible, onClose }) => {
   const { t } = useTranslation();
   return (
@@ -17,7 +17,7 @@ export const TermModal: React.FC<{ visible: boolean; onClose: () => void }> = ({
       footer={null}
       onCancel={onClose}
       unmountOnExit
-      style={{ width: 640 }}
+      className='!w-640px max-w-[calc(100vw-32px)]'
     >
       <div className='max-h-60vh overflow-y-auto' data-testid='learn-term-full'>
         <MarkdownView hiddenCodeCopyButton>{t('common.jr.learn.term.full')}</MarkdownView>
@@ -34,7 +34,7 @@ type ConsentModalProps = {
   onAccepted: (state: LearnState) => void;
 };
 
-/** LGPD approval screen with the exact v1.2 text. Permitir unlocks only with the checkbox. */
+/** LGPD approval screen with the exact term text. Permitir unlocks only with the checkbox. */
 const ConsentModal: React.FC<ConsentModalProps> = ({ visible, reconsent, onClose, onAccepted }) => {
   const { t } = useTranslation();
   const [agreed, setAgreed] = useState(false);
@@ -71,7 +71,7 @@ const ConsentModal: React.FC<ConsentModalProps> = ({ visible, reconsent, onClose
         title={t('common.jr.learn.consent.title')}
         onCancel={onClose}
         unmountOnExit
-        style={{ width: 560 }}
+        className='!w-560px max-w-[calc(100vw-32px)]'
         footer={
           <>
             <Button onClick={onClose}>{t('common.jr.learn.consent.notNow')}</Button>

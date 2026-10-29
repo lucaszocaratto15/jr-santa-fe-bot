@@ -476,6 +476,8 @@ export type I18nKey =
   | 'common.jr.learn.insights.errors.unavailable'
   | 'common.jr.learn.insights.generate'
   | 'common.jr.learn.insights.generated'
+  | 'common.jr.learn.insights.hoursMinutes'
+  | 'common.jr.learn.insights.minutesShort'
   | 'common.jr.learn.insights.period'
   | 'common.jr.learn.insights.repetitive'
   | 'common.jr.learn.insights.teach'

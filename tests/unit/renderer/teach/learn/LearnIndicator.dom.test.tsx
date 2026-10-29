@@ -42,7 +42,7 @@ const base: LearnState = {
   lastInsightsAt: null,
   activeSince: null,
 };
-const active: LearnState = { ...base, status: 'active', acceptedVersion: '1.2', activeSince: Date.now() };
+const active: LearnState = { ...base, status: 'active', acceptedVersion: '1.3', activeSince: Date.now() };
 
 const i18n = ptBR();
 const renderIndicator = (state: LearnState) => {

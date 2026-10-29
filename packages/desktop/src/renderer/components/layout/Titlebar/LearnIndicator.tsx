@@ -4,7 +4,7 @@ import { Brain } from '@icon-park/react';
 import classNames from 'classnames';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { useLearnState } from '@renderer/pages/Jr/JrSidebar/Learn/useLearnState';
+import { useLearnState } from '@renderer/hooks/agent/useLearnState';
 import { emitter } from '@renderer/utils/emitter';
 
 type MenuKey = 'pause1h' | 'pauseUntilResume' | 'resume' | 'open' | 'review' | 'turnOff';

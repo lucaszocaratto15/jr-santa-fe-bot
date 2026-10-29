@@ -44,7 +44,7 @@ import { initialsFromName, sidebarProfile } from './sidebarProfile';
 import { readSidebarLayout, writeSidebarLayout } from './preferences';
 import styles from './JrSidebar.module.css';
 import { useTaughtRunWatcher } from './Teach/useTaughtRunWatcher';
-import { useLearnSettingsRequests } from './Learn/useLearnState';
+import { useLearnSettingsRequests } from '@renderer/hooks/agent/useLearnState';
 
 const JrConnections = lazy(() => import('../Connections'));
 const JrBotTeamDialog = lazy(() => import('../JrBotTeamDialog'));

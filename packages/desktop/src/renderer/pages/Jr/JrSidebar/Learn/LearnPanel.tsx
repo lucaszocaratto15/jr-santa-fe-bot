@@ -14,7 +14,7 @@ import styles from '../JrSidebar.module.css';
 import ConsentModal, { TermModal } from './ConsentModal';
 import ExclusionList from './ExclusionList';
 import InsightList from './InsightList';
-import { useLearnState } from './useLearnState';
+import { useLearnState } from '@renderer/hooks/agent/useLearnState';
 
 const INSIGHTS_KEY = 'jr.learn.insights';
 const EXCLUSIONS_KEY = 'jr.learn.exclusions';
@@ -43,7 +43,9 @@ const LearnPanel: React.FC<LearnPanelProps> = ({ autoConsent, onTeach }) => {
   const [busy, setBusy] = useState<string | null>(null);
   const autoOpened = useRef(false);
   const on = state?.status === 'active' || state?.status === 'paused';
-  const insights = useSWR(on ? INSIGHTS_KEY : null, () => ipcBridge.learn.listInsights.invoke());
+  // Data controls stay reachable after Desligar, a declined new term or lost encryption (LGPD art. 18).
+  const hasData = Boolean(state && (state.acceptedVersion !== null || state.rawHours > 0));
+  const insights = useSWR(hasData ? INSIGHTS_KEY : null, () => ipcBridge.learn.listInsights.invoke());
   const exclusions = useSWR(on ? EXCLUSIONS_KEY : null, () => ipcBridge.learn.getExclusions.invoke());
 
   useEffect(() => {
@@ -131,6 +133,99 @@ const LearnPanel: React.FC<LearnPanelProps> = ({ autoConsent, onTeach }) => {
 
   if (!state) return header;
 
+  const paused = state.status === 'paused';
+  const acceptedAt = state.acceptedAt
+    ? new Intl.DateTimeFormat(i18n.language || 'pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(
+        new Date(state.acceptedAt)
+      )
+    : '';
+
+  const insightList = (
+    <InsightList
+      batches={insights.data ?? []}
+      onTeach={onTeach}
+      onDelete={(id) =>
+        void act('delete', async () => {
+          await ipcBridge.learn.deleteInsight.invoke({ id });
+          await insights.mutate();
+        })
+      }
+    />
+  );
+
+  const dataCard = (
+    <div className={`${styles.card} ${styles.cardList}`}>
+      <div className={styles.row}>
+        <div className={styles.rowCopy}>
+          <p className={styles.rowTitle}>{t('common.jr.learn.data.title')}</p>
+          <p className={styles.muted}>{t('common.jr.learn.data.rawHours', { count: state.rawHours })}</p>
+        </div>
+        <div className={styles.rowActions}>
+          <Button className={styles.softButton} size='small' onClick={() => setConfirm('wipe')}>
+            {t('common.jr.learn.data.wipeNow')}
+          </Button>
+        </div>
+      </div>
+      {state.acceptedVersion !== null && (
+        <div className={styles.row}>
+          <p className={`${styles.muted} flex-1`}>
+            {t('common.jr.learn.data.accepted', { date: acceptedAt, version: state.acceptedVersion })}
+          </p>
+          <div className={styles.rowActions}>
+            <Button type='text' size='small' onClick={() => setTermOpen(true)}>
+              {t('common.jr.learn.data.readTerm')}
+            </Button>
+          </div>
+        </div>
+      )}
+      <div className={styles.row}>
+        <div className={styles.rowActions}>
+          {on && (
+            <Button
+              className={styles.softButton}
+              size='small'
+              loading={busy === 'off'}
+              onClick={() => void act('off', () => ipcBridge.learn.turnOff.invoke())}
+            >
+              {t('common.jr.learn.data.turnOff')}
+            </Button>
+          )}
+          <Button status='danger' size='small' loading={busy === 'revoke'} onClick={() => setConfirm('revoke')}>
+            {t('common.jr.learn.data.revoke')}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const dialogs = (
+    <>
+      <Modal
+        visible={confirm !== null}
+        title={t(confirm === 'revoke' ? 'common.jr.learn.data.revoke' : 'common.jr.learn.data.wipeNow')}
+        okText={t(confirm === 'revoke' ? 'common.jr.learn.data.revoke' : 'common.jr.learn.data.wipeNow')}
+        cancelText={t('common.cancel')}
+        okButtonProps={{ status: 'danger' }}
+        onOk={runConfirmed}
+        onCancel={() => setConfirm(null)}
+        unmountOnExit
+      >
+        {t(confirm === 'revoke' ? 'common.jr.learn.data.revokeConfirm' : 'common.jr.learn.data.wipeConfirm')}
+      </Modal>
+      <TermModal visible={termOpen} onClose={() => setTermOpen(false)} />
+    </>
+  );
+
+  /** Insights and "Seus dados" while the feature is not running but data or a consent remains. */
+  const dataWhileStopped = hasData && (
+    <>
+      <h3 className={`${styles.cardTitle} mt-20px mb-12px`}>{t('common.jr.learn.insights.title')}</h3>
+      {insightList}
+      <div className='mt-14px'>{dataCard}</div>
+      {dialogs}
+    </>
+  );
+
   if (state.status === 'unavailable') {
     return (
       <div>
@@ -142,6 +237,7 @@ const LearnPanel: React.FC<LearnPanelProps> = ({ autoConsent, onTeach }) => {
               : 'common.jr.learn.panel.unavailablePlatform'
           )}
         </p>
+        {dataWhileStopped}
       </div>
     );
   }
@@ -157,17 +253,11 @@ const LearnPanel: React.FC<LearnPanelProps> = ({ autoConsent, onTeach }) => {
         <Button type='primary' loading={busy === 'enable'} onClick={reconsent ? () => setConsentOpen(true) : enable}>
           {t(reconsent ? 'common.jr.learn.panel.reviewTerm' : 'common.jr.learn.panel.enable')}
         </Button>
+        {dataWhileStopped}
         {consentModal}
       </div>
     );
   }
-
-  const paused = state.status === 'paused';
-  const acceptedAt = state.acceptedAt
-    ? new Intl.DateTimeFormat(i18n.language || 'pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(
-        new Date(state.acceptedAt)
-      )
-    : '';
 
   return (
     <div>
@@ -218,16 +308,7 @@ const LearnPanel: React.FC<LearnPanelProps> = ({ autoConsent, onTeach }) => {
           {t('common.jr.learn.insights.generate')}
         </Button>
       </div>
-      <InsightList
-        batches={insights.data ?? []}
-        onTeach={onTeach}
-        onDelete={(id) =>
-          void act('delete', async () => {
-            await ipcBridge.learn.deleteInsight.invoke({ id });
-            await insights.mutate();
-          })
-        }
-      />
+      {insightList}
 
       <div className={`${styles.card} mt-14px`}>
         <h3 className={styles.cardTitle}>{t('common.jr.learn.exclusions.title')}</h3>
@@ -238,58 +319,8 @@ const LearnPanel: React.FC<LearnPanelProps> = ({ autoConsent, onTeach }) => {
         />
       </div>
 
-      <div className={`${styles.card} ${styles.cardList}`}>
-        <div className={styles.row}>
-          <div className={styles.rowCopy}>
-            <p className={styles.rowTitle}>{t('common.jr.learn.data.title')}</p>
-            <p className={styles.muted}>{t('common.jr.learn.data.rawHours', { count: state.rawHours })}</p>
-          </div>
-          <div className={styles.rowActions}>
-            <Button className={styles.softButton} size='small' onClick={() => setConfirm('wipe')}>
-              {t('common.jr.learn.data.wipeNow')}
-            </Button>
-          </div>
-        </div>
-        <div className={styles.row}>
-          <p className={`${styles.muted} flex-1`}>
-            {t('common.jr.learn.data.accepted', { date: acceptedAt, version: state.acceptedVersion ?? '' })}
-          </p>
-          <div className={styles.rowActions}>
-            <Button type='text' size='small' onClick={() => setTermOpen(true)}>
-              {t('common.jr.learn.data.readTerm')}
-            </Button>
-          </div>
-        </div>
-        <div className={styles.row}>
-          <div className={styles.rowActions}>
-            <Button
-              className={styles.softButton}
-              size='small'
-              loading={busy === 'off'}
-              onClick={() => void act('off', () => ipcBridge.learn.turnOff.invoke())}
-            >
-              {t('common.jr.learn.data.turnOff')}
-            </Button>
-            <Button status='danger' size='small' loading={busy === 'revoke'} onClick={() => setConfirm('revoke')}>
-              {t('common.jr.learn.data.revoke')}
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      <Modal
-        visible={confirm !== null}
-        title={t(confirm === 'revoke' ? 'common.jr.learn.data.revoke' : 'common.jr.learn.data.wipeNow')}
-        okText={t(confirm === 'revoke' ? 'common.jr.learn.data.revoke' : 'common.jr.learn.data.wipeNow')}
-        cancelText={t('common.cancel')}
-        okButtonProps={{ status: 'danger' }}
-        onOk={runConfirmed}
-        onCancel={() => setConfirm(null)}
-        unmountOnExit
-      >
-        {t(confirm === 'revoke' ? 'common.jr.learn.data.revokeConfirm' : 'common.jr.learn.data.wipeConfirm')}
-      </Modal>
-      <TermModal visible={termOpen} onClose={() => setTermOpen(false)} />
+      {dataCard}
+      {dialogs}
       {consentModal}
     </div>
   );

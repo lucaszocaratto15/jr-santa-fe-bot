@@ -7,11 +7,19 @@ import styles from '../JrSidebar.module.css';
 
 const TOP_APPS = 5;
 
-/** `130` → `2h10`, `45` → `45 min`, `2.5` → `2,5 min` (locale decimals). */
-export function formatMinutes(minutes: number, locale: string): string {
-  if (minutes < 60) return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(minutes)} min`;
+type Translate = (key: string, options: Record<string, unknown>) => string;
+
+/** `130` → `2h10`, `45` → `45 min`, `2.5` → `2,5 min` (locale decimals, units from i18n). */
+export function formatMinutes(minutes: number, locale: string, t: Translate): string {
+  if (minutes < 60) {
+    const value = new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(minutes);
+    return t('common.jr.learn.insights.minutesShort', { value });
+  }
   const total = Math.round(minutes);
-  return `${Math.floor(total / 60)}h${String(total % 60).padStart(2, '0')}`;
+  return t('common.jr.learn.insights.hoursMinutes', {
+    hours: Math.floor(total / 60),
+    minutes: String(total % 60).padStart(2, '0'),
+  });
 }
 
 type InsightListProps = {
@@ -50,7 +58,7 @@ const InsightList: React.FC<InsightListProps> = ({ batches, onDelete, onTeach })
               <strong>{t('common.jr.learn.insights.timePerApp')}</strong>{' '}
               {batch.timePerApp
                 .slice(0, TOP_APPS)
-                .map(({ app, minutes }) => `${app} ${formatMinutes(minutes, locale)}`)
+                .map(({ app, minutes }) => `${app} ${formatMinutes(minutes, locale, t as Translate)}`)
                 .join(' · ')}
             </p>
           )}

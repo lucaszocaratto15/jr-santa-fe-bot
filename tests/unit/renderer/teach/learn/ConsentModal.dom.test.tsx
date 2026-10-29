@@ -40,7 +40,7 @@ describe('ConsentModal', () => {
     expect(allowButton()).not.toBeDisabled();
   });
 
-  it('shows the v1.2 sees list without "cliques" and the never list with "Seus cliques e o que você digita"', () => {
+  it('shows the sees list without "cliques" and the never list with "Seus cliques e o que você digita"', () => {
     renderModal();
     const sees = screen.getByTestId('learn-consent-sees');
     expect(sees).not.toHaveTextContent(/cliques/i);
@@ -56,7 +56,7 @@ describe('ConsentModal', () => {
     fireEvent.click(screen.getByText('Li e concordo com o Termo de Consentimento de Dados'));
     fireEvent.click(allowButton());
     await waitFor(() => expect(onAccepted).toHaveBeenCalledWith(state));
-    expect(accept).toHaveBeenCalledWith({ termVersion: '1.2' });
+    expect(accept).toHaveBeenCalledWith({ termVersion: '1.3' });
   });
 
   it('a failed accept keeps the modal open and does not report acceptance', async () => {
@@ -76,11 +76,11 @@ describe('ConsentModal', () => {
     expect(accept).not.toHaveBeenCalled();
   });
 
-  it('the link opens the full term containing "Versão 1.2"', async () => {
+  it('the link opens the full term containing "Versão 1.3"', async () => {
     renderModal();
     fireEvent.click(screen.getByText('Ler o termo completo'));
     const full = await screen.findByTestId('learn-term-full');
-    expect(full).toHaveTextContent('Versão 1.2');
+    expect(full).toHaveTextContent('Versão 1.3');
     expect(full).toHaveTextContent('transferência internacional de dados');
   });
 
@@ -90,6 +90,15 @@ describe('ConsentModal', () => {
     expect(who).toHaveTextContent(/seu gestor/);
     expect(who).toHaveTextContent(/quem ocupar o seu cargo no futuro/);
     expect(within(who).getByText('Manual da função').tagName).toBe('STRONG');
+  });
+
+  it('Onde fica names the fallback AI processors outside Brazil (v1.3)', () => {
+    renderModal();
+    expect(
+      screen.getByText(
+        /à MiniMax e, se ela estiver indisponível, à OpenRouter ou ao Google \(Gemini\), todos com servidores fora do Brasil/
+      )
+    ).toBeInTheDocument();
   });
 
   it('shows the reconsent notice only when the term changed', () => {
@@ -112,11 +121,19 @@ describe('consent locales', () => {
     }
   });
 
-  it('term.full is the v1.2 "Termo completo" with the controller and DPO', () => {
+  it('term.full is the v1.3 "Termo completo" with the controller and DPO', () => {
     const full = learnOf('pt-BR').term.full;
-    expect(full).toContain('Versão 1.2 — 29/10/2026');
+    expect(full).toContain('Versão 1.3 — 29/10/2026');
     expect(full).toContain('CNPJ 65.472.078/0001-54');
     expect(full).toContain('João Batista Zocaratto Junior');
     expect(full).toContain('**8. Alterações**');
+  });
+
+  it('term.full §5 discloses OpenRouter and Google (Gemini) as fallback processors outside Brazil', () => {
+    const full = learnOf('pt-BR').term.full;
+    const section5 = full.slice(full.indexOf('**5.'), full.indexOf('**6.'));
+    expect(section5).toContain('provedor de inteligência artificial MiniMax');
+    expect(section5).toMatch(/OpenRouter e Google \(Gemini\), também com servidores localizados fora do Brasil/);
+    expect(section5).toContain('transferência internacional de dados');
   });
 });

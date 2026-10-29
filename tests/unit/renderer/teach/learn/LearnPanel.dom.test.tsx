@@ -65,8 +65,9 @@ vi.mock('@renderer/pages/Jr/JrSidebar/Usage/UsagePanel', () => ({ __esModule: tr
 
 import { MemoryRouter } from 'react-router-dom';
 import LearnPanel from '@renderer/pages/Jr/JrSidebar/Learn/LearnPanel';
+import { formatMinutes } from '@renderer/pages/Jr/JrSidebar/Learn/InsightList';
 import JrSettingsModal from '@renderer/pages/Jr/JrSidebar/SettingsModal';
-import { useLearnSettingsRequests } from '@renderer/pages/Jr/JrSidebar/Learn/useLearnState';
+import { useLearnSettingsRequests } from '@renderer/hooks/agent/useLearnState';
 import { emitter } from '@renderer/utils/emitter';
 
 const base: LearnState = {
@@ -85,7 +86,7 @@ const active: LearnState = {
   ...base,
   status: 'active',
   rawHours: 9,
-  acceptedVersion: '1.2',
+  acceptedVersion: '1.3',
   acceptedAt: '2026-10-29T18:02:00.000Z',
 };
 const bankRule = (id: string): LearnExclusion => ({ id, kind: 'domain', pattern: `${id}.com.br`, builtin: true });
@@ -145,7 +146,7 @@ describe('LearnPanel', () => {
 
   it('off after Desligar with the current term: Ativar turns it back on without the modal', async () => {
     learn.turnOn.invoke.mockResolvedValue(active);
-    renderPanel({ ...base, acceptedVersion: '1.2', acceptedAt: active.acceptedAt });
+    renderPanel({ ...base, acceptedVersion: '1.3', acceptedAt: active.acceptedAt });
     fireEvent.click(await screen.findByRole('button', { name: 'Ativar' }));
     await waitFor(() => expect(learn.turnOn.invoke).toHaveBeenCalled());
     expect(screen.queryByText('Li e concordo com o Termo de Consentimento de Dados')).not.toBeInTheDocument();
@@ -158,7 +159,7 @@ describe('LearnPanel', () => {
     expect(screen.getByText(/Excel 2h10 · Portal NF 1h05/)).toBeInTheDocument();
     expect(await screen.findByText('Bancos')).toBeInTheDocument();
     expect(screen.getByText('Registros brutos: 9 h guardadas (apagadas em até 48 h)')).toBeInTheDocument();
-    expect(screen.getByText(/Termo aceito em .* \(v1\.2\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Termo aceito em .* \(v1\.3\)/)).toBeInTheDocument();
     expect(screen.getByText('Só você vê isto.')).toBeInTheDocument();
   });
 
@@ -234,16 +235,51 @@ describe('LearnPanel', () => {
   });
 
   it('autoConsent with needs-consent opens the modal with the reconsent notice', async () => {
-    renderPanel({ ...base, status: 'needs-consent', acceptedVersion: '1.1' }, { autoConsent: true });
-    expect(await screen.findByText(/O termo mudou. Leia a versão 1.2/)).toBeInTheDocument();
+    renderPanel({ ...base, status: 'needs-consent', acceptedVersion: '1.2' }, { autoConsent: true });
+    expect(await screen.findByText(/O termo mudou. Leia a versão 1.3/)).toBeInTheDocument();
   });
 
   it('needs-consent without autoConsent waits for Revisar o termo', async () => {
-    renderPanel({ ...base, status: 'needs-consent', acceptedVersion: '1.1' });
+    renderPanel({ ...base, status: 'needs-consent', acceptedVersion: '1.2' });
     const review = await screen.findByRole('button', { name: 'Revisar o termo' });
-    expect(screen.queryByText(/Leia a versão 1.2/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Leia a versão 1.3/)).not.toBeInTheDocument();
     fireEvent.click(review);
-    expect(await screen.findByText(/Leia a versão 1.2/)).toBeInTheDocument();
+    expect(await screen.findByText(/Leia a versão 1.3/)).toBeInTheDocument();
+  });
+
+  it('off after Desligar still shows the insights, Apagar agora and Revogar', async () => {
+    learn.listInsights.invoke.mockResolvedValue([batch]);
+    learn.revoke.invoke.mockResolvedValue(base);
+    renderPanel({ ...base, rawHours: 3, acceptedVersion: '1.3', acceptedAt: active.acceptedAt });
+    expect(await screen.findByText('Baixar NF no portal')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Apagar agora' })).toBeInTheDocument();
+    expect(screen.getByText('Registros brutos: 3 h guardadas (apagadas em até 48 h)')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Revogar consentimento e apagar tudo' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Revogar consentimento e apagar tudo' }));
+    await waitFor(() => expect(learn.revoke.invoke).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('button', { name: 'Desligar' })).not.toBeInTheDocument();
+  });
+
+  it('needs-consent (declined the new term) can still revoke and delete insights', async () => {
+    learn.listInsights.invoke.mockResolvedValue([batch]);
+    renderPanel({ ...base, status: 'needs-consent', acceptedVersion: '1.2', acceptedAt: active.acceptedAt });
+    expect(await screen.findByRole('button', { name: 'Revogar consentimento e apagar tudo' })).toBeInTheDocument();
+    expect(await screen.findByText('Baixar NF no portal')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Apagar' })).toBeInTheDocument();
+  });
+
+  it('unavailable with a prior accept still offers Revogar', async () => {
+    renderPanel({ ...base, status: 'unavailable', unavailableReason: 'encryption', acceptedVersion: '1.3' });
+    expect(await screen.findByText(/não oferece criptografia/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Revogar consentimento e apagar tudo' })).toBeInTheDocument();
+  });
+
+  it('off with no accept and no data shows no data controls', async () => {
+    renderPanel(base);
+    await screen.findByRole('button', { name: 'Ativar' });
+    expect(screen.queryByRole('button', { name: 'Revogar consentimento e apagar tudo' })).not.toBeInTheDocument();
+    expect(learn.listInsights.invoke).not.toHaveBeenCalled();
   });
 
   it('unavailable without encryption says why and offers no Ativar', async () => {
@@ -330,11 +366,11 @@ describe('useLearnSettingsRequests', () => {
 
   it('asks once per session after a prior accept of another version', async () => {
     const open = vi.fn();
-    const first = mount({ ...base, status: 'needs-consent', acceptedVersion: '1.1' }, open);
+    const first = mount({ ...base, status: 'needs-consent', acceptedVersion: '1.2' }, open);
     await waitFor(() => expect(open).toHaveBeenCalledWith(true));
     first.unmount();
     const again = vi.fn();
-    mount({ ...base, status: 'needs-consent', acceptedVersion: '1.1' }, again);
+    mount({ ...base, status: 'needs-consent', acceptedVersion: '1.2' }, again);
     await waitFor(() => expect(learn.state.invoke).toHaveBeenCalled());
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(again).not.toHaveBeenCalled();
@@ -353,5 +389,16 @@ describe('useLearnSettingsRequests', () => {
     mount(active, open);
     emitter.emit('jr.settings.open', { tab: 'learn' });
     expect(open).toHaveBeenCalledWith(false);
+  });
+});
+
+describe('formatMinutes', () => {
+  it('takes its units from i18n', () => {
+    const t = ((key: string, opts: Record<string, unknown>) =>
+      key.endsWith('minutesShort')
+        ? `${String(opts.value)} minutos`
+        : `${String(opts.hours)} horas ${String(opts.minutes)}`) as never;
+    expect(formatMinutes(2.5, 'pt-BR', t)).toBe('2,5 minutos');
+    expect(formatMinutes(130, 'pt-BR', t)).toBe('2 horas 10');
   });
 });
