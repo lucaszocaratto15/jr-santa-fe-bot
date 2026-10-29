@@ -4,7 +4,7 @@ import { Alert, Button, Form, Input, Message, Popconfirm } from '@arco-design/we
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import useSWR from 'swr';
-import styles from './JrSidebar.module.css';
+import styles from '../JrSidebar.module.css';
 
 type Draft = { id?: string; name: string; origins: string; username: string; password: string; hints: string };
 

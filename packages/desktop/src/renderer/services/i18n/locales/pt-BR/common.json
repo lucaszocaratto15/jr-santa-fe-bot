@@ -659,7 +659,12 @@
         "delete": "Excluir",
         "deleteConfirm": "Excluir esta tarefa?",
         "deleteFailed": "Não foi possível excluir a tarefa.",
-        "loadFailed": "Não foi possível carregar as tarefas."
+        "loadFailed": "Não foi possível carregar as tarefas.",
+        "run": "Executar",
+        "runPrompt": "Execute a tarefa salva {{name}} ({{description}}). Siga a skill. Se faltar alguma entrada, pergunte antes de abrir o site.",
+        "scheduledPrompt": "Execução agendada da tarefa salva {{name}}. Siga a skill. Ninguém está acompanhando: se faltar uma entrada que a skill não define, ou se algo estiver diferente, pare e explique o que faltou. Se o navegador embutido ainda não estiver disponível, tente de novo algumas vezes antes de desistir.",
+        "noBot": "Crie um bot primeiro.",
+        "runFailed": "Não foi possível iniciar a tarefa. Tente de novo."
       },
       "generating": {
         "title": "Gerando tarefa…",

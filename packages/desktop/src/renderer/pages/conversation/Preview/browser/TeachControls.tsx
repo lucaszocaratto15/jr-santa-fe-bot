@@ -68,7 +68,7 @@ const TeachControls: React.FC<{ agentActive: boolean }> = ({ agentActive }) => {
           size='small'
           icon={<Record theme='outline' size={14} />}
           disabled={teach.phase !== 'idle'}
-          onClick={openDescribe}
+          onClick={() => openDescribe()}
         >
           {t('common.jr.teach.controls.teach')}
         </Button>

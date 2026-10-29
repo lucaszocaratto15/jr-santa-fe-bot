@@ -1,17 +1,30 @@
 import { ipcBridge } from '@/common';
 import { Button, Message, Popconfirm } from '@arco-design/web-react';
-import React from 'react';
+import { PlayOne } from '@icon-park/react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import useSWR from 'swr';
-import styles from './JrSidebar.module.css';
+import { JR_BOTS_KEY } from '@renderer/pages/Jr/index';
+import { listJrBots } from '@renderer/pages/Jr/jrBots';
+import styles from '../JrSidebar.module.css';
+import { buildRunPrompt, pickRunBot, runTaughtTask, TAUGHT_SKILL_PREFIX, type TaughtTaskSummary } from './taskActions';
 
-/** Taught skills are named `jr-tarefa-<slug>` (see process/services/teach/recording/skillDraft.ts). */
-export const TAUGHT_SKILL_PREFIX = 'jr-tarefa-';
+export { TAUGHT_SKILL_PREFIX };
 
-/** "Minhas tarefas": the tasks the employee taught the bot, with delete. */
-const TasksPanel: React.FC = () => {
+type TasksPanelProps = {
+  /** Closes the settings modal (Executar leaves it for the new conversation). */
+  onClose?: () => void;
+};
+
+/** "Minhas tarefas": the tasks the employee taught the bot, with Executar and delete. */
+const TasksPanel: React.FC<TasksPanelProps> = ({ onClose }) => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const [params] = useSearchParams();
   const skills = useSWR('jr.teach.tasks', () => ipcBridge.fs.listAvailableSkills.invoke());
+  const bots = useSWR(JR_BOTS_KEY, listJrBots);
+  const [running, setRunning] = useState<string | null>(null);
   const tasks = (skills.data ?? []).filter((skill) => skill.name.startsWith(TAUGHT_SKILL_PREFIX));
 
   const remove = async (name: string) => {
@@ -20,6 +33,24 @@ const TasksPanel: React.FC = () => {
       await skills.mutate();
     } catch {
       Message.error(t('common.jr.teach.tasks.deleteFailed'));
+    }
+  };
+
+  const run = async (task: TaughtTaskSummary) => {
+    if (running) return;
+    const bot = pickRunBot(bots.data ?? [], params.get('bot'));
+    if (!bot) {
+      Message.warning(t('common.jr.teach.tasks.noBot'));
+      return;
+    }
+    setRunning(task.name);
+    onClose?.();
+    try {
+      await runTaughtTask({ bot, prompt: buildRunPrompt(t, task, 'now'), navigate: (path) => void navigate(path) });
+    } catch {
+      Message.error(t('common.jr.teach.tasks.runFailed'));
+    } finally {
+      setRunning(null);
     }
   };
 
@@ -39,6 +70,15 @@ const TasksPanel: React.FC = () => {
               <p className={styles.muted}>{task.description}</p>
             </div>
             <div className={styles.rowActions}>
+              <Button
+                className={styles.softButton}
+                size='small'
+                icon={<PlayOne theme='outline' size={14} />}
+                loading={running === task.name}
+                onClick={() => void run(task)}
+              >
+                {t('common.jr.teach.tasks.run')}
+              </Button>
               <Popconfirm
                 title={t('common.jr.teach.tasks.deleteConfirm')}
                 okText={t('common.jr.teach.tasks.delete')}

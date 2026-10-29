@@ -8,7 +8,7 @@ import { Button, Input, Message } from '@arco-design/web-react';
 import { Record } from '@icon-park/react';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { beginRecording, cancelDescribe } from './teachStore';
+import { beginRecording, cancelDescribe, useTeachUi } from './teachStore';
 import styles from './TeachCards.module.css';
 
 const MAX_DESCRIPTION = 300;
@@ -16,7 +16,8 @@ const MAX_DESCRIPTION = 300;
 /** "O que essa tarefa faz?" — one line from the employee, then the recording starts. */
 const DescribeCard: React.FC = () => {
   const { t } = useTranslation();
-  const [description, setDescription] = useState('');
+  const { describePrefill } = useTeachUi();
+  const [description, setDescription] = useState(describePrefill ?? '');
   const [busy, setBusy] = useState(false);
   const title = t('common.jr.teach.describe.title');
 

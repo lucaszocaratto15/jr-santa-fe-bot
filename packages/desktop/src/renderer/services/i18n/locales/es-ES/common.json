@@ -659,7 +659,12 @@
         "delete": "Delete",
         "deleteConfirm": "Delete this task?",
         "deleteFailed": "Couldn't delete the task.",
-        "loadFailed": "Couldn't load the tasks."
+        "loadFailed": "Couldn't load the tasks.",
+        "run": "Run",
+        "runPrompt": "Run the saved task {{name}} ({{description}}). Follow the skill. If an input is missing, ask before opening the site.",
+        "scheduledPrompt": "Scheduled run of the saved task {{name}}. Follow the skill. Nobody is watching: if an input the skill does not define is missing, or if something looks different, stop and explain what was missing. If the in-app browser is not available yet, try again a few times before giving up.",
+        "noBot": "Create a bot first.",
+        "runFailed": "Couldn't start the task. Try again."
       },
       "generating": {
         "title": "Creating the task…",

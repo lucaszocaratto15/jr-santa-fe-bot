@@ -40,6 +40,8 @@ export type TeachUiState = {
   takenOver: boolean;
   /** Conversation ids of the mounted card hosts, most recent last. */
   hosts: string[];
+  /** Text the describe card starts with (the "Ensinar esta tarefa" shortcut). */
+  describePrefill: string | null;
 };
 
 const initial: TeachUiState = {
@@ -54,6 +56,7 @@ const initial: TeachUiState = {
   draftError: null,
   takenOver: false,
   hosts: [],
+  describePrefill: null,
 };
 
 let state: TeachUiState = initial;
@@ -169,10 +172,30 @@ export const registerTeachHost = (conversationId: string): (() => void) => {
   return () => set({ hosts: state.hosts.filter((id) => id !== conversationId) });
 };
 
-export const openDescribe = (): void => {
+export const openDescribe = (prefill?: string): void => {
   const conversationId = state.hosts.at(-1);
   if (!conversationId || state.phase !== 'idle') return;
-  set({ phase: 'describing', conversationId });
+  set({ phase: 'describing', conversationId, describePrefill: prefill ?? null });
+};
+
+/**
+ * What a conversation should do once its chat mounts: open the in-app browser (the agent
+ * only controls it while the tab is mounted) and optionally the prefilled describe card.
+ */
+export type ConversationIntent = { openBrowser: true; url?: string; describe?: string };
+
+const intents = new Map<string, ConversationIntent>();
+
+/** Queues an intent for the next time `conversationId`'s card host mounts. */
+export const queueConversationIntent = (conversationId: string, intent: ConversationIntent): void => {
+  intents.set(conversationId, intent);
+};
+
+/** The queued intent of `conversationId`, returned once and then cleared. */
+export const takeConversationIntent = (conversationId: string): ConversationIntent | null => {
+  const intent = intents.get(conversationId) ?? null;
+  intents.delete(conversationId);
+  return intent;
 };
 
 export const cancelDescribe = (): void => {

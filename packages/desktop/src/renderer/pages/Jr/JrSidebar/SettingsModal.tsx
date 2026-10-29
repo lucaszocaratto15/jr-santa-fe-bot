@@ -5,9 +5,9 @@ import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { isMacOS } from '@/renderer/utils/platform';
 import { ComputerPanel, GeneralPanel, UpdatesPanel } from './panels';
-import TasksPanel from './TasksPanel';
+import TasksPanel from './Teach/TasksPanel';
 import UsagePanel from './Usage/UsagePanel';
-import VaultPanel from './VaultPanel';
+import VaultPanel from './Teach/VaultPanel';
 import styles from './JrSidebar.module.css';
 
 export const SETTINGS_TABS = ['general', 'computer', 'usage', 'vault', 'tasks', 'updates'] as const;
@@ -91,7 +91,7 @@ const JrSettingsModal: React.FC<{
           {tab === 'computer' && <ComputerPanel />}
           {tab === 'usage' && <UsagePanel />}
           {tab === 'vault' && <VaultPanel />}
-          {tab === 'tasks' && <TasksPanel />}
+          {tab === 'tasks' && <TasksPanel onClose={onClose} />}
           {tab === 'updates' && <UpdatesPanel />}
         </div>
       </div>

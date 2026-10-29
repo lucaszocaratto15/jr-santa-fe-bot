@@ -5,11 +5,12 @@
  */
 
 import React, { useEffect } from 'react';
+import { useOptionalPreviewContext } from '../../context/PreviewContext';
 import DescribeCard from './DescribeCard';
 import GeneratingCard from './GeneratingCard';
 import ReviewCard from './ReviewCard';
 import SecureCard from './SecureCard';
-import { registerTeachHost, useTeachUi } from './teachStore';
+import { openDescribe, registerTeachHost, takeConversationIntent, useTeachUi } from './teachStore';
 import { dismissSecureRequest, resyncSecureRequests, useSecureRequests } from './useSecureRequests';
 
 type TeachCardHostProps = {
@@ -30,6 +31,15 @@ const TeachCardHost: React.FC<TeachCardHostProps> = ({ conversationId }) => {
     void resyncSecureRequests();
   }, []);
   useEffect(() => registerTeachHost(conversationId), [conversationId]);
+  const openBrowserTab = useOptionalPreviewContext()?.openBrowserTab;
+  // Runs after registerTeachHost, so openDescribe targets this conversation.
+  useEffect(() => {
+    if (!openBrowserTab) return;
+    const intent = takeConversationIntent(conversationId);
+    if (!intent) return;
+    openBrowserTab(intent.url);
+    if (intent.describe !== undefined) openDescribe(intent.describe);
+  }, [conversationId, openBrowserTab]);
 
   const current = requests[0];
   if (current) {
