@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
-import { roleKey } from '../../../../services/control/handbook.mjs';
+import { HANDBOOK_REQUEST_LIMIT, roleKey } from '../../../../services/control/handbook.mjs';
 import { startControl } from './support.mjs';
 
 const JPEG = (size = 64) => {
@@ -287,4 +289,50 @@ test('the author withdraws an item and its media is gone', async (t) => {
   assert.equal((await app.request(`/handbook/items/${id}`, { method: 'DELETE', token: a.token })).status, 200);
   assert.equal((await mine(a)).items.length, 0);
   assert.equal((await app.request(`/handbook/media/${mediaId}`, { token: a.token })).status, 404);
+});
+
+test('indicators rows older than the 4-week window are deleted on the next write', async (t) => {
+  const clock = { value: Date.UTC(2026, 9, 1) };
+  const { app, a, b, publish } = await setup(t, clock);
+  await publish(a, {
+    kind: 'indicators',
+    source: 'learn',
+    body: { weekStart: '2026-09-28', activities: [], timePerApp: [{ app: 'Excel', minutesPerDay: 10 }] },
+  });
+  await publish(a, { source: 'learn', body: activity('Observada antiga') });
+  const db = new DatabaseSync(join(app.directory, 'control.sqlite'), { readOnly: true });
+  t.after(() => db.close());
+  const count = (kind) => db.prepare('SELECT COUNT(*) AS n FROM handbook_items WHERE kind = ?').get(kind).n;
+  assert.equal(count('indicators'), 1);
+  clock.value += 27 * 86_400_000;
+  await publish(b, { body: activity('Ainda dentro da janela') });
+  assert.equal(count('indicators'), 1);
+  clock.value += 2 * 86_400_000;
+  await publish(b, {
+    kind: 'indicators',
+    source: 'learn',
+    body: { weekStart: '2026-10-26', activities: [], timePerApp: [{ app: 'Excel', minutesPerDay: 20 }] },
+  });
+  assert.equal(count('indicators'), 1);
+  const authors = db.prepare("SELECT author_id FROM handbook_items WHERE kind = 'indicators'").all();
+  assert.deepEqual(
+    authors.map((row) => row.author_id),
+    [b.id]
+  );
+  // Activities are not indicators: they stay until withdrawn.
+  assert.equal(count('activity'), 2);
+});
+
+test('a publish request over the 6 MB cap is rejected with 413 and one under it is accepted', async (t) => {
+  const { a, publish, mine } = await setup(t);
+  const big = await publish(a, {
+    media: Array.from({ length: 16 }, () => ({ id: randomUUID(), base64: JPEG(300 * 1024) })),
+  });
+  assert.equal(big.status, 413);
+  assert.equal((await mine(a)).items.length, 0);
+  const fits = await publish(a, {
+    media: Array.from({ length: 13 }, () => ({ id: randomUUID(), base64: JPEG(300 * 1024) })),
+  });
+  assert.equal(fits.status, 200);
+  assert.equal(HANDBOOK_REQUEST_LIMIT, 6 * 1024 * 1024);
 });

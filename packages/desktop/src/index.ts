@@ -41,7 +41,7 @@ import {
   setTeachServices,
 } from './process/services/teach/registry';
 import { startLearnService } from './process/services/teach/learn/learnIpc';
-import { startHandbookService } from './process/services/teach/handbook/handbookIpc';
+import { onHandbookAccessChanged, startHandbookService } from './process/services/teach/handbook/handbookIpc';
 import { createRecorder, sweepTaughtTasks } from './process/services/teach/recording/recorder';
 import { SHOT_MAX_WIDTH } from './process/services/teach/recording/stepShots';
 import { TAUGHT_TASKS_DIRNAME } from './process/services/teach/recording/teachSession';
@@ -999,7 +999,10 @@ const handleAppReady = async (): Promise<void> => {
         throw new Error('JR_ACCESS_PROFILE_UNBOUND');
       }
     },
-    onChange: (state) => ipcBridge.jr.accessChanged.emit(state),
+    onChange: (state) => {
+      ipcBridge.jr.accessChanged.emit(state);
+      onHandbookAccessChanged(state.status);
+    },
     onDiagnostic: (cause) => {
       console.warn(`[JR] ${cause}`);
       void appendJrOpenLog(app.getPath('userData'), { message: cause }).catch(() => {});

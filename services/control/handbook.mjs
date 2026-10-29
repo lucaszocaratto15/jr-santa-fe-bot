@@ -5,7 +5,13 @@ const INDICATOR_WINDOW_MS = 28 * DAY;
 const MAX_BODY_BYTES = 64 * 1024;
 const MAX_MEDIA = 40;
 const MAX_MEDIA_BYTES = 300 * 1024;
-export const HANDBOOK_REQUEST_LIMIT = 16 * 1024 * 1024;
+/**
+ * Cap of a publish request. The server's `requestTimeout` (30 s, server-wide) also covers the
+ * upload of the body, so the cap is sized to finish in 30 s at about 1.6 Mbit/s of upload:
+ * 6 MB holds roughly 4 MB of JPEGs in base64 plus the 64 KB body. The desktop app keeps its
+ * images under that budget (MAX_PUBLISH_MEDIA_BYTES) and publishes the rest of the steps as text.
+ */
+export const HANDBOOK_REQUEST_LIMIT = 6 * 1024 * 1024;
 const ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 const BASE64_RE = /^[A-Za-z0-9+/]+={0,2}$/u;
 const KINDS = new Set(['activity', 'indicators']);
@@ -238,6 +244,10 @@ export function createHandbookStore(db, now, httpError) {
         db.prepare('DELETE FROM handbook_media WHERE item_id = ?').run(parsed.id);
         const insert = db.prepare("INSERT INTO handbook_media (id,item_id,mime,data) VALUES (?,?,'image/jpeg',?)");
         for (const media of parsed.media) insert.run(media.id, parsed.id, media.data);
+        // Data minimization: per-person weekly values past the window are never read again.
+        db.prepare("DELETE FROM handbook_items WHERE kind = 'indicators' AND updated_at < ?").run(
+          timestamp - INDICATOR_WINDOW_MS
+        );
         return { id: parsed.id };
       });
     },

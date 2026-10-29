@@ -6,6 +6,7 @@
 
 import path from 'node:path';
 import { ipcBridge } from '@/common';
+import type { JrAccessState } from '@/common/config/clientSettings';
 import { createHandbookClient, type HandbookCall } from '@process/services/jr/handbookClient';
 import { userSkillsDir } from '../control/teachIpc';
 import { getHandbookService, getLearnService, setHandbookService } from '../registry';
@@ -48,5 +49,15 @@ export function startHandbookService(userDataDir: string, call: HandbookCall): H
     stateFile: path.join(userDataDir, HANDBOOK_DIRNAME, 'state.json'),
   });
   setHandbookService(service);
+  // An Aprender revoke that could not reach the server is retried now and hourly while pending.
+  service.startWithdrawRetries();
   return service;
+}
+
+/** A restored login retries a pending learn-items withdrawal right away. */
+export function onHandbookAccessChanged(status: JrAccessState['status']): void {
+  if (status !== 'authenticated') return;
+  const service = getHandbookService();
+  if (!service) return;
+  void service.retryPendingWithdraw().catch(() => {});
 }

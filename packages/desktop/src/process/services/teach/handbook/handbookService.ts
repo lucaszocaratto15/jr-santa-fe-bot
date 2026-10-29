@@ -50,12 +50,23 @@ const MAX_STEPS = 100;
 const MAX_STEP_TEXT = 1000;
 const MAX_CONFIRM = 20;
 const SHOT_FILE_RE = /^(\d{1,3})\.jpg$/;
+/**
+ * Images of one publish, in raw bytes. The server caps a publish request at 6 MB so a slow
+ * upload still ends within its 30 s request timeout; 4 MB of JPEGs is about 5.4 MB in base64.
+ * Steps past the budget are published as text only.
+ */
+export const MAX_PUBLISH_MEDIA_BYTES = 4 * 1024 * 1024;
+/** Retry interval of a pending learn-items withdrawal. */
+export const WITHDRAW_RETRY_MS = 3_600_000;
 
 type PublishedEntry = { itemId: string; hash: string; kind: HandbookKind; source: HandbookSource; title: string };
 type HandbookState = {
   published: Record<string, PublishedEntry>;
   dismissed: Record<string, string>;
-  /** Set when an Aprender revoke could not reach the server; retried on the next call. */
+  /**
+   * Set when an Aprender revoke could not reach the server. Retried at startup, when the
+   * login is restored, hourly while set, and on the next drafts/mine call.
+   */
   pendingWithdrawLearn?: boolean;
 };
 
@@ -69,6 +80,8 @@ export type HandbookServiceDeps = {
   stateFile: string;
   readFile?: (file: string) => Promise<Buffer>;
   now?: () => number;
+  /** Raw image budget of one publish (default MAX_PUBLISH_MEDIA_BYTES). */
+  maxPublishMediaBytes?: number;
 };
 
 export type HandbookService = {
@@ -77,6 +90,10 @@ export type HandbookService = {
   dismiss(key: string): Promise<void>;
   withdraw(itemId: string): Promise<void>;
   withdrawLearnItems(): Promise<void>;
+  /** Retry a pending learn-items withdrawal now (no-op when none is pending). */
+  retryPendingWithdraw(): Promise<void>;
+  /** Retry a pending withdrawal now and every `intervalMs` while one stays pending. Returns a stop function. */
+  startWithdrawRetries(intervalMs?: number): () => void;
   mine(): Promise<HandbookView>;
   media(id: string): Promise<string>;
   draftShot(key: string, shot: number): Promise<string>;
@@ -265,16 +282,55 @@ export function createHandbookService(deps: HandbookServiceDeps): HandbookServic
 
   const sources = async (): Promise<SourceDraft[]> => [...(await taughtDrafts()), ...(await learnDrafts())];
 
-  const retryPendingWithdraw = async (state: HandbookState): Promise<void> => {
-    if (!state.pendingWithdrawLearn) return;
-    try {
-      await deps.client.withdrawLearn();
-      await updateState((next) => {
-        delete next.pendingWithdrawLearn;
-      });
-    } catch {
-      // Still offline: try again on the next call.
+  /** Drop the local traces of observed (learn) items once the server withdrew them. */
+  const clearLearnLocal = (state: HandbookState) => {
+    delete state.pendingWithdrawLearn;
+    for (const [key, entry] of Object.entries(state.published)) {
+      if (entry.source === 'learn') delete state.published[key];
     }
+    for (const key of Object.keys(state.dismissed)) {
+      if (!key.startsWith('taught:')) delete state.dismissed[key];
+    }
+  };
+
+  let retryIntervalMs: number | null = null;
+  let retryTimer: ReturnType<typeof setInterval> | null = null;
+  let retrying: Promise<void> | null = null;
+
+  const disarmRetry = () => {
+    if (retryTimer) clearInterval(retryTimer);
+    retryTimer = null;
+  };
+
+  const armRetry = () => {
+    if (retryIntervalMs === null || retryTimer) return;
+    retryTimer = setInterval(() => {
+      void retryPendingWithdraw();
+    }, retryIntervalMs);
+    retryTimer.unref?.();
+  };
+
+  const retryPendingWithdraw = (): Promise<void> => {
+    if (retrying) return retrying;
+    retrying = (async () => {
+      const state = await loadState();
+      if (!state.pendingWithdrawLearn) {
+        disarmRetry();
+        return;
+      }
+      try {
+        await deps.client.withdrawLearn();
+      } catch {
+        // Still offline, blocked or outside hours: the hourly timer tries again.
+        armRetry();
+        return;
+      }
+      disarmRetry();
+      await updateState(clearLearnLocal);
+    })().finally(() => {
+      retrying = null;
+    });
+    return retrying;
   };
 
   const findSource = async (key: string): Promise<SourceDraft> => {
@@ -298,8 +354,8 @@ export function createHandbookService(deps: HandbookServiceDeps): HandbookServic
 
   return {
     async drafts() {
+      await retryPendingWithdraw();
       const state = await loadState();
-      await retryPendingWithdraw(state);
       const payload = await deps.client.mine();
       const drafts: HandbookDraft[] = [];
       for (const source of await sources()) {
@@ -339,10 +395,13 @@ export function createHandbookService(deps: HandbookServiceDeps): HandbookServic
             step.shot !== undefined && keep.has(step.shot) ? readShot(source.shotsDir, step.shot) : null
           )
         );
-        // Media ids are assigned in step order once every file is read.
+        // Media ids are assigned in step order once every file is read, within the budget.
+        const budget = deps.maxPublishMediaBytes ?? MAX_PUBLISH_MEDIA_BYTES;
+        let mediaBytes = 0;
         const steps = activity.steps.map((step, index) => {
           const data = images[index];
-          if (!data) return { text: step.text };
+          if (!data || mediaBytes + data.length > budget) return { text: step.text };
+          mediaBytes += data.length;
           const mediaId = randomUUID();
           media.push({ id: mediaId, base64: data.toString('base64') });
           return { text: step.text, mediaId };
@@ -386,21 +445,26 @@ export function createHandbookService(deps: HandbookServiceDeps): HandbookServic
         await updateState((state) => {
           state.pendingWithdrawLearn = true;
         });
+        armRetry();
         throw error;
       }
-      await updateState((state) => {
-        delete state.pendingWithdrawLearn;
-        for (const [key, entry] of Object.entries(state.published)) {
-          if (entry.source === 'learn') delete state.published[key];
-        }
-        for (const key of Object.keys(state.dismissed)) {
-          if (!key.startsWith('taught:')) delete state.dismissed[key];
-        }
-      });
+      disarmRetry();
+      await updateState(clearLearnLocal);
+    },
+
+    retryPendingWithdraw: () => retryPendingWithdraw(),
+
+    startWithdrawRetries(intervalMs = WITHDRAW_RETRY_MS) {
+      retryIntervalMs = intervalMs;
+      void retryPendingWithdraw();
+      return () => {
+        retryIntervalMs = null;
+        disarmRetry();
+      };
     },
 
     async mine() {
-      await retryPendingWithdraw(await loadState());
+      await retryPendingWithdraw();
       return withFlowcharts(await deps.client.mine());
     },
 

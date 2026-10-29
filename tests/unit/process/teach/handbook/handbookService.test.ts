@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { HandbookActivityBody, HandbookPayload } from '@/common/types/agent/handbookTypes';
 import { LEARN_TERM_VERSION, type LearnInsightBatch, type LearnState } from '@/common/types/agent/learnTypes';
 import type { HandbookClient, HandbookPublishInput } from '@process/services/jr/handbookClient';
-import { createHandbookService } from '@process/services/teach/handbook/handbookService';
+import { MAX_PUBLISH_MEDIA_BYTES, createHandbookService } from '@process/services/teach/handbook/handbookService';
 
 const DAY = 86_400_000;
 const NOW = Date.UTC(2026, 9, 29, 15);
@@ -68,7 +68,9 @@ const learnWith = (acceptedVersion: string | null) => ({
   listInsights: vi.fn(async () => batches),
 });
 
-async function setup(options: { client?: Partial<HandbookClient>; accepted?: string | null } = {}) {
+async function setup(
+  options: { client?: Partial<HandbookClient>; accepted?: string | null; maxPublishMediaBytes?: number } = {}
+) {
   const root = await mkdtemp(join(tmpdir(), 'jr-handbook-'));
   roots.push(root);
   const skillsDir = join(root, 'skills');
@@ -86,6 +88,7 @@ async function setup(options: { client?: Partial<HandbookClient>; accepted?: str
     learn: () => learn,
     stateFile,
     now: () => NOW,
+    ...(options.maxPublishMediaBytes === undefined ? {} : { maxPublishMediaBytes: options.maxPublishMediaBytes }),
   });
   return { service, ...fake, learn, stateFile, skillsDir };
 }
@@ -163,6 +166,22 @@ describe('handbook service publish', () => {
     expect(JSON.stringify(input.body)).not.toContain('"shot"');
   });
 
+  it('keeps the images of a publish under the media budget and sends the rest of the steps as text', async () => {
+    // Each fixture shot is 6 bytes: a 12-byte budget holds the first two.
+    const { service, published } = await setup({ maxPublishMediaBytes: 12 });
+    const [draft] = (await service.drafts()).drafts;
+    await service.publish(taughtKey, draft.body, [1, 2, 3]);
+    const [input] = published;
+    expect(input.media.map((media) => Buffer.from(media.base64, 'base64').toString())).toEqual(['jpeg-1', 'jpeg-2']);
+    const steps = (input.body as HandbookActivityBody).steps;
+    expect(steps.map((step) => Boolean(step.mediaId))).toEqual([true, true, false]);
+    expect(steps.map((step) => step.text)).toHaveLength(3);
+  });
+
+  it('the default media budget is 4 MB, under the 6 MB server cap', () => {
+    expect(MAX_PUBLISH_MEDIA_BYTES).toBe(4 * 1024 * 1024);
+  });
+
   it('applies the employee edits and ignores unknown fields', async () => {
     const { service, published } = await setup();
     const [draft] = (await service.drafts()).drafts;
@@ -228,6 +247,82 @@ describe('handbook service publish', () => {
     expect(withdrawLearn).toHaveBeenCalledTimes(2);
     await service.mine();
     expect(withdrawLearn).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('handbook service pending withdraw retries', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const offlineWithdraw = () => {
+    const control = { offline: true };
+    const withdrawLearn = vi.fn(async () => {
+      if (control.offline) throw new Error('unavailable');
+    });
+    return { control, withdrawLearn };
+  };
+
+  const pendingFlag = async (stateFile: string): Promise<boolean> =>
+    JSON.parse(await readFile(stateFile, 'utf8')).pendingWithdrawLearn === true;
+
+  it('startup retries a pending withdraw without any drafts or mine call', async () => {
+    const { control, withdrawLearn } = offlineWithdraw();
+    const { service, client, stateFile } = await setup({ client: { withdrawLearn } });
+    await expect(service.withdrawLearnItems()).rejects.toThrow('unavailable');
+    control.offline = false;
+    const stop = service.startWithdrawRetries();
+    await vi.waitFor(() => expect(withdrawLearn).toHaveBeenCalledTimes(2));
+    await vi.waitFor(async () => expect(await pendingFlag(stateFile)).toBe(false));
+    stop();
+    expect(client.mine).not.toHaveBeenCalled();
+  });
+
+  it('a restored login retries a pending withdraw and clears the learn entries', async () => {
+    const { control, withdrawLearn } = offlineWithdraw();
+    const { service, client, stateFile } = await setup({ accepted: LEARN_TERM_VERSION, client: { withdrawLearn } });
+    const { drafts } = await service.drafts();
+    for (const draft of drafts) {
+      // eslint-disable-next-line no-await-in-loop
+      await service.publish(draft.key, draft.body, []);
+    }
+    await expect(service.withdrawLearnItems()).rejects.toThrow('unavailable');
+    control.offline = false;
+    const mineCalls = vi.mocked(client.mine).mock.calls.length;
+    await service.retryPendingWithdraw();
+    expect(withdrawLearn).toHaveBeenCalledTimes(2);
+    expect(await pendingFlag(stateFile)).toBe(false);
+    expect(vi.mocked(client.mine).mock.calls.length).toBe(mineCalls);
+    const state = JSON.parse(await readFile(stateFile, 'utf8'));
+    expect(Object.keys(state.published)).toEqual([taughtKey]);
+  });
+
+  it('retries hourly while a withdraw is pending and stops once it succeeds', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const { control, withdrawLearn } = offlineWithdraw();
+    const { service, stateFile } = await setup({ client: { withdrawLearn } });
+    const stop = service.startWithdrawRetries(3_600_000);
+    await expect(service.withdrawLearnItems()).rejects.toThrow('unavailable');
+    expect(withdrawLearn).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(3_600_000);
+    await vi.waitFor(() => expect(withdrawLearn).toHaveBeenCalledTimes(2));
+    control.offline = false;
+    await vi.advanceTimersByTimeAsync(3_600_000);
+    await vi.waitFor(() => expect(withdrawLearn).toHaveBeenCalledTimes(3));
+    await vi.waitFor(async () => expect(await pendingFlag(stateFile)).toBe(false));
+    await vi.advanceTimersByTimeAsync(3 * 3_600_000);
+    expect(withdrawLearn).toHaveBeenCalledTimes(3);
+    stop();
+  });
+
+  it('runs no hourly timer when nothing is pending', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const { service, client } = await setup();
+    const stop = service.startWithdrawRetries(3_600_000);
+    await vi.advanceTimersByTimeAsync(3 * 3_600_000);
+    expect(client.withdrawLearn).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+    stop();
   });
 });
 
