@@ -252,6 +252,9 @@ body[arco-theme='dark'] {
   height: 44px;
   min-height: 44px;
   padding-left: 96px;
+  /* Centre the toggle on the window buttons (their centre is 30px from the top). */
+  align-items: flex-start;
+  padding-top: 14px;
 }
 .app-shell button.jr-sider-toggle {
   display: inline-flex;
@@ -280,7 +283,7 @@ body[arco-theme='dark'] {
   z-index: 50;
 }
 .app-shell--mac button.jr-sider-toggle--floating {
-  top: 6px;
+  top: 14px;
   left: 96px;
 }
 .app-shell .jr-sider-brandline {
