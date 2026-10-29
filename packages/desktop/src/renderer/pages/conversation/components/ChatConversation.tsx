@@ -252,8 +252,9 @@ const AionrsConversationPanel: React.FC<{ conversation: AionrsConversation; slid
   const emptySlot = (
     <SingleChatEmptyState
       conversation_id={conversation.id}
-      assistant_name={presetAssistantInfo?.name}
+      assistant_name={jrBot?.name ?? presetAssistantInfo?.name}
       assistant_backend={presetAssistantInfo?.backend}
+      avatar={jrBot ? <JrCharacter appearance={jrBot.appearance} size={72} /> : undefined}
     />
   );
 
