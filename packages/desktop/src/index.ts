@@ -839,6 +839,25 @@ const handleAppReady = async (): Promise<void> => {
     }
   }
 
+  /**
+   * Teach control channel for the `jr-teach` MCP server. Like the CDP vars above, the env
+   * must be set before the backend spawns MCP servers so they inherit it. On failure the
+   * env stays unset and the MCP server exits with a diagnostic.
+   */
+  try {
+    const { createTeachControlServer } = await import('./process/services/teach/controlServer');
+    const { buildTeachHandlers } = await import('./process/services/teach/controlHandlers');
+    const teachControl = await createTeachControlServer(buildTeachHandlers());
+    process.env.JR_TEACH_PORT = String(teachControl.port);
+    process.env.JR_TEACH_TOKEN = teachControl.token;
+    app.once('will-quit', () => {
+      void teachControl.close();
+    });
+    mark('teachControl');
+  } catch (error) {
+    console.error('[Teach] Failed to start control server; jr-teach tools stay off.', error);
+  }
+
   const localPilot = process.env.JR_LOCAL_PILOT === '1' && !app.isPackaged;
   const startJrCore = () =>
     startBackendOrExit({

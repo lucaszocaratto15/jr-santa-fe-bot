@@ -9,7 +9,7 @@ import { migrateConfigStorage, migrateLegacyMcpConfigToDb, migrateProviders } fr
 import { httpRequest } from '@/common/adapter/httpBridge';
 import { mcpService } from '@/common/adapter/ipcBridge';
 import type { ImageGenerationModelSetting } from '@/common/config/clientSettings';
-import { BUILTIN_BROWSER_MCP_NAME } from '@/common/config/constants';
+import { BUILTIN_BROWSER_MCP_NAME, BUILTIN_TEACH_MCP_NAME } from '@/common/config/constants';
 import {
   removeImageGenerationEnvKeys,
   resolveImageGenerationMcpEnv,
@@ -38,6 +38,9 @@ const BUILTIN_CHROME_DEVTOOLS_NAME = 'chrome-devtools';
  * happens in the side preview panel where the user can watch it.
  */
 const BUILTIN_BROWSER_SCRIPT = 'builtin-mcp-browser';
+
+/** Built-in `jr-teach` MCP server script (vault fill, secure input, taught-task drafts). */
+const BUILTIN_TEACH_SCRIPT = 'builtin-mcp-teach';
 
 const LEGACY_BACKEND_CLIENT_PREFERENCE_KEYS = [
   'assistants',
@@ -200,6 +203,27 @@ function buildBuiltinBrowserServer(): McpImportServer {
   };
 }
 
+function buildBuiltinTeachServer(): McpImportServer {
+  const serverConfig = {
+    command: 'node',
+    args: [getBuiltinMcpScriptPath(BUILTIN_TEACH_SCRIPT)],
+  };
+
+  return {
+    name: BUILTIN_TEACH_MCP_NAME,
+    description:
+      'Teach-a-task tools: fill saved credentials from the vault, request sensitive input securely and submit taught-task drafts. Secret values are never returned.',
+    enabled: true,
+    builtin: true,
+    transport: {
+      type: 'stdio',
+      command: serverConfig.command,
+      args: serverConfig.args,
+    },
+    original_json: JSON.stringify({ mcpServers: { [BUILTIN_TEACH_MCP_NAME]: serverConfig } }, null, 2),
+  };
+}
+
 function buildDefaultMcpServers(): McpImportServer[] {
   const chromeConfig = {
     command: 'npx',
@@ -220,6 +244,7 @@ function buildDefaultMcpServers(): McpImportServer[] {
       original_json: JSON.stringify({ mcpServers: { [BUILTIN_CHROME_DEVTOOLS_NAME]: chromeConfig } }, null, 2),
     },
     buildBuiltinBrowserServer(),
+    buildBuiltinTeachServer(),
   ];
 }
 
