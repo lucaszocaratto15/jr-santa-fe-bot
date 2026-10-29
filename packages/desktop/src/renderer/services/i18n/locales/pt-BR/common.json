@@ -664,7 +664,13 @@
         "runPrompt": "Execute a tarefa salva {{name}} ({{description}}). Siga a skill. Se faltar alguma entrada, pergunte antes de abrir o site.",
         "scheduledPrompt": "Execução agendada da tarefa salva {{name}}. Siga a skill. Ninguém está acompanhando: se faltar uma entrada que a skill não define, ou se algo estiver diferente, pare e explique o que faltou. Se o navegador embutido ainda não estiver disponível, tente de novo algumas vezes antes de desistir.",
         "noBot": "Crie um bot primeiro.",
-        "runFailed": "Não foi possível iniciar a tarefa. Tente de novo."
+        "runFailed": "Não foi possível iniciar a tarefa. Tente de novo.",
+        "edit": "Editar",
+        "editTitle": "Editar tarefa",
+        "editDescription": "O que faz",
+        "editBody": "Passos e instruções",
+        "editSaved": "Tarefa salva. A mudança vale a partir da próxima execução.",
+        "editFailed": "Não foi possível abrir ou salvar a tarefa."
       },
       "generating": {
         "title": "Gerando tarefa…",

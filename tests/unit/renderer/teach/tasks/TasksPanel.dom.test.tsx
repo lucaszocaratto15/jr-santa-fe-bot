@@ -10,7 +10,8 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-const { listAvailableSkills, deleteSkill, listJrBots, startJrConversation, navigate } = vi.hoisted(() => ({
+const { listAvailableSkills, deleteSkill, listJrBots, startJrConversation, navigate, readTask } = vi.hoisted(() => ({
+  readTask: vi.fn(),
   listAvailableSkills: vi.fn(),
   deleteSkill: vi.fn(),
   listJrBots: vi.fn(),
@@ -34,6 +35,7 @@ vi.mock('@/common', () => ({
       listAvailableSkills: { invoke: listAvailableSkills },
       deleteSkill: { invoke: deleteSkill },
     },
+    teach: { readTask: { invoke: readTask }, saveTask: { invoke: vi.fn() } },
   },
 }));
 
@@ -118,5 +120,14 @@ describe('TasksPanel', () => {
     });
     await waitFor(() => expect(Message.error).toHaveBeenCalledWith('common.jr.teach.tasks.runFailed'));
     expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('Editar opens the edit modal for that task', async () => {
+    readTask.mockResolvedValue({ name: 'jr-tarefa-nfs', description: 'Baixa NFs', body: '\n## Passos\n1. a\n' });
+    renderPanel();
+    await screen.findByText('jr-tarefa-nfs');
+    fireEvent.click(screen.getByRole('button', { name: /common.jr.teach.tasks.edit$/ }));
+    expect(await screen.findByText('common.jr.teach.tasks.editTitle')).toBeInTheDocument();
+    expect(readTask).toHaveBeenCalledWith({ name: 'jr-tarefa-nfs' });
   });
 });

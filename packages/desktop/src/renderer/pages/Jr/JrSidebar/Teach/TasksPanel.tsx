@@ -1,6 +1,6 @@
 import { ipcBridge } from '@/common';
 import { Button, Message, Popconfirm } from '@arco-design/web-react';
-import { PlayOne } from '@icon-park/react';
+import { Edit, PlayOne } from '@icon-park/react';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -8,6 +8,7 @@ import useSWR from 'swr';
 import { JR_BOTS_KEY } from '@renderer/pages/Jr/index';
 import { listJrBots } from '@renderer/pages/Jr/jrBots';
 import styles from '../JrSidebar.module.css';
+import EditTaskModal from './EditTaskModal';
 import { buildRunPrompt, pickRunBot, runTaughtTask, TAUGHT_SKILL_PREFIX, type TaughtTaskSummary } from './taskActions';
 
 export { TAUGHT_SKILL_PREFIX };
@@ -17,7 +18,7 @@ type TasksPanelProps = {
   onClose?: () => void;
 };
 
-/** "Minhas tarefas": the tasks the employee taught the bot, with Executar and delete. */
+/** "Minhas tarefas": the tasks the employee taught the bot, with Executar, Editar and delete. */
 const TasksPanel: React.FC<TasksPanelProps> = ({ onClose }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -25,6 +26,7 @@ const TasksPanel: React.FC<TasksPanelProps> = ({ onClose }) => {
   const skills = useSWR('jr.teach.tasks', () => ipcBridge.fs.listAvailableSkills.invoke());
   const bots = useSWR(JR_BOTS_KEY, listJrBots);
   const [running, setRunning] = useState<string | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
   const tasks = (skills.data ?? []).filter((skill) => skill.name.startsWith(TAUGHT_SKILL_PREFIX));
 
   const remove = async (name: string) => {
@@ -79,6 +81,14 @@ const TasksPanel: React.FC<TasksPanelProps> = ({ onClose }) => {
               >
                 {t('common.jr.teach.tasks.run')}
               </Button>
+              <Button
+                className={styles.softButton}
+                size='small'
+                icon={<Edit theme='outline' size={14} />}
+                onClick={() => setEditing(task.name)}
+              >
+                {t('common.jr.teach.tasks.edit')}
+              </Button>
               <Popconfirm
                 title={t('common.jr.teach.tasks.deleteConfirm')}
                 okText={t('common.jr.teach.tasks.delete')}
@@ -93,6 +103,7 @@ const TasksPanel: React.FC<TasksPanelProps> = ({ onClose }) => {
           </div>
         ))}
       </div>
+      <EditTaskModal name={editing} onClose={() => setEditing(null)} onSaved={() => void skills.mutate()} />
     </div>
   );
 };

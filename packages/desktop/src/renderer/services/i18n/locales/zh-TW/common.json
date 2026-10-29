@@ -664,7 +664,13 @@
         "runPrompt": "Run the saved task {{name}} ({{description}}). Follow the skill. If an input is missing, ask before opening the site.",
         "scheduledPrompt": "Scheduled run of the saved task {{name}}. Follow the skill. Nobody is watching: if an input the skill does not define is missing, or if something looks different, stop and explain what was missing. If the in-app browser is not available yet, try again a few times before giving up.",
         "noBot": "Create a bot first.",
-        "runFailed": "Couldn't start the task. Try again."
+        "runFailed": "Couldn't start the task. Try again.",
+        "edit": "Edit",
+        "editTitle": "Edit task",
+        "editDescription": "What it does",
+        "editBody": "Steps and instructions",
+        "editSaved": "Task saved. The change applies from the next run.",
+        "editFailed": "Couldn't open or save the task."
       },
       "generating": {
         "title": "Creating the task…",
