@@ -20,7 +20,7 @@ import {
   installBrowserWindowHandlers,
   shouldManageBrowserContents,
   uniqueFileName,
-} from '@process/services/teach/browserWindows';
+} from '@process/services/teach/recording/browserWindows';
 import { BROWSER_SESSION_PARTITION } from '@/common/config/constants';
 
 type Handler = (d: { url: string }) => { action: string };

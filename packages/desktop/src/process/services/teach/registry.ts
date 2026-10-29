@@ -1,4 +1,4 @@
-import type { VaultStore } from './vault';
+import type { VaultStore } from './vault/vault';
 
 export type TeachServices = { vault: VaultStore };
 

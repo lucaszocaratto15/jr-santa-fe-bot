@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeOrigin, originAllowed } from '@/process/services/teach/originMatch';
+import { normalizeOrigin, originAllowed } from '@/process/services/teach/vault/originMatch';
 
 describe('normalizeOrigin', () => {
   it('adds https to a bare host', () => {

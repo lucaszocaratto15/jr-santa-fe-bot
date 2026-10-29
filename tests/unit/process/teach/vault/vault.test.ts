@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createVaultStore } from '@/process/services/teach/vault';
+import { createVaultStore } from '@/process/services/teach/vault/vault';
 
 const roots: string[] = [];
 afterEach(async () => {

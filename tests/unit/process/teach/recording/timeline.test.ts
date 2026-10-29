@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { REDACTED } from '@process/resources/builtinMcp/secretRedact';
-import type { TeachEvent } from '@process/services/teach/recorder';
-import { summarizeEvents } from '@process/services/teach/timeline';
+import type { TeachEvent } from '@process/services/teach/recording/recorder';
+import { summarizeEvents } from '@process/services/teach/recording/timeline';
 
 const U = 'https://portal.gov.br/home';
 const ev = (e: Partial<TeachEvent> & Pick<TeachEvent, 'kind'>): TeachEvent => ({ t: 0, tab: 1, url: U, ...e });

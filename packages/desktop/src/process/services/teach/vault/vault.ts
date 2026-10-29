@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { chmod, constants, lstat, mkdir, open, rename, unlink } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
-import type { OsEncryption } from '../jr/auth';
+import type { OsEncryption } from '../../jr/auth';
 import { normalizeOrigin } from './originMatch';
 
 export type VaultItemPublic = {

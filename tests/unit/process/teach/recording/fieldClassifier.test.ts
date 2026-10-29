@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isSecretField } from '@/process/services/teach/fieldClassifier';
+import { isSecretField } from '@/process/services/teach/recording/fieldClassifier';
 
 describe('isSecretField', () => {
   it('flags password inputs', () => {

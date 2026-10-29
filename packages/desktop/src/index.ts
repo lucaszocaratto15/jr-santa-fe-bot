@@ -22,7 +22,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { initMainAdapterWithWindow } from './common/adapter/main';
 import { ipcBridge } from './common';
-import { registerBrowserWindowHandlers } from './process/services/teach/browserWindows';
+import { registerBrowserWindowHandlers } from './process/services/teach/recording/browserWindows';
 import { initializeProcess } from './process';
 import { startBackendOrExit } from './process/startup/backendStartup';
 import { bootstrapJrConnection, configureJrProvider } from './process/services/jr/bootstrap';
@@ -33,7 +33,7 @@ import {
   JrAccessController,
   setJrAccessController,
 } from './process/services/jr/auth';
-import { createVaultStore } from './process/services/teach/vault';
+import { createVaultStore } from './process/services/teach/vault/vault';
 import { setTeachServices } from './process/services/teach/registry';
 import { startJrAuthProxy } from './process/services/jr/authProxy';
 import { appendJrOpenLog } from './process/services/jr/openLog';
@@ -845,8 +845,8 @@ const handleAppReady = async (): Promise<void> => {
    * env stays unset and the MCP server exits with a diagnostic.
    */
   try {
-    const { createTeachControlServer } = await import('./process/services/teach/controlServer');
-    const { buildTeachHandlers } = await import('./process/services/teach/controlHandlers');
+    const { createTeachControlServer } = await import('./process/services/teach/control/controlServer');
+    const { buildTeachHandlers } = await import('./process/services/teach/control/controlHandlers');
     const teachControl = await createTeachControlServer(buildTeachHandlers());
     process.env.JR_TEACH_PORT = String(teachControl.port);
     process.env.JR_TEACH_TOKEN = teachControl.token;

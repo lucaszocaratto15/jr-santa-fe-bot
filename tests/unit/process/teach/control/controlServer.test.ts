@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createTeachControlServer, type TeachHandlers } from '@/process/services/teach/controlServer';
+import { createTeachControlServer, type TeachHandlers } from '@/process/services/teach/control/controlServer';
 
 type Server = Awaited<ReturnType<typeof createTeachControlServer>>;
 

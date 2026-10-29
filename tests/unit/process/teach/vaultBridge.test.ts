@@ -23,7 +23,7 @@ vi.mock('@/common', () => ({
 
 import { initVaultBridge } from '@process/bridge/vaultBridge';
 import { setTeachServices } from '@process/services/teach/registry';
-import type { VaultStore } from '@process/services/teach/vault';
+import type { VaultStore } from '@process/services/teach/vault/vault';
 
 const item = { id: 'a', name: 'CRTI', origins: ['https://x.com'], username: 'u', hasPassword: true, hints: '' };
 const makeStore = () =>

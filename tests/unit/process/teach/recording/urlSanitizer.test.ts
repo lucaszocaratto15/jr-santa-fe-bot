@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sanitizeUrl } from '@/process/services/teach/urlSanitizer';
+import { sanitizeUrl } from '@/process/services/teach/recording/urlSanitizer';
 
 describe('sanitizeUrl', () => {
   it('masks secret query parameter values', () => {

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CdpBridgeHandle } from '@/process/resources/builtinMcp/cdpBridge';
-import { createRecorder } from '@/process/services/teach/recorder';
+import { createRecorder } from '@/process/services/teach/recording/recorder';
 
 const roots: string[] = [];
 afterEach(async () => {

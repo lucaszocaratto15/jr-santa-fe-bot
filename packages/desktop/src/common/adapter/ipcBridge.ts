@@ -1542,8 +1542,8 @@ export const theme = {
 // Vault — local encrypted credentials. No channel ever returns a secret.
 // ---------------------------------------------------------------------------
 
-export type VaultItemPublic = import('@process/services/teach/vault').VaultItemPublic;
-export type VaultUpsert = import('@process/services/teach/vault').VaultUpsert;
+export type VaultItemPublic = import('@process/services/teach/vault/vault').VaultItemPublic;
+export type VaultUpsert = import('@process/services/teach/vault/vault').VaultUpsert;
 
 export const vault = {
   available: bridge.buildProvider<boolean, void>('vault:available'),
