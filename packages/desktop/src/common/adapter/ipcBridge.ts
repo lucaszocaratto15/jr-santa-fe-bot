@@ -2556,3 +2556,8 @@ export const sidebar = {
     (p) => `/api/sidebar/archived/project/${encodeURIComponent(p.project_id)}`
   ),
 };
+
+export const teach = {
+  openTab: bridge.buildEmitter<{ url: string; openerWebContentsId: number }>('teach:open-tab'),
+  downloaded: bridge.buildEmitter<{ fileName: string; path: string; origin: string }>('teach:downloaded'),
+};

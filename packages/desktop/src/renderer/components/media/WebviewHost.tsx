@@ -8,6 +8,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Left, Right, Refresh, Loading } from '@icon-park/react';
 import { ipcBridge } from '@/common';
+import { BROWSER_SESSION_PARTITION } from '@/common/config/constants';
 import { InternalNavTracker, shouldResetHistoryForUrlProp } from './webviewHistory';
 
 export interface WebviewHostProps {
@@ -609,7 +610,8 @@ const WebviewHost: React.FC<WebviewHostProps> = ({
    * directly reachable by untrusted pages.
    */
   const webviewAttrs: Record<string, string> = {
-    allowpopups: 'false',
+    // Popups are routed to new tabs by the main process (setWindowOpenHandler) for the in-app browser only.
+    allowpopups: partition === BROWSER_SESSION_PARTITION ? 'true' : 'false',
     webpreferences: 'contextIsolation=yes, nodeIntegration=no, nativeWindowOpen=no',
   };
   if (partition) {
