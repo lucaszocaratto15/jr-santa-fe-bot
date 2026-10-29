@@ -6,6 +6,7 @@
 
 import React, { useEffect } from 'react';
 import { useOptionalPreviewContext } from '../../context/PreviewContext';
+import { TeachRecordingBar } from '../TeachControls';
 import DescribeCard from './DescribeCard';
 import GeneratingCard from './GeneratingCard';
 import HandbookCard from './HandbookCard';
@@ -20,6 +21,8 @@ import {
   useTeachUi,
 } from './teachStore';
 import { dismissSecureRequest, resyncSecureRequests, useSecureRequests } from './useSecureRequests';
+
+const RECORDING_PHASES = new Set(['recording', 'paused', 'stopping', 'discarding']);
 
 type TeachCardHostProps = {
   /** The conversation this host sits in; the describe/review cards and the draft prompt use it. */
@@ -61,6 +64,8 @@ const TeachCardHost: React.FC<TeachCardHostProps> = ({ conversationId }) => {
   }
   const ours = teach.conversationId === null || teach.conversationId === conversationId;
   if (ours && teach.phase === 'describing') return <DescribeCard />;
+  // Timer and controls also sit in the chat that started the recording.
+  if (teach.conversationId === conversationId && RECORDING_PHASES.has(teach.phase)) return <TeachRecordingBar inChat />;
   if (ours && teach.phase === 'generating') return <GeneratingCard />;
   if (ours && teach.phase === 'review' && teach.draft) {
     return <ReviewCard key={teach.draft.markdown} event={teach.draft} prompt={teach.prompt} />;

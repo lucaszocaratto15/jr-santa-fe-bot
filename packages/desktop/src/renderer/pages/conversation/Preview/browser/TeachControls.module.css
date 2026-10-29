@@ -18,6 +18,13 @@
   font-size: 12px;
 }
 
+.barChat {
+  margin-bottom: 12px;
+  border: 1px solid var(--jr-hairline);
+  border-radius: 12px;
+  box-shadow: var(--jr-composer-shadow);
+}
+
 .dot {
   width: 8px;
   height: 8px;

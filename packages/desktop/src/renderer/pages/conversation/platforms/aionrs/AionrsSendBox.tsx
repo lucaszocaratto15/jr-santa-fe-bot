@@ -12,6 +12,7 @@ import SendBox from '@/renderer/components/chat/SendBox';
 import ThoughtDisplay from '@/renderer/components/chat/ThoughtDisplay';
 import FileAttachButton from '@/renderer/components/media/FileAttachButton';
 import FilePreview from '@/renderer/components/media/FilePreview';
+import TeachChatButton from './TeachChatButton';
 import HorizontalFileList from '@/renderer/components/media/HorizontalFileList';
 import { useConversationContextSafe } from '@/renderer/hooks/context/ConversationContext';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
@@ -599,11 +600,14 @@ const AionrsSendBox: React.FC<{
         defaultMultiLine={!isMobile}
         lockMultiLine={!isMobile}
         tools={
-          <FileAttachButton
-            openFileSelector={openFileSelector}
-            onLocalFilesAdded={handleFilesAdded}
-            loadedMcpStatuses={loadedMcpStatuses}
-          />
+          <>
+            <FileAttachButton
+              openFileSelector={openFileSelector}
+              onLocalFilesAdded={handleFilesAdded}
+              loadedMcpStatuses={loadedMcpStatuses}
+            />
+            <TeachChatButton />
+          </>
         }
         prefix={
           <>

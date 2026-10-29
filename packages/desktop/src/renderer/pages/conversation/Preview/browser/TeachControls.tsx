@@ -77,8 +77,8 @@ const TeachControls: React.FC<{ agentActive: boolean }> = ({ agentActive }) => {
   );
 };
 
-/** Thin bar on top of the browser while a recording is active. */
-export const TeachRecordingBar: React.FC = () => {
+/** Thin bar on top of the browser (or above the bot's send box, `inChat`) while a recording is active. */
+export const TeachRecordingBar: React.FC<{ inChat?: boolean }> = ({ inChat = false }) => {
   const { t } = useTranslation();
   const teach = useTeachUi();
   if (!ACTIVE_PHASES.has(teach.phase)) return null;
@@ -94,7 +94,7 @@ export const TeachRecordingBar: React.FC = () => {
   };
 
   return (
-    <div className={styles.bar} role='status'>
+    <div className={inChat ? `${styles.bar} ${styles.barChat}` : styles.bar} role='status'>
       <span className={paused ? `${styles.dot} ${styles.dotPaused}` : styles.dot} aria-hidden='true' />
       <span className={styles.timer}>
         {paused ? t('common.jr.teach.controls.paused') : t('common.jr.teach.controls.recording')}{' '}
