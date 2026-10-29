@@ -76,3 +76,28 @@ describe('summarizeEvents', () => {
     expect(out.split('\n')[2]).toBe('3. Preencheu campo "B"');
   });
 });
+
+describe('summarizeEvents screenshot markers', () => {
+  it('timeline appends [tela 3] only to events with a shot', () => {
+    const text = summarizeEvents([
+      ev({ kind: 'navigate', url: 'https://portal.gov.br/login', shot: 1 }),
+      ev({ kind: 'click', target: [{ role: 'button', name: 'Entrar' }] }),
+      ev({ kind: 'click', target: [{ role: 'button', name: 'Emitir' }], shot: 3 }),
+    ]);
+    expect(text.split('\n')).toEqual([
+      '1. Navegou para https://portal.gov.br/login (aba 1) [tela 1]',
+      '2. Clicou em botão "Entrar" (aba 1, portal.gov.br)',
+      '3. Clicou em botão "Emitir" (aba 1, portal.gov.br) [tela 3]',
+    ]);
+  });
+
+  it('keeps the shot of a click that is folded into the following input', () => {
+    const field = [{ label: 'Número da nota' }];
+    const text = summarizeEvents([
+      ev({ kind: 'click', target: field, shot: 2 }),
+      ev({ kind: 'input', target: field, value: '1' }),
+      ev({ kind: 'input', target: field, value: '123' }),
+    ]);
+    expect(text).toBe('1. Preencheu campo "Número da nota" com 123 [tela 2]');
+  });
+});

@@ -7,15 +7,21 @@
  * every field with isSecretField and masks it as `«segredo»` anyway. The recorder never
  * reads a secret from the page; it only remembers the origin in `secretOrigins` so the UI
  * can offer to save a credential (the employee retypes it there).
+ *
+ * Screenshots ("telas", stepShots.ts): taken after click/submit/navigate into
+ * `<dir>/<id>/shots/<n>.jpg`, and skipped when the step is secret, when a secret field of the
+ * tab got a value since its last navigation, or when the bridge holds a live secret for the
+ * page. The images never reach the model; the timeline only carries `[tela N]` markers.
  */
 
 import { randomUUID } from 'node:crypto';
-import { appendFile, mkdir, readdir, rm } from 'node:fs/promises';
+import { appendFile, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { CdpBridgeHandle } from '@process/resources/builtinMcp/cdpBridge';
 import { REDACTED } from '@process/resources/builtinMcp/secretRedact';
 import { CAPTURE_BINDING, buildCaptureScript } from './captureScript';
 import { isPasswordField, isSecretField, type FieldAttrs } from './fieldClassifier';
+import { MAX_SHOTS, createShotTaker, decideShot, type ShotTaker } from './stepShots';
 import { sanitizeUrl } from './urlSanitizer';
 import type { RecorderState } from '@/common/types/agent/teachTypes';
 
@@ -40,6 +46,8 @@ export type TeachEvent = {
   value?: string;
   key?: string;
   fileName?: string;
+  /** Number of the screenshot of this step (`shots/<n>.jpg`), when one was taken. */
+  shot?: number;
 };
 
 export type { RecorderState };
@@ -65,6 +73,13 @@ export type RecorderDeps = {
   now?: () => number;
   limitMs?: number;
   onAutoStop(): void;
+  /** Step screenshots; without it no screenshot is taken. */
+  shots?: {
+    /** Re-encode a captured JPEG at a quality, at most SHOT_MAX_WIDTH wide; null on failure. */
+    encode(jpeg: Buffer, quality: number): Buffer | null;
+    delayMs?: number;
+    max?: number;
+  };
 };
 
 /** Hard limit of a recording (10 minutes). */
@@ -75,6 +90,9 @@ const MAX_LOCATOR_TEXT = 200;
 const ID_RE = /^[0-9a-f-]{36}$/;
 const LOCATOR_KEYS = ['role', 'name', 'label', 'text', 'placeholder', 'attr', 'css'] as const;
 const PAGE_KINDS = new Set(['click', 'input', 'submit', 'key']);
+const SHOT_KINDS = new Set<TeachEventKind>(['click', 'submit', 'navigate']);
+/** Shots live next to events.jsonl in the recording dir. */
+export const SHOTS_DIRNAME = 'shots';
 
 type Session = {
   id: string;
@@ -90,6 +108,9 @@ type Session = {
   writes: Promise<void>;
   /** Tab events of attaches that happened while paused, pushed on resume. */
   pendingTabEvents: Array<Pick<TeachEvent, 'kind' | 'tab' | 'url'>>;
+  /** Tabs where a secret field got a value since the tab's last top-frame navigation. */
+  secretDirty: Set<number>;
+  shots: ShotTaker | null;
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -166,7 +187,7 @@ export function createRecorder(deps: RecorderDeps): Recorder {
   let session: Session | null = null;
   let lastResult: RecordingResult | null = null;
 
-  const push = (s: Session, event: Omit<TeachEvent, 't' | 'tab'> & { tab?: number }) => {
+  const push = (s: Session, event: Omit<TeachEvent, 't' | 'tab'> & { tab?: number }, eventSecret = false) => {
     // Every url written to events.jsonl goes through sanitizeUrl (no secrets in query/fragment).
     const full = {
       ...event,
@@ -177,6 +198,48 @@ export function createRecorder(deps: RecorderDeps): Recorder {
     s.events.push(full);
     const file = path.join(s.dir, 'events.jsonl');
     s.writes = s.writes.then(() => appendFile(file, `${JSON.stringify(full)}\n`, 'utf8')).catch(() => {});
+    if (s.shots && SHOT_KINDS.has(full.kind)) scheduleShot(s, s.events.length - 1, full.tab, eventSecret);
+  };
+
+  /** True when the bridge holds a vault/secure-card secret for the attached page (or none is attached). */
+  const liveSecret = (): boolean => {
+    const id = deps.bridge.attachedWebContentsId();
+    return id === null || deps.bridge.hasLiveSecret(id);
+  };
+
+  const scheduleShot = (s: Session, eventIndex: number, tab: number, eventSecret: boolean) => {
+    const taker = s.shots;
+    if (!taker) return;
+    const max = deps.shots?.max ?? MAX_SHOTS;
+    // Evaluated again when the shot is due and after the capture, not only now.
+    taker.schedule(eventIndex, () =>
+      decideShot({
+        eventSecret,
+        secretDirty: s.secretDirty.has(tab) || s.secretDirty.has(s.currentTab),
+        liveSecret: liveSecret(),
+        taken: taker.count(),
+        max,
+      })
+    );
+  };
+
+  const createShots = (dir: string): ShotTaker | null => {
+    const options = deps.shots;
+    if (!options) return null;
+    const shotsDir = path.join(dir, SHOTS_DIRNAME);
+    return createShotTaker({
+      capture: async () => {
+        const res = await deps.bridge.sendCommand('Page.captureScreenshot', { format: 'jpeg', quality: 60 });
+        const data = isRecord(res) ? str(res.data) : undefined;
+        return data ? Buffer.from(data, 'base64') : null;
+      },
+      encode: options.encode,
+      write: async (n, data) => {
+        await mkdir(shotsDir, { recursive: true });
+        await writeFile(path.join(shotsDir, `${n}.jpg`), data);
+      },
+      delayMs: options.delayMs,
+    });
   };
 
   const inject = async (s: Session) => {
@@ -235,11 +298,31 @@ export function createRecorder(deps: RecorderDeps): Recorder {
       const origin = originOf(sanitizeUrl(url));
       if (origin) s.secretOrigins.add(origin);
     }
-    push(s, event);
+    push(s, event, secret);
+  };
+
+  /** Track secret fields even while paused, so a resumed recording never photographs them. */
+  const trackSecrets = (s: Session, method: string, params: Record<string, unknown>) => {
+    if (method === 'Page.frameNavigated' && isRecord(params.frame) && !params.frame.parentId) {
+      s.secretDirty.delete(s.currentTab);
+      return;
+    }
+    if (method !== 'Runtime.bindingCalled' || params.name !== CAPTURE_BINDING) return;
+    let payload: unknown;
+    try {
+      payload = JSON.parse(str(params.payload) ?? '');
+    } catch {
+      return;
+    }
+    if (!isRecord(payload) || payload.kind !== 'input') return;
+    const field = sanitizeField(payload.field);
+    if (payload.secret === true || (field !== null && isSecretField(field))) s.secretDirty.add(s.currentTab);
   };
 
   const onBridgeEvent = (s: Session, method: string, params: unknown) => {
-    if (current !== 'recording' || session !== s || !isRecord(params)) return;
+    if (session !== s || !isRecord(params)) return;
+    trackSecrets(s, method, params);
+    if (current !== 'recording') return;
     if (method === 'Runtime.bindingCalled') {
       if (params.name !== CAPTURE_BINDING) return;
       const payload = str(params.payload);
@@ -291,6 +374,11 @@ export function createRecorder(deps: RecorderDeps): Recorder {
     session = null;
     current = 'idle';
     finishing = (async () => {
+      const shots = s.shots ? await s.shots.flush() : new Map<number, number>();
+      for (const [index, n] of shots) {
+        const event = s.events[index];
+        if (event) event.shot = n;
+      }
       await teardown(s);
       lastResult = { id: s.id, events: [...s.events], secretOrigins: [...s.secretOrigins] };
       return lastResult;
@@ -324,6 +412,8 @@ export function createRecorder(deps: RecorderDeps): Recorder {
         timer: null,
         writes: Promise.resolve(),
         pendingTabEvents: [],
+        secretDirty: new Set(),
+        shots: createShots(dir),
       };
       session = s;
       lastResult = null;

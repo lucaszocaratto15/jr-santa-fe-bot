@@ -105,6 +105,13 @@ describe('cdpBridge redaction + internal api', () => {
     expect(f.params.args[0].value).toBe('«segredo»');
   });
 
+  it('hasLiveSecret reports a registered secret only for its webContents', () => {
+    expect(handle.hasLiveSecret(contents.id)).toBe(false);
+    handle.addSecret(contents.id, SECRET);
+    expect(handle.hasLiveSecret(contents.id)).toBe(true);
+    expect(handle.hasLiveSecret(contents.id + 1000)).toBe(false);
+  });
+
   it('redacts forwarded command results', async () => {
     handle.addSecret(contents.id, SECRET);
     contents.commandResult = { result: { value: `pw=${SECRET}` } };

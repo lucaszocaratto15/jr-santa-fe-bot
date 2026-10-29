@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -57,7 +57,7 @@ const fakeRecorder = (result: Partial<RecordingResult> = {}) => {
   return recorder;
 };
 
-const setup = async (recorder: Recorder | null = fakeRecorder()) => {
+const setup = async (recorder: Recorder | null = fakeRecorder(), extra: Record<string, unknown> = {}) => {
   const dir = await mkdtemp(join(tmpdir(), 'teach-session-'));
   roots.push(dir);
   const setClientsLocked = vi.fn();
@@ -70,6 +70,7 @@ const setup = async (recorder: Recorder | null = fakeRecorder()) => {
     emitDraftRejected: vi.fn(),
     dir,
     now: () => 1_000,
+    ...extra,
   };
   return { session: createTeachSession(deps), deps, dir, setClientsLocked };
 };
@@ -214,5 +215,39 @@ describe('teach session', () => {
     await session.start('Baixar NFs');
     expect(session.takeOverState()).toEqual({ on: false });
     expect(() => session.takeOver(false)).toThrow();
+  });
+
+  it('saveDraft copies only referenced shots into telas/ and the fallback dir', async () => {
+    const shotsDir = await mkdtemp(join(tmpdir(), 'teach-shots-'));
+    roots.push(shotsDir);
+    const { session, dir } = await setup(fakeRecorder(), { shotsDir });
+    await session.start('Emitir NF');
+    await session.stop();
+    await mkdir(join(dir, ID, 'shots'), { recursive: true });
+    for (const n of [1, 2, 3]) await writeFile(join(dir, ID, 'shots', `${n}.jpg`), `jpeg-${n}`);
+    const markdown = DRAFT.replace('1. Abrir o portal', '1. Abrir o portal [tela 1]\n2. Emitir [tela 3] [tela 9]');
+    const { skillPath } = await session.saveDraft({ markdown, recordingId: ID });
+    expect((await readdir(join(skillPath, 'telas'))).toSorted()).toEqual(['1.jpg', '3.jpg']);
+    expect(await readFile(join(skillPath, 'telas', '3.jpg'), 'utf8')).toBe('jpeg-3');
+    expect((await readdir(join(shotsDir, 'jr-tarefa-relatorio-nfs'))).toSorted()).toEqual(['1.jpg', '3.jpg']);
+  });
+
+  it('drops the oldest shots when the skill folder would pass the import limit', async () => {
+    const { session, dir } = await setup(fakeRecorder(), { maxSkillBytes: async () => DRAFT.length + 150 });
+    await session.start('Emitir NF');
+    await session.stop();
+    await mkdir(join(dir, ID, 'shots'), { recursive: true });
+    for (const n of [1, 2]) await writeFile(join(dir, ID, 'shots', `${n}.jpg`), 'x'.repeat(100));
+    const markdown = DRAFT.replace('1. Abrir o portal', '1. Abrir [tela 1]\n2. Emitir [tela 2]');
+    const { skillPath } = await session.saveDraft({ markdown, recordingId: ID });
+    expect(await readdir(join(skillPath, 'telas'))).toEqual(['2.jpg']);
+  });
+
+  it('creates no telas folder when the draft cites no shot', async () => {
+    const { session } = await setup();
+    await session.start('Baixar NFs');
+    await session.stop();
+    const { skillPath } = await session.saveDraft({ markdown: DRAFT, recordingId: ID });
+    expect(await readdir(skillPath)).toEqual(['SKILL.md']);
   });
 });

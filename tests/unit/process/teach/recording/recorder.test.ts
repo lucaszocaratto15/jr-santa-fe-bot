@@ -19,6 +19,7 @@ const fakeBridge = (initialId: number | null = 7) => {
   let attachedId = initialId;
   const sent: Sent[] = [];
   const locks: boolean[] = [];
+  const liveSecrets = new Set<number>();
   let href = 'https://portal.example.com/login';
   const bridge = {
     port: 0,
@@ -28,8 +29,10 @@ const fakeBridge = (initialId: number | null = 7) => {
     detach: () => {},
     close: async () => {},
     addSecret: () => {},
+    hasLiveSecret: (id: number) => liveSecrets.has(id),
     sendCommand: vi.fn(async (method: string, params?: Record<string, unknown>) => {
       sent.push({ method, params });
+      if (method === 'Page.captureScreenshot') return { data: Buffer.from(`shot-of-${href}`).toString('base64') };
       if (method === 'Page.addScriptToEvaluateOnNewDocument') return { identifier: `s${sent.length}` };
       if (method === 'Runtime.evaluate' && params?.expression === 'location.href') {
         return { result: { value: href } };
@@ -52,6 +55,7 @@ const fakeBridge = (initialId: number | null = 7) => {
     bridge,
     sent,
     locks,
+    liveSecrets,
     setHref: (next: string) => {
       href = next;
     },
@@ -71,7 +75,7 @@ const fakeBridge = (initialId: number | null = 7) => {
   };
 };
 
-const setup = async (opts: { limitMs?: number; initialId?: number | null } = {}) => {
+const setup = async (opts: { limitMs?: number; initialId?: number | null; shots?: boolean } = {}) => {
   const dir = await mkdtemp(join(tmpdir(), 'jr-teach-'));
   roots.push(dir);
   const fake = fakeBridge(opts.initialId === undefined ? 7 : opts.initialId);
@@ -83,6 +87,7 @@ const setup = async (opts: { limitMs?: number; initialId?: number | null } = {})
     now: () => clock,
     limitMs: opts.limitMs,
     onAutoStop,
+    ...(opts.shots ? { shots: { encode: (jpeg: Buffer) => jpeg, delayMs: 5 } } : {}),
   });
   return { dir, fake, recorder, onAutoStop, tick: (ms: number) => (clock += ms) };
 };
@@ -353,5 +358,103 @@ describe('sweepTaughtTasks', () => {
 
   it('is a no-op when the dir does not exist', async () => {
     expect(await sweepTaughtTasks(join(tmpdir(), 'jr-sweep-missing-' + Date.now()))).toBe(0);
+  });
+});
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const click = (text: string) => ({ kind: 'click', url: 'https://portal.example.com/login', target: [{ text }] });
+
+describe('teach recorder step screenshots', () => {
+  it('takes a shot after a click and marks the event with its number', async () => {
+    const { dir, fake, recorder } = await setup({ shots: true });
+    const { id } = await recorder.start('emitir');
+    await wait(20);
+    fake.page(click('Emitir'));
+    await wait(20);
+    const { events } = await recorder.stop();
+    const clicked = events.find((e) => e.kind === 'click');
+    expect(clicked?.shot).toBeGreaterThan(0);
+    const file = await readFile(join(dir, id, 'shots', `${clicked?.shot}.jpg`), 'utf8');
+    expect(file).toBe('shot-of-https://portal.example.com/login');
+    expect(fake.sent.find((s) => s.method === 'Page.captureScreenshot')?.params).toEqual({
+      format: 'jpeg',
+      quality: 60,
+    });
+  });
+
+  it('no shot after a password field got a value until the next navigation', async () => {
+    const { dir, fake, recorder } = await setup({ shots: true });
+    const { id } = await recorder.start('login');
+    await wait(20);
+    const before = fake.sent.filter((s) => s.method === 'Page.captureScreenshot').length;
+    fake.page({
+      kind: 'input',
+      url: 'https://portal.example.com/login',
+      field: { tag: 'input', type: 'password', name: 'pass' },
+    });
+    fake.page(click('Entrar'));
+    await wait(20);
+    fake.page(click('Outro botão'));
+    await wait(20);
+    expect(fake.sent.filter((s) => s.method === 'Page.captureScreenshot')).toHaveLength(before);
+    fake.setHref('https://portal.example.com/home');
+    fake.emit('Page.frameNavigated', { frame: { id: 'f', url: 'https://portal.example.com/home' } });
+    await wait(20);
+    const { events } = await recorder.stop();
+    expect(events.filter((e) => e.kind === 'click').every((e) => e.shot === undefined)).toBe(true);
+    const navigated = events.findLast((e) => e.kind === 'navigate');
+    expect(navigated?.shot).toBeGreaterThan(0);
+    // Only the empty login page (before typing) and the page after navigating were photographed.
+    const names = await readdir(join(dir, id, 'shots'));
+    expect(names).toHaveLength(before + 1);
+    expect(await readFile(join(dir, id, 'shots', `${navigated?.shot}.jpg`), 'utf8')).toBe(
+      'shot-of-https://portal.example.com/home'
+    );
+  });
+
+  it('a secret typed while paused still blocks shots after resume', async () => {
+    const { fake, recorder } = await setup({ shots: true });
+    await recorder.start('login');
+    await wait(20);
+    recorder.pause();
+    fake.page({ kind: 'input', url: 'https://portal.example.com/login', secret: true });
+    recorder.resume();
+    fake.page(click('Entrar'));
+    await wait(20);
+    const { events } = await recorder.stop();
+    expect(events.find((e) => e.kind === 'click')?.shot).toBeUndefined();
+  });
+
+  it('skips the shot of a secret click and while the bridge holds a live secret', async () => {
+    const { fake, recorder } = await setup({ shots: true });
+    await recorder.start('login');
+    await wait(20);
+    fake.page({ ...click('Mostrar senha'), secret: true });
+    await wait(20);
+    fake.liveSecrets.add(7);
+    fake.page(click('Entrar'));
+    await wait(20);
+    const { events } = await recorder.stop();
+    expect(events.filter((e) => e.kind === 'click').map((e) => e.shot)).toEqual([undefined, undefined]);
+  });
+
+  it('a vault fill during the delay skips the pending shot', async () => {
+    const { fake, recorder } = await setup({ shots: true });
+    await recorder.start('login');
+    await wait(20);
+    fake.page(click('Usuário'));
+    fake.liveSecrets.add(7);
+    await wait(20);
+    const { events } = await recorder.stop();
+    expect(events.find((e) => e.kind === 'click')?.shot).toBeUndefined();
+  });
+
+  it('takes no screenshot at all without the shots option', async () => {
+    const { fake, recorder } = await setup();
+    await recorder.start('x');
+    fake.page(click('Emitir'));
+    await wait(20);
+    await recorder.stop();
+    expect(fake.sent.some((s) => s.method === 'Page.captureScreenshot')).toBe(false);
   });
 });

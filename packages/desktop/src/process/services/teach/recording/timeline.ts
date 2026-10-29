@@ -93,17 +93,29 @@ function line(e: TeachEvent): string {
   }
 }
 
+/** ` [tela N]` when the step has a screenshot; only this marker ever reaches the model. */
+const shotMarker = (e: TeachEvent): string => (e.shot ? ` [tela ${e.shot}]` : '');
+
 export function summarizeEvents(events: TeachEvent[]): string {
   const kept: TeachEvent[] = [];
+  // A dropped or merged event hands its screenshot on to the line that replaces it.
+  let carried: number | undefined;
   events.forEach((e, i) => {
     const next = events[i + 1];
-    if (e.kind === 'click' && next?.kind === 'input' && sameElement(e, next)) return;
-    const prev = kept[kept.length - 1];
-    if (e.kind === 'input' && prev?.kind === 'input' && sameElement(prev, e)) {
-      kept[kept.length - 1] = e;
+    if (e.kind === 'click' && next?.kind === 'input' && sameElement(e, next)) {
+      carried = e.shot ?? carried;
       return;
     }
-    kept.push(e);
+    const prev = kept[kept.length - 1];
+    const shot = e.shot ?? carried;
+    carried = undefined;
+    const event = shot === undefined ? e : { ...e, shot };
+    if (e.kind === 'input' && prev?.kind === 'input' && sameElement(prev, e)) {
+      kept[kept.length - 1] =
+        event.shot === undefined && prev.shot !== undefined ? { ...event, shot: prev.shot } : event;
+      return;
+    }
+    kept.push(event);
   });
-  return kept.map((e, i) => `${i + 1}. ${line(e)}`).join('\n');
+  return kept.map((e, i) => `${i + 1}. ${line(e)}${shotMarker(e)}`).join('\n');
 }

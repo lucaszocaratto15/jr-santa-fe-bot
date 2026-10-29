@@ -12,7 +12,7 @@ import { showNotification } from '@process/bridge/notificationBridge';
 import i18n from '@process/services/i18n';
 import { getCdpBridgeHandle } from '@process/utils/cdpBridgeRegistry';
 import { getTeachServices, setSecureInputBroker, setTeachSession } from '../registry';
-import { createTeachSession, TAUGHT_TASKS_DIRNAME } from '../recording/teachSession';
+import { createTeachSession, TAUGHT_SHOTS_DIRNAME, TAUGHT_TASKS_DIRNAME } from '../recording/teachSession';
 import type { TeachHandlerDeps } from './controlHandlers';
 import { FILL_ERRORS, fillFocused } from './secretFill';
 import type { FillOptions, FillResult } from './secretFill';
@@ -99,6 +99,11 @@ export function createMainTeachDeps(): TeachHandlerDeps {
     emitDraft: (event) => ipcBridge.teach.draft.emit(event),
     emitDraftRejected: (event) => ipcBridge.teach.draftRejected.emit(event),
     dir: path.join(app.getPath('userData'), TAUGHT_TASKS_DIRNAME),
+    shotsDir: path.join(app.getPath('userData'), TAUGHT_SHOTS_DIRNAME),
+    maxSkillBytes: async () => {
+      const limits = await ipcBridge.fs.getSkillImportLimits.invoke();
+      return typeof limits?.max_total_bytes === 'number' && limits.max_total_bytes > 0 ? limits.max_total_bytes : null;
+    },
   });
   setTeachSession(session);
   return { vault, fill: fillAttached, broker, submitDraft: (markdown) => session.submitDraft(markdown) };

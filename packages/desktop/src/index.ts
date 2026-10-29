@@ -42,6 +42,7 @@ import {
 } from './process/services/teach/registry';
 import { startLearnService } from './process/services/teach/learn/learnIpc';
 import { createRecorder, sweepTaughtTasks } from './process/services/teach/recording/recorder';
+import { SHOT_MAX_WIDTH } from './process/services/teach/recording/stepShots';
 import { TAUGHT_TASKS_DIRNAME } from './process/services/teach/recording/teachSession';
 import { getCdpBridgeHandle } from './process/utils/cdpBridgeRegistry';
 import { startJrAuthProxy } from './process/services/jr/authProxy';
@@ -103,6 +104,18 @@ import {
 import { readCloseToTraySetting } from './process/utils/closeToTraySetting';
 // @ts-expect-error - electron-squirrel-startup doesn't have types
 import electronSquirrelStartup from 'electron-squirrel-startup';
+
+/** Teach step screenshot: shrink to SHOT_MAX_WIDTH when wider, then JPEG at `quality`. */
+const encodeStepShot = (jpeg: Buffer, quality: number): Buffer | null => {
+  try {
+    const image = nativeImage.createFromBuffer(jpeg);
+    if (image.isEmpty()) return null;
+    const { width } = image.getSize();
+    return (width > SHOT_MAX_WIDTH ? image.resize({ width: SHOT_MAX_WIDTH }) : image).toJPEG(quality);
+  } catch {
+    return null;
+  }
+};
 
 // ============ Single Instance Lock ============
 // Acquire lock early so the second instance quits before doing unnecessary work.
@@ -967,6 +980,7 @@ const handleAppReady = async (): Promise<void> => {
           bridge: teachBridge,
           dir: taughtTasksDir,
           onAutoStop: () => void getTeachSession()?.handleAutoStop(),
+          shots: { encode: encodeStepShot },
         })
       : null,
   });

@@ -56,6 +56,7 @@ export function buildDraftPrompt(description: string, timeline: string): string 
     '1. Passos curtos e numerados, com localizadores semânticos (papel, texto visível, rótulo, placeholder), nunca coordenadas.',
     '2. Para login: clique no campo e chame `vault_fill`; no último campo do login (normalmente a senha) use `submit: true` para enviar o formulário — scripts na página ficam bloqueados enquanto houver segredo num campo.',
     '3. Para códigos de verificação ou dados sensíveis: use `secure_input` (com `submit: true` quando for o último campo antes de enviar).',
+    '4. Quando uma linha da gravação terminar com `[tela N]`, termine o passo correspondente com os mesmos marcadores `[tela N]`. Não invente marcadores.',
     '',
     '## Confirmar antes de',
     '- Ações sem volta (emitir, enviar, pagar, excluir): pare e peça confirmação antes.',

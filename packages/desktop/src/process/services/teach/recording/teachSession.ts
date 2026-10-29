@@ -10,10 +10,10 @@
  * recording bar, the bot's draft submission and the "Assumir" browser take-over.
  */
 
-import { mkdir, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { CdpBridgeHandle } from '@process/resources/builtinMcp/cdpBridge';
-import type { Recorder, RecorderState } from './recorder';
+import { SHOTS_DIRNAME, type Recorder } from './recorder';
 import {
   buildDraftPrompt,
   parseDraft,
@@ -22,6 +22,7 @@ import {
   type DraftErrorCode,
   type TeachDraft,
 } from './skillDraft';
+import { extractShotRefs } from './stepShots';
 import { summarizeEvents } from './timeline';
 import type {
   TeachDraftEvent,
@@ -49,6 +50,13 @@ export type TeachSessionDeps = {
   emitDraftRejected(event: TeachDraftRejectedEvent): void;
   /** `<userData>/taught-tasks` (same base dir as the recorder). */
   dir: string;
+  /**
+   * `<userData>/taught-shots`: a copy of each skill's cited screenshots, kept in case the
+   * skill import does not carry the `telas/` subfolder.
+   */
+  shotsDir?: string;
+  /** Total byte limit of an imported skill folder; null when unknown. */
+  maxSkillBytes?: () => Promise<number | null>;
   now?: () => number;
   tickMs?: number;
 };
@@ -80,9 +88,58 @@ export const TEACH_ERRORS = {
 
 /** Recordings and draft skills live in `<userData>/taught-tasks/<recordingId>/`. */
 export const TAUGHT_TASKS_DIRNAME = 'taught-tasks';
+/** Fallback copy of the cited screenshots: `<userData>/taught-shots/<skill>/<n>.jpg`. */
+export const TAUGHT_SHOTS_DIRNAME = 'taught-shots';
+/** Cited screenshots are copied to `<skill>/telas/<n>.jpg`. */
+export const SKILL_SHOTS_DIRNAME = 'telas';
 const TICK_MS = 1_000;
 
 const fail = (code: TeachSaveErrorCode): Error => new Error(code);
+
+const fileSize = async (file: string): Promise<number | null> => {
+  try {
+    const info = await stat(file);
+    return info.isFile() ? info.size : null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Copy the screenshots the draft cites (`[tela N]`) into `<skill>/telas/` and the fallback dir.
+ * When the folder would pass the import limit, the oldest shots are left out.
+ */
+async function copyCitedShots(input: {
+  text: string;
+  source: string;
+  skillPath: string;
+  fallback: string | null;
+  limit: number | null;
+}): Promise<void> {
+  const cited = await Promise.all(
+    extractShotRefs(input.text).map(async (n) => ({ n, size: await fileSize(path.join(input.source, `${n}.jpg`)) }))
+  );
+  const kept = cited.filter((shot): shot is { n: number; size: number } => shot.size !== null);
+  if (input.limit !== null) {
+    let total = Buffer.byteLength(input.text, 'utf8') + kept.reduce((sum, shot) => sum + shot.size, 0);
+    kept.sort((a, b) => a.n - b.n);
+    while (kept.length > 0 && total > input.limit) total -= kept.shift()?.size ?? 0;
+  }
+  const targets = [path.join(input.skillPath, SKILL_SHOTS_DIRNAME)];
+  if (input.fallback) {
+    await rm(input.fallback, { recursive: true, force: true });
+    targets.push(input.fallback);
+  }
+  if (kept.length === 0) return;
+  await Promise.all(
+    targets.map(async (target) => {
+      await mkdir(target, { recursive: true });
+      await Promise.all(
+        kept.map((shot) => copyFile(path.join(input.source, `${shot.n}.jpg`), path.join(target, `${shot.n}.jpg`)))
+      );
+    })
+  );
+}
 
 export function createTeachSession(deps: TeachSessionDeps): TeachSession {
   const now = deps.now ?? Date.now;
@@ -206,6 +263,14 @@ export function createTeachSession(deps: TeachSessionDeps): TeachSession {
       const skillPath = path.join(deps.dir, recordingId, 'skill', parsed.name);
       await mkdir(skillPath, { recursive: true });
       await writeFile(path.join(skillPath, 'SKILL.md'), text, 'utf8');
+      const limit = deps.maxSkillBytes ? await deps.maxSkillBytes().catch((): null => null) : null;
+      await copyCitedShots({
+        text,
+        source: path.join(deps.dir, recordingId, SHOTS_DIRNAME),
+        skillPath,
+        fallback: deps.shotsDir ? path.join(deps.shotsDir, parsed.name) : null,
+        limit,
+      });
       return { skillPath };
     },
 

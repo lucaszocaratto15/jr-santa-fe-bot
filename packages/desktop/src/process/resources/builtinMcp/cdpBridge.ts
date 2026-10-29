@@ -62,6 +62,8 @@ export type CdpBridgeHandle = {
    * value is probed it stays probed.
    */
   addSecret: (webContentsId: number, value: string, opts?: { probe: boolean }) => void;
+  /** True while a vault or secure-card secret is registered for this webContents (no screenshots then). */
+  hasLiveSecret: (webContentsId: number) => boolean;
   /**
    * While locked, every client command is rejected with a CDP error and request bodies are
    * stripped from relayed events (events still flow). Bodies of requests seen while locked
@@ -641,6 +643,7 @@ export const startCdpBridge = async (): Promise<CdpBridgeHandle> => {
       map.set(value, probe || map.get(value) === true);
       secretsByContents.set(webContentsId, map);
     },
+    hasLiveSecret: (webContentsId) => (secretsByContents.get(webContentsId)?.size ?? 0) > 0,
     setClientsLocked: (locked, reason) => {
       clientsLocked = locked ? { reason } : null;
     },

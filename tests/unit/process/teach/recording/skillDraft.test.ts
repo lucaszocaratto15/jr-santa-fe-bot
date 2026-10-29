@@ -177,4 +177,15 @@ describe('buildDraftPrompt', () => {
       expect(prompt).toContain(piece);
     }
   });
+
+  it('tells the bot to end each Passo with its [tela N] markers', () => {
+    expect(prompt).toContain('[tela N]');
+  });
+
+  it('draft prompt never contains image bytes or base64', () => {
+    const withShots = buildDraftPrompt('Emitir NF', '1. Clicou em botão "Emitir" (aba 1, portal) [tela 1]');
+    expect(withShots).toContain('[tela 1]');
+    expect(withShots).not.toContain('data:image');
+    expect(withShots).not.toContain('/9j/');
+  });
 });
