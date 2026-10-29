@@ -39,6 +39,7 @@ export function createMainTeachDeps(): TeachHandlerDeps {
   const vault = () => getTeachServices()?.vault ?? null;
   const broker = createSecureInputBroker({
     emit: (request) => ipcBridge.teach.secureRequest.emit(request),
+    expired: (id) => ipcBridge.teach.secureExpired.emit({ id }),
     currentOrigin: attachedUrl,
     fill: fillAttached,
     vault,

@@ -17,7 +17,6 @@ export function initVaultBridge(): void {
 
 /** Secure card answers. The typed value goes to the broker and is never sent back. */
 export function initSecureInputBridge(): void {
-  ipcBridge.teach.secureRespond.provider(async (response) => {
-    await getSecureInputBroker()?.respond(response);
-  });
+  ipcBridge.teach.secureRespond.provider(async (response) => (await getSecureInputBroker()?.respond(response)) ?? {});
+  ipcBridge.teach.secureListPending.provider(async () => getSecureInputBroker()?.listPending() ?? []);
 }

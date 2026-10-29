@@ -606,7 +606,9 @@
         "footnote": "The bot can't see what you type.",
         "saveOnlyTitle": "Save the password for {{origin}} to the vault?",
         "saveOnlySubmit": "Save",
-        "sendFailed": "Couldn't send. Try again."
+        "sendFailed": "Couldn't send. Try again.",
+        "saveFailed": "Password sent, but I couldn't save it to the vault.",
+        "saveOnlyFailed": "Couldn't save to the vault. Try again."
       }
     }
   }

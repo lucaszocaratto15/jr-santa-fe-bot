@@ -18,7 +18,7 @@ vi.mock('@/common', () => ({
       upsert: channel('upsert'),
       remove: channel('remove'),
     },
-    teach: { secureRespond: channel('secureRespond') },
+    teach: { secureRespond: channel('secureRespond'), secureListPending: channel('secureListPending') },
   },
 }));
 
@@ -68,14 +68,17 @@ describe('vaultBridge', () => {
     expect(Object.keys(actual.vault)).toEqual(['available', 'list', 'upsert', 'remove']);
   });
 
-  it('forwards secure card answers to the broker and returns nothing', async () => {
-    const respond = vi.fn(async () => undefined);
-    setSecureInputBroker({ respond } as unknown as SecureInputBroker);
+  it('forwards secure card answers and pending lists without values', async () => {
+    const respond = vi.fn(async () => ({ saved: false }));
+    const pending = [{ id: 'r2', origin: 'https://x.com', kind: 'otp', label: '', allowSave: false, purpose: 'fill' }];
+    setSecureInputBroker({ respond, listPending: () => pending } as unknown as SecureInputBroker);
     initSecureInputBridge();
     const response = { id: 'r1', value: '123456' };
-    expect(await handlers.secureRespond(response)).toBeUndefined();
+    expect(await handlers.secureRespond(response)).toEqual({ saved: false });
     expect(respond).toHaveBeenCalledWith(response);
+    expect(await handlers.secureListPending()).toEqual(pending);
     setSecureInputBroker(null);
-    expect(await handlers.secureRespond(response)).toBeUndefined();
+    expect(await handlers.secureRespond(response)).toEqual({});
+    expect(await handlers.secureListPending()).toEqual([]);
   });
 });

@@ -21,6 +21,7 @@ const makeDeps = () => {
     status: vi.fn(async () => ({ ok: true, id: 'r1', result: 'aguardando' }) as const),
     respond: vi.fn(),
     offerSave: vi.fn(),
+    listPending: vi.fn(() => []),
   };
   const handlers = buildTeachHandlers({ vault: () => vault, fill, broker });
   return { handlers, vault, fill, broker };

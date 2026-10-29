@@ -7,6 +7,7 @@
 import { randomUUID } from 'node:crypto';
 import type { VaultStore } from '../vault/vault';
 import { normalizeOrigin } from '../vault/originMatch';
+import { FILL_ERRORS } from './secretFill';
 import type { FillOptions, FillResult } from './secretFill';
 
 export type SecureKind = 'otp' | 'password' | 'text';
@@ -25,6 +26,9 @@ export type SecureRequest = {
 /** Renderer → main: the employee's answer. */
 export type SecureResponse = { id: string; value?: string; cancelled?: boolean; save?: boolean };
 
+/** Main → renderer after an answer: `saved` is set only when a vault save was attempted. */
+export type SecureRespondResult = { saved?: boolean };
+
 /** What the agent sees. The value is never part of it. */
 export type SecureResult =
   | { ok: true; id: string; result: 'enviado' | 'cancelado' | 'aguardando' }
@@ -33,30 +37,38 @@ export type SecureResult =
 export type SecureInputBroker = {
   request(kind: SecureKind, label: string): Promise<SecureResult>;
   status(id: string): Promise<SecureResult>;
-  respond(response: SecureResponse): Promise<void>;
+  respond(response: SecureResponse): Promise<SecureRespondResult>;
   /** Offer to store a password for `origin` (R3). Returns the request id, or null for a bad origin. */
   offerSave(origin: string): string | null;
+  /** Requests still waiting for the employee, oldest first. Carries no values. */
+  listPending(): SecureRequest[];
 };
 
 export type SecureInputDeps = {
   emit(request: SecureRequest): void;
+  /** Tells the renderer to drop the card of a request that expired. */
+  expired(id: string): void;
   /** Origin of the page attached to the agent browser, or null when nothing is open. */
   currentOrigin(): string | null;
   fill(value: string, opts: FillOptions): Promise<FillResult>;
   vault(): VaultStore | null;
   waitMs?: number;
+  ttlMs?: number;
   newId?: () => string;
 };
 
 export const SECURE_INPUT_WAIT_MS = 50_000;
+/** Every entry (pending or finished-but-unread) is dropped after this long (R10). */
+export const SECURE_REQUEST_TTL_MS = 300_000;
 const MAX_PENDING = 3;
-const MAX_ENTRIES = 50;
 const MAX_LABEL = 200;
 
 export const SECURE_ERRORS = {
   noPage: 'abra o site no navegador do app antes de pedir',
   tooMany: 'há pedidos seguros demais aguardando o funcionário',
   unknown: 'pedido não encontrado',
+  pageChanged: 'a página mudou de site antes do envio',
+  fillFailed: 'não foi possível preencher o campo',
 } as const;
 
 type Outcome = { result: 'enviado' | 'cancelado' } | { error: string };
@@ -66,6 +78,7 @@ type Entry = {
   settled: Promise<Outcome>;
   settle(outcome: Outcome): void;
   outcome?: Outcome;
+  timer: ReturnType<typeof setTimeout>;
 };
 
 const deferred = <T>(): { promise: Promise<T>; resolve: (value: T) => void } => {
@@ -84,15 +97,24 @@ const hostOf = (origin: string): string => {
   }
 };
 
-/** Stores a password for `origin`, updating the item that already lists it when there is one. */
-async function savePassword(vault: VaultStore | null, origin: string, password: string): Promise<void> {
-  if (!vault?.available()) return;
-  const existing = (await vault.list()).find((item) => item.origins.includes(origin));
-  await vault.upsert(
-    existing
-      ? { id: existing.id, name: existing.name, origins: existing.origins, username: existing.username, password }
-      : { name: hostOf(origin), origins: [origin], username: '', password }
-  );
+/**
+ * Stores a password for `origin`, updating the item that already lists it when there is one.
+ * Returns false (and logs only the error name) when the vault is unavailable or the save fails.
+ */
+async function savePassword(vault: VaultStore | null, origin: string, password: string): Promise<boolean> {
+  if (!vault?.available()) return false;
+  try {
+    const existing = (await vault.list()).find((item) => item.origins.includes(origin));
+    await vault.upsert(
+      existing
+        ? { id: existing.id, name: existing.name, origins: existing.origins, username: existing.username, password }
+        : { name: hostOf(origin), origins: [origin], username: '', password }
+    );
+    return true;
+  } catch (error) {
+    console.warn('[teach] vault save failed', error instanceof Error ? error.name : undefined);
+    return false;
+  }
 }
 
 /**
@@ -101,11 +123,23 @@ async function savePassword(vault: VaultStore | null, origin: string, password: 
  */
 export function createSecureInputBroker(deps: SecureInputDeps): SecureInputBroker {
   const waitMs = deps.waitMs ?? SECURE_INPUT_WAIT_MS;
+  const ttlMs = deps.ttlMs ?? SECURE_REQUEST_TTL_MS;
   const newId = deps.newId ?? randomUUID;
   const entries = new Map<string, Entry>();
 
-  const pendingCount = () =>
-    [...entries.values()].filter((entry) => entry.request.purpose === 'fill' && !entry.outcome).length;
+  const pending = () => [...entries.values()].filter((entry) => !entry.outcome);
+
+  const remove = (entry: Entry) => {
+    clearTimeout(entry.timer);
+    entries.delete(entry.request.id);
+  };
+
+  const expire = (entry: Entry) => {
+    remove(entry);
+    if (entry.outcome) return;
+    entry.settle({ result: 'cancelado' });
+    deps.expired(entry.request.id);
+  };
 
   const open = (request: SecureRequest): Entry => {
     const { promise: settled, resolve } = deferred<Outcome>();
@@ -116,12 +150,8 @@ export function createSecureInputBroker(deps: SecureInputDeps): SecureInputBroke
         entry.outcome = outcome;
         resolve(outcome);
       },
+      timer: setTimeout(() => expire(entry), ttlMs),
     };
-    // Forget the oldest finished requests whose outcome the agent never asked for.
-    for (const [id, old] of entries) {
-      if (entries.size < MAX_ENTRIES) break;
-      if (old.outcome) entries.delete(id);
-    }
     entries.set(request.id, entry);
     deps.emit(request);
     return entry;
@@ -137,7 +167,7 @@ export function createSecureInputBroker(deps: SecureInputDeps): SecureInputBroke
     clearTimeout(timer);
     const id = entry.request.id;
     if (!outcome) return { ok: true, id, result: 'aguardando' };
-    entries.delete(id);
+    remove(entry);
     return 'error' in outcome ? { ok: false, error: outcome.error } : { ok: true, id, result: outcome.result };
   };
 
@@ -145,7 +175,8 @@ export function createSecureInputBroker(deps: SecureInputDeps): SecureInputBroke
     async request(kind, label) {
       const origin = normalizeOrigin(deps.currentOrigin() ?? '');
       if (!origin) return { ok: false, error: SECURE_ERRORS.noPage };
-      if (pendingCount() >= MAX_PENDING) return { ok: false, error: SECURE_ERRORS.tooMany };
+      const waiting = pending().filter((entry) => entry.request.purpose === 'fill').length;
+      if (waiting >= MAX_PENDING) return { ok: false, error: SECURE_ERRORS.tooMany };
       const entry = open({
         id: newId(),
         origin,
@@ -170,34 +201,41 @@ export function createSecureInputBroker(deps: SecureInputDeps): SecureInputBroke
         .id;
     },
 
+    listPending() {
+      return pending().map((entry) => ({ ...entry.request }));
+    },
+
     async respond({ id, value, cancelled, save }) {
       const entry = entries.get(id);
-      if (!entry || entry.outcome) return;
+      if (!entry || entry.outcome) return {};
       const { request } = entry;
       if (cancelled || !value) {
         entry.settle({ result: 'cancelado' });
-        if (request.purpose === 'save-only') entries.delete(id);
-        return;
+        if (request.purpose === 'save-only') remove(entry);
+        return {};
       }
       if (request.purpose === 'save-only') {
-        entries.delete(id);
+        // Keep the entry on failure so the employee can retry from the same card.
+        if (!(await savePassword(deps.vault(), request.origin, value))) return { saved: false };
         entry.settle({ result: 'enviado' });
-        await savePassword(deps.vault(), request.origin, value);
-        return;
+        remove(entry);
+        return { saved: true };
       }
       // Mark settled before awaiting so a duplicate response cannot fill twice.
       entry.outcome = { result: 'enviado' };
       const filled = await deps
         .fill(value, { requirePassword: request.kind === 'password', allowedOrigins: [request.origin] })
-        .catch((): FillResult => ({ ok: false, error: 'não foi possível preencher o campo' }));
+        .catch((): FillResult => ({ ok: false, error: SECURE_ERRORS.fillFailed }));
       if (filled.ok === false) {
-        entry.settle({ error: filled.error });
-        return;
-      }
-      if (save && request.kind === 'password' && request.allowSave) {
-        await savePassword(deps.vault(), request.origin, value).catch((): void => undefined);
+        // The request is not a vault item, so the origin error gets its own wording.
+        entry.settle({ error: filled.error === FILL_ERRORS.origin ? SECURE_ERRORS.pageChanged : filled.error });
+        return {};
       }
       entry.settle({ result: 'enviado' });
+      if (save && request.kind === 'password' && request.allowSave) {
+        return { saved: await savePassword(deps.vault(), request.origin, value) };
+      }
+      return {};
     },
   };
 }

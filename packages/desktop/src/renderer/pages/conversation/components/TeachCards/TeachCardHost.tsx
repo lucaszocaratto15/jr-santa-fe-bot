@@ -4,9 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import SecureCard from './SecureCard';
-import { dismissSecureRequest, useSecureRequests } from './useSecureRequests';
+import { dismissSecureRequest, resyncSecureRequests, useSecureRequests } from './useSecureRequests';
 
 type TeachCardHostProps = {
   /** The conversation this host sits in; teach review cards (Task 9) are scoped by it. */
@@ -19,6 +19,9 @@ type TeachCardHostProps = {
  */
 const TeachCardHost: React.FC<TeachCardHostProps> = () => {
   const requests = useSecureRequests();
+  useEffect(() => {
+    void resyncSecureRequests();
+  }, []);
   const current = requests[0];
   if (!current) return null;
   return <SecureCard key={current.id} request={current} onDone={() => dismissSecureRequest(current.id)} />;

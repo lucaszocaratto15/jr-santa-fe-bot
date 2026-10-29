@@ -9,30 +9,42 @@ import type { SecureRequest } from '@/common/adapter/ipcBridge';
 import { useSyncExternalStore } from 'react';
 
 /**
- * Pending secure requests, oldest first. Kept at module level so switching conversations
- * (which remounts the host) does not drop a request the employee has not answered yet.
+ * Pending secure requests, oldest first. Kept at module level, and subscribed at module load,
+ * so a request emitted before any chat is mounted (or while switching chats) is not lost.
  */
 let queue: SecureRequest[] = [];
 const listeners = new Set<() => void>();
-let unsubscribeIpc: (() => void) | null = null;
 
 const notify = () => listeners.forEach((listener) => listener());
 
+const drop = (id: string): void => {
+  if (!queue.some((item) => item.id === id)) return;
+  queue = queue.filter((item) => item.id !== id);
+  notify();
+};
+
+ipcBridge.teach.secureRequest.on((request) => {
+  if (queue.some((item) => item.id === request.id)) return;
+  queue = [...queue, request];
+  notify();
+});
+ipcBridge.teach.secureExpired.on(({ id }) => drop(id));
+
 const subscribe = (listener: () => void): (() => void) => {
-  if (!unsubscribeIpc) {
-    unsubscribeIpc = ipcBridge.teach.secureRequest.on((request) => {
-      if (queue.some((item) => item.id === request.id)) return;
-      queue = [...queue, request];
-      notify();
-    });
-  }
   listeners.add(listener);
   return () => listeners.delete(listener);
 };
 
-export const dismissSecureRequest = (id: string): void => {
-  queue = queue.filter((item) => item.id !== id);
-  notify();
+/** Replaces the queue with main's pending list (main is the source of truth). */
+export const resyncSecureRequests = async (): Promise<void> => {
+  try {
+    queue = await ipcBridge.teach.secureListPending.invoke();
+    notify();
+  } catch {
+    // Keep what we have; the next emit or mount resyncs.
+  }
 };
+
+export const dismissSecureRequest = (id: string): void => drop(id);
 
 export const useSecureRequests = (): SecureRequest[] => useSyncExternalStore(subscribe, () => queue);

@@ -604,7 +604,9 @@
         "footnote": "O bot não vê o que você digita.",
         "saveOnlyTitle": "Salvar a senha de {{origin}} no cofre?",
         "saveOnlySubmit": "Salvar",
-        "sendFailed": "Não foi possível enviar. Tente de novo."
+        "sendFailed": "Não foi possível enviar. Tente de novo.",
+        "saveFailed": "Senha enviada, mas não consegui salvar no cofre.",
+        "saveOnlyFailed": "Não consegui salvar no cofre. Tente de novo."
       }
     }
   }

@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createSecureInputBroker, SECURE_INPUT_WAIT_MS } from '@process/services/teach/control/secureInput';
+import {
+  createSecureInputBroker,
+  SECURE_INPUT_WAIT_MS,
+  SECURE_REQUEST_TTL_MS,
+} from '@process/services/teach/control/secureInput';
 import type { SecureRequest } from '@process/services/teach/control/secureInput';
 import type { VaultItemPublic, VaultStore } from '@process/services/teach/vault/vault';
 
@@ -19,17 +23,19 @@ const makeVault = (items: VaultItemPublic[] = []) =>
 
 const setup = (opts: { origin?: string | null; vault?: VaultStore | null } = {}) => {
   const emitted: SecureRequest[] = [];
+  const expired: string[] = [];
   const fill = vi.fn(async (_value: string, _opts: unknown) => ({ ok: true }) as const);
   const vault = opts.vault === undefined ? makeVault() : opts.vault;
   let n = 0;
   const broker = createSecureInputBroker({
     emit: (req) => emitted.push(req),
+    expired: (id) => expired.push(id),
     currentOrigin: () => (opts.origin === undefined ? ORIGIN : opts.origin),
     fill,
     vault: () => vault,
     newId: () => `req-${++n}`,
   });
-  return { broker, emitted, fill, vault };
+  return { broker, emitted, expired, fill, vault };
 };
 
 describe('secure input broker', () => {
@@ -183,5 +189,85 @@ describe('secure input broker', () => {
       ok: false,
       error: 'há pedidos seguros demais aguardando o funcionário',
     });
+  });
+
+  it('expires a pending request after the TTL, frees the cap and tells the renderer', async () => {
+    const { broker, expired } = setup();
+    const results = [1, 2, 3].map(() => broker.request('otp', 'Código'));
+    await vi.advanceTimersByTimeAsync(SECURE_INPUT_WAIT_MS);
+    await Promise.all(results);
+    await vi.advanceTimersByTimeAsync(SECURE_REQUEST_TTL_MS - SECURE_INPUT_WAIT_MS - 10_000);
+    const status = broker.status('req-1');
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(SECURE_REQUEST_TTL_MS).toBe(300_000);
+    expect(await status).toEqual({ ok: true, id: 'req-1', result: 'cancelado' });
+    expect(expired).toEqual(['req-1', 'req-2', 'req-3']);
+    expect(broker.listPending()).toEqual([]);
+    expect(await broker.status('req-2')).toEqual({ ok: false, error: 'pedido não encontrado' });
+    void broker.request('otp', 'Código');
+    expect(broker.listPending()).toHaveLength(1);
+  });
+
+  it('expires unanswered save-only offers too', async () => {
+    const { broker, expired } = setup();
+    const id = broker.offerSave(ORIGIN);
+    await vi.advanceTimersByTimeAsync(SECURE_REQUEST_TTL_MS);
+    expect(expired).toEqual([id]);
+    expect(broker.listPending()).toEqual([]);
+  });
+
+  it('lists pending requests oldest first without any value', async () => {
+    const { broker } = setup();
+    void broker.request('otp', 'Código');
+    const saveId = broker.offerSave(ORIGIN);
+    void broker.request('password', 'Senha');
+    await broker.respond({ id: 'req-1', value: CODE });
+    const list = broker.listPending();
+    expect(list.map((item) => item.id)).toEqual([saveId, 'req-3']);
+    expect(JSON.stringify(list)).not.toContain(CODE);
+    for (const item of list) expect(item).not.toHaveProperty('value');
+  });
+
+  it('reports saved on the fill flow, and a value-free warning when the vault save fails', async () => {
+    const vault = makeVault();
+    const { broker } = setup({ vault });
+    void broker.request('password', 'Senha');
+    expect(await broker.respond({ id: 'req-1', value: PASSWORD, save: true })).toEqual({ saved: true });
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    vault.upsert.mockRejectedValueOnce(new TypeError(`bad ${PASSWORD}`));
+    const pending = broker.request('password', 'Senha');
+    expect(await broker.respond({ id: 'req-2', value: PASSWORD, save: true })).toEqual({ saved: false });
+    expect(await pending).toEqual({ ok: true, id: 'req-2', result: 'enviado' });
+    expect(warn).toHaveBeenCalledWith('[teach] vault save failed', 'TypeError');
+    expect(JSON.stringify(warn.mock.calls)).not.toContain(PASSWORD);
+    warn.mockRestore();
+  });
+
+  it('keeps a save-only offer open for retry when the save fails', async () => {
+    const vault = makeVault();
+    const { broker } = setup({ vault });
+    const id = broker.offerSave(ORIGIN) as string;
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    vault.upsert.mockRejectedValueOnce(new Error('disk'));
+    expect(await broker.respond({ id, value: PASSWORD })).toEqual({ saved: false });
+    expect(broker.listPending().map((item) => item.id)).toEqual([id]);
+    expect(await broker.respond({ id, value: PASSWORD })).toEqual({ saved: true });
+    expect(broker.listPending()).toEqual([]);
+    warn.mockRestore();
+  });
+
+  it('reports saved false for save-only when the vault is unavailable', async () => {
+    const { broker } = setup({ vault: null });
+    const id = broker.offerSave(ORIGIN) as string;
+    expect(await broker.respond({ id, value: PASSWORD })).toEqual({ saved: false });
+  });
+
+  it('words an origin change as the page changing site', async () => {
+    const { broker, fill } = setup();
+    fill.mockResolvedValueOnce({ ok: false, error: 'domínio não autorizado para este item do cofre' } as never);
+    const pending = broker.request('otp', 'Código');
+    await broker.respond({ id: 'req-1', value: CODE });
+    expect(await pending).toEqual({ ok: false, error: 'a página mudou de site antes do envio' });
   });
 });

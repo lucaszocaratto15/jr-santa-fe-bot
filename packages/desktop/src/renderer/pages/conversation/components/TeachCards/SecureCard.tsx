@@ -42,11 +42,21 @@ const SecureCard: React.FC<SecureCardProps> = ({ request, onDone }) => {
   const [busy, setBusy] = useState(false);
   const saveOnly = request.purpose === 'save-only';
   const origin = hostOf(request.origin);
+  const title = saveOnly
+    ? t('common.jr.teach.secure.saveOnlyTitle', { origin })
+    : t('common.jr.teach.secure.title', { origin, what: t(WHAT_KEY[request.kind]) });
 
   const answer = async (response: Parameters<typeof ipcBridge.teach.secureRespond.invoke>[0]) => {
     setBusy(true);
     try {
-      await ipcBridge.teach.secureRespond.invoke(response);
+      const result = await ipcBridge.teach.secureRespond.invoke(response);
+      if (saveOnly && result?.saved === false) {
+        // Main keeps the offer open, so the employee can retry from this card.
+        Message.warning(t('common.jr.teach.secure.saveOnlyFailed'));
+        setBusy(false);
+        return;
+      }
+      if (result?.saved === false) Message.warning(t('common.jr.teach.secure.saveFailed'));
       onDone();
     } catch {
       Message.error(t('common.jr.teach.secure.sendFailed'));
@@ -62,14 +72,10 @@ const SecureCard: React.FC<SecureCardProps> = ({ request, onDone }) => {
   };
 
   return (
-    <div className={styles.card} role='dialog' aria-label={t('common.jr.teach.secure.footnote')}>
+    <div className={styles.card} role='dialog' aria-label={title}>
       <div className={styles.title}>
         <Lock theme='outline' size={16} className={styles.icon} />
-        <span>
-          {saveOnly
-            ? t('common.jr.teach.secure.saveOnlyTitle', { origin })
-            : t('common.jr.teach.secure.title', { origin, what: t(WHAT_KEY[request.kind]) })}
-        </span>
+        <span>{title}</span>
       </div>
       {request.label && <div className={styles.label}>{request.label}</div>}
       <div className={styles.row}>

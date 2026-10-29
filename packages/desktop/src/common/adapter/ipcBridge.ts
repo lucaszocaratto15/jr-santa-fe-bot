@@ -2559,12 +2559,17 @@ export const sidebar = {
 
 export type SecureRequest = import('@process/services/teach/control/secureInput').SecureRequest;
 export type SecureResponse = import('@process/services/teach/control/secureInput').SecureResponse;
+export type SecureRespondResult = import('@process/services/teach/control/secureInput').SecureRespondResult;
 
 export const teach = {
   openTab: bridge.buildEmitter<{ url: string; openerWebContentsId: number }>('teach:open-tab'),
   downloaded: bridge.buildEmitter<{ fileName: string; path: string; origin: string }>('teach:downloaded'),
   /** Main → renderer: show a secure input card. Carries no value. */
   secureRequest: bridge.buildEmitter<SecureRequest>('teach:secure-request'),
-  /** Renderer → main: the typed value goes straight to the filler; nothing is returned. */
-  secureRespond: bridge.buildProvider<void, SecureResponse>('teach:secure-respond'),
+  /** Main → renderer: drop the card of a request that expired unanswered. */
+  secureExpired: bridge.buildEmitter<{ id: string }>('teach:secure-expired'),
+  /** Renderer → main: the typed value goes straight to the filler; only `saved` comes back. */
+  secureRespond: bridge.buildProvider<SecureRespondResult, SecureResponse>('teach:secure-respond'),
+  /** Renderer → main: pending requests (no values) so a freshly mounted host can resync. */
+  secureListPending: bridge.buildProvider<SecureRequest[], void>('teach:secure-list-pending'),
 };

@@ -607,6 +607,8 @@ export type I18nKey =
   | 'common.jr.taskTitle'
   | 'common.jr.teach.secure.cancel'
   | 'common.jr.teach.secure.footnote'
+  | 'common.jr.teach.secure.saveFailed'
+  | 'common.jr.teach.secure.saveOnlyFailed'
   | 'common.jr.teach.secure.saveOnlySubmit'
   | 'common.jr.teach.secure.saveOnlyTitle'
   | 'common.jr.teach.secure.saveToVault'
