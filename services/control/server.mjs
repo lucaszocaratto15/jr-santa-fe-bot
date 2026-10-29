@@ -51,13 +51,24 @@ export function createControlServer(options = {}) {
     loginAttempts.set(address, entry);
     if (entry.count > 60) throw httpError(429, 'rate_limited');
   };
-  const authenticate = (request) => {
+  /** Count an outside-hours model request; the 60-second session poll never comes here. */
+  const countHoursDenial = (userId) => {
+    try {
+      if (store.recordDenial(userId, 'request')) proxy.revokeUser(userId);
+    } catch {
+      // Counting a denial must never change the answer.
+    }
+  };
+  const authenticate = (request, { countDenial = false } = {}) => {
     const match = /^Bearer ([a-zA-Z0-9_-]{43})$/u.exec(request.headers.authorization ?? '');
     const session = match ? store.session(match[1]) : null;
     if (session?.denied === 'session_replaced') throw httpError(401, 'session_replaced');
     if (!session) throw httpError(401, 'invalid_session');
     if (session.denied === 'employee_blocked') throw httpError(403, 'employee_blocked');
-    if (session.denied === 'outside_access_hours') throw httpError(403, 'outside_access_hours');
+    if (session.denied === 'outside_access_hours') {
+      if (countDenial) countHoursDenial(session.userId);
+      throw httpError(403, 'outside_access_hours');
+    }
     return session;
   };
   let closing;
@@ -81,7 +92,9 @@ export function createControlServer(options = {}) {
           for (const hash of replacedSessions) proxy.revokeSession(hash);
           return json(response, 200, result);
         }
-        const session = authenticate(request);
+        const session = authenticate(request, {
+          countDenial: request.method === 'POST' && path === '/v1/chat/completions',
+        });
         if (request.method === 'GET' && path === '/auth/session') return json(response, 200, { user: session.user });
         if (request.method === 'POST' && path === '/auth/logout') {
           store.logout(session.sessionHash);
