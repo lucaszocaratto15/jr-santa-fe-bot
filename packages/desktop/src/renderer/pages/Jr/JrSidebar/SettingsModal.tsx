@@ -1,16 +1,17 @@
 import { Button } from '@arco-design/web-react';
-import { ChartHistogram, Close, Computer, Download, ListCheckbox, Lock, SettingTwo } from '@icon-park/react';
+import { Brain, ChartHistogram, Close, Computer, Download, ListCheckbox, Lock, SettingTwo } from '@icon-park/react';
 import React, { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { isMacOS } from '@/renderer/utils/platform';
 import { ComputerPanel, GeneralPanel, UpdatesPanel } from './panels';
+import LearnPanel from './Learn/LearnPanel';
 import TasksPanel from './Teach/TasksPanel';
 import UsagePanel from './Usage/UsagePanel';
 import VaultPanel from './Teach/VaultPanel';
 import styles from './JrSidebar.module.css';
 
-export const SETTINGS_TABS = ['general', 'computer', 'usage', 'vault', 'tasks', 'updates'] as const;
+export const SETTINGS_TABS = ['general', 'computer', 'usage', 'vault', 'tasks', 'learn', 'updates'] as const;
 export type SettingsTab = (typeof SETTINGS_TABS)[number];
 
 const TAB_LABEL = {
@@ -19,6 +20,7 @@ const TAB_LABEL = {
   usage: 'common.jr.look.tabs.usage',
   vault: 'common.jr.look.tabs.vault',
   tasks: 'common.jr.look.tabs.tasks',
+  learn: 'common.jr.look.tabs.learn',
   updates: 'common.jr.look.tabs.updates',
 } as const;
 
@@ -27,6 +29,7 @@ const tabIcon = (id: SettingsTab) => {
   if (id === 'usage') return <ChartHistogram size={20} />;
   if (id === 'vault') return <Lock size={20} />;
   if (id === 'tasks') return <ListCheckbox size={20} />;
+  if (id === 'learn') return <Brain size={20} />;
   if (id === 'updates') return <Download size={20} />;
   return <SettingTwo size={20} />;
 };
@@ -35,7 +38,9 @@ const JrSettingsModal: React.FC<{
   tab: SettingsTab;
   onTab: (tab: SettingsTab) => void;
   onClose: () => void;
-}> = ({ tab, onTab, onClose }) => {
+  /** Learn tab opened by the reconsent prompt: open the term modal right away. */
+  autoConsent?: boolean;
+}> = ({ tab, onTab, onClose, autoConsent }) => {
   const { t } = useTranslation();
 
   useEffect(() => {
@@ -92,6 +97,7 @@ const JrSettingsModal: React.FC<{
           {tab === 'usage' && <UsagePanel />}
           {tab === 'vault' && <VaultPanel />}
           {tab === 'tasks' && <TasksPanel onClose={onClose} />}
+          {tab === 'learn' && <LearnPanel autoConsent={autoConsent} onTeach={() => {}} />}
           {tab === 'updates' && <UpdatesPanel />}
         </div>
       </div>

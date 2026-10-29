@@ -217,6 +217,16 @@ describe('collection', () => {
     expect(await h.service.getExclusions()).toEqual([{ id: 'x', kind: 'app', pattern: 'excel', builtin: false }]);
   });
 
+  it('restoreDefaultExclusions brings removed defaults back and keeps custom rules', async () => {
+    const h = harness();
+    await h.service.init();
+    const custom = { id: 'c', kind: 'title' as const, pattern: 'Salário', builtin: false };
+    await h.service.setExclusions([custom]);
+    const restored = await h.service.restoreDefaultExclusions();
+    expect(restored.filter((rule) => rule.builtin).length).toBeGreaterThan(30);
+    expect(restored).toContainEqual(custom);
+  });
+
   it('three sampler failures set samplerError, and resume() retries with a fresh child', async () => {
     const h = harness({}, () => 'garbage');
     await h.service.init();

@@ -24,7 +24,7 @@ import {
   type ConsentEvent,
   type LearnSettingsData,
 } from './learnSettings';
-import { isExcluded } from './privacyFilter';
+import { DEFAULT_EXCLUSIONS, isExcluded } from './privacyFilter';
 import { createSampler, type Sampler } from './sampler';
 import { createInsightStore, createSampleStore, encryptionUsable } from './sampleStore';
 import { JR_APP_LABEL, LEARN_TICK_MS } from './summary';
@@ -76,6 +76,8 @@ export type LearnService = {
   revoke(): Promise<LearnState>;
   getExclusions(): Promise<LearnExclusion[]>;
   setExclusions(rules: LearnExclusion[]): Promise<LearnExclusion[]>;
+  /** Puts back any removed default rule, keeping the user's own rules. */
+  restoreDefaultExclusions(): Promise<LearnExclusion[]>;
   listInsights(): Promise<LearnInsightBatch[]>;
   deleteInsight(id: string): Promise<void>;
   generateNow(): Promise<LearnGenerateResult>;
@@ -403,6 +405,13 @@ export function createLearnService(deps: LearnServiceDeps): LearnService {
 
     async setExclusions(rules) {
       await write({ exclusions: sanitizeExclusions(rules) });
+      return data!.exclusions;
+    },
+
+    async restoreDefaultExclusions() {
+      if (!data) await load();
+      const custom = data!.exclusions.filter((rule) => !rule.builtin);
+      await write({ exclusions: [...DEFAULT_EXCLUSIONS, ...custom] });
       return data!.exclusions;
     },
 

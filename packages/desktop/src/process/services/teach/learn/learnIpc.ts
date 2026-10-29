@@ -49,6 +49,7 @@ export function initLearnBridge(): void {
   ipcBridge.learn.revoke.provider(async () => requireService().revoke());
   ipcBridge.learn.getExclusions.provider(async () => requireService().getExclusions());
   ipcBridge.learn.setExclusions.provider(async (rules) => requireService().setExclusions(rules));
+  ipcBridge.learn.restoreDefaultExclusions.provider(async () => requireService().restoreDefaultExclusions());
   ipcBridge.learn.listInsights.provider(async () => getLearnService()?.listInsights() ?? []);
   ipcBridge.learn.deleteInsight.provider(async ({ id }) => requireService().deleteInsight(id));
   ipcBridge.learn.generateNow.provider(

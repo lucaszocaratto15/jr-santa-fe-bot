@@ -2633,6 +2633,8 @@ export const learn = {
   revoke: bridge.buildProvider<LearnState, void>('learn:revoke'),
   getExclusions: bridge.buildProvider<LearnExclusion[], void>('learn:get-exclusions'),
   setExclusions: bridge.buildProvider<LearnExclusion[], LearnExclusion[]>('learn:set-exclusions'),
+  /** "Restaurar padrão": defaults live in main, so the renderer asks for them back. */
+  restoreDefaultExclusions: bridge.buildProvider<LearnExclusion[], void>('learn:restore-default-exclusions'),
   listInsights: bridge.buildProvider<LearnInsightBatch[], void>('learn:list-insights'),
   deleteInsight: bridge.buildProvider<void, { id: string }>('learn:delete-insight'),
   generateNow: bridge.buildProvider<LearnGenerateResult, void>('learn:generate-now'),

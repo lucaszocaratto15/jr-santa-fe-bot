@@ -47,6 +47,7 @@ vi.mock('@/common', () => ({
         'revoke',
         'getExclusions',
         'setExclusions',
+        'restoreDefaultExclusions',
         'listInsights',
         'deleteInsight',
         'generateNow',

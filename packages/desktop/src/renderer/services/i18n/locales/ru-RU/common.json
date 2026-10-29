@@ -468,7 +468,8 @@
         "usage": "Usage and billing",
         "updates": "Updates",
         "vault": "Vault",
-        "tasks": "My tasks"
+        "tasks": "My tasks",
+        "learn": "Learn"
       },
       "generalTitle": "General",
       "account": "Account",
@@ -692,6 +693,109 @@
         "no_description": "The task needs a description.",
         "no_steps": "The draft has no steps.",
         "no_review": "This recording is no longer waiting for review."
+      }
+    },
+    "learn": {
+      "consent": {
+        "title": "🧠 Aprender com seu trabalho",
+        "intro": "Com sua permissão, o JR Bot observa como você usa o computador para sugerir automações e economizar seu tempo.",
+        "seesTitle": "O que ele vê",
+        "sees1": "Quais programas e sites você usa e por quanto tempo",
+        "sees2": "Títulos das janelas e, no navegador do JR Bot, o endereço e o título das páginas abertas",
+        "neverTitle": "O que ele nunca vê",
+        "never1": "Seus cliques e o que você digita",
+        "never2": "Senhas, códigos de verificação e dados de cartão",
+        "never3": "Seu microfone ou câmera",
+        "never4": "Nada enquanto estiver pausado ou desligado",
+        "whereTitle": "Onde fica",
+        "whereBody": "Os registros brutos ficam só neste computador e são apagados em até 48 horas. Somente resumos em texto são enviados à IA para gerar sugestões.",
+        "whoTitle": "Quem vê",
+        "whoBody": "Os registros brutos e os insights ficam só com você. O JR Bot monta rascunhos do <b>Manual da função</b> do seu cargo (atividades, passo a passo com telas das tarefas que você ensinou e indicadores do cargo, como tempo e frequência das tarefas). Nada sai daqui sem a sua aprovação, item por item. O que você aprovar fica visível para o <b>seu gestor</b> e para <b>quem ocupar o seu cargo no futuro</b>.",
+        "control": "Você pode <b>pausar ou desligar quando quiser</b> pelo ícone 🧠 no topo do JR Bot. Recusar não traz nenhuma consequência para você.",
+        "checkbox": "Li e concordo com o Termo de Consentimento de Dados",
+        "readFull": "Ler o termo completo",
+        "notNow": "Não agora",
+        "allow": "Permitir",
+        "reconsentNotice": "O termo mudou. Leia a versão 1.2 e aceite de novo para continuar.",
+        "fullTitle": "Termo de Consentimento (v1.2)"
+      },
+      "term": {
+        "full": "**Termo de Consentimento — Recurso \"Aprender com seu trabalho\" do JR Bot**\nVersão 1.2 — 29/10/2026\n\n**1. Quem é o responsável pelos dados**\nJR Santa Fé Pavimentação e Construções Ltda., inscrita no CNPJ 65.472.078/0001-54, com sede na Rua dos Bandeirantes, nº 1220-A, Distrito Industrial V, Santa Fé do Sul/SP, CEP 15779-050, é a controladora dos dados, nos termos da Lei nº 13.709/2018 (LGPD).\n\n**Encarregado pelo tratamento de dados (DPO):** João Batista Zocaratto Junior. Contato: lucaszocaratto@jrsantafe.com.br\n\n**2. Para que serve**\nO recurso analisa como você usa o computador no trabalho para:\n- identificar tarefas repetitivas que o JR Bot pode automatizar;\n- sugerir tarefas para você ensinar ao bot;\n- oferecer insights sobre seu próprio fluxo de trabalho;\n- montar o **Manual da função** do seu cargo (atividades, passo a passo e indicadores do cargo), **somente com a sua aprovação de cada item**.\n\nOs dados **não são usados** para avaliação de desempenho, controle de jornada, monitoramento disciplinar ou qualquer tipo de punição.\n\n**3. Quais dados são coletados**\n- Nome dos programas e sites usados, títulos das janelas e tempo de uso;\n- No navegador do JR Bot: endereço (sem parâmetros) e título das páginas abertas.\n\n**Nunca são coletados:** cliques, teclas digitadas, senhas, códigos de verificação, dados de cartão, conteúdo de campos sensíveis, áudio, imagem da câmera, nem qualquer dado enquanto o recurso estiver pausado ou desligado.\n\n**Apps e sites excluídos:** você pode marcar programas e sites que nunca serão observados. Já vêm excluídos por padrão: aplicativos e sites de bancos, WhatsApp e e-mail pessoal.\n\n**4. Onde ficam e por quanto tempo**\n- **Registros brutos:** apenas no seu computador, criptografados, apagados automaticamente em até 48 horas.\n- **Resumos em texto** (sem senhas ou dados sensíveis): enviados ao servidor da empresa e ao provedor de IA somente para gerar sugestões.\n- **Insights gerados:** guardados por até 90 dias e visíveis somente para você.\n- **Manual da função** (itens que você aprovou: atividades, passo a passo com telas das tarefas ensinadas, com senhas ocultadas, e indicadores do cargo): guardado no servidor da empresa enquanto for útil ao cargo, visível para o seu gestor e para quem ocupar o seu cargo, inclusive depois que você sair da empresa. Os indicadores são mostrados por cargo, não por pessoa. Se você for a única pessoa no cargo, o indicador do cargo reflete o seu trabalho.\n\n**5. Compartilhamento e transferência internacional**\nOs resumos são processados por:\n- servidor próprio da JR Santa Fé;\n- provedor de inteligência artificial MiniMax, com servidores localizados fora do Brasil.\n\nO Manual da função aprovado (textos, telas e indicadores) fica guardado no servidor próprio da JR Santa Fé. As telas e o passo a passo **não** são enviados ao provedor de IA. Quando alguém do cargo pergunta ao bot, ele recebe só o texto do manual.\n\nIsso configura **transferência internacional de dados** (art. 33 da LGPD), realizada com base no seu consentimento específico e destacado. Nenhum dado é vendido, compartilhado com terceiros para outros fins ou usado para publicidade.\n\n**6. Seus direitos (art. 18 da LGPD)**\nA qualquer momento você pode:\n- pausar ou desligar o recurso no JR Bot;\n- consultar e apagar seus insights e registros;\n- revogar este consentimento, sem qualquer consequência no seu trabalho;\n- retirar do Manual da função, a qualquer momento, qualquer item que você aprovou;\n- solicitar informações, correção ou exclusão pelo e-mail lucaszocaratto@jrsantafe.com.br.\n\nAo revogar, os registros locais são apagados imediatamente e os insights em até 7 dias. Os indicadores e as atividades do manual que vieram da observação também são retirados do servidor. As atividades que vieram de tarefas que você ensinou continuam no manual até você retirá-las, porque são instruções de trabalho que você mesmo aprovou.\n\n**7. Segurança**\nOs registros locais são criptografados pelo sistema operacional. Senhas e campos sensíveis são bloqueados antes de qualquer gravação.\n\n**8. Alterações**\nSe este termo for alterado, o JR Bot pedirá sua aprovação novamente antes de continuar."
+      },
+      "panel": {
+        "title": "Learn from your work",
+        "onlyYou": "Only you can see this.",
+        "offIntro": "With your permission, JR Bot observes which programs and pages you use and suggests tasks to automate. It is off by default.",
+        "enable": "Turn on",
+        "status": {
+          "active": "On",
+          "paused": "Paused",
+          "off": "Off",
+          "needsConsent": "Term changed",
+          "unavailable": "Unavailable"
+        },
+        "pause": "Pause",
+        "resume": "Resume",
+        "needsConsent": "The consent term changed. Review it to turn this back on.",
+        "reviewTerm": "Review the term",
+        "unavailableEncryption": "Unavailable: this computer does not offer system encryption, so nothing can be stored safely.",
+        "unavailablePlatform": "Unavailable on this system.",
+        "screenRecording": "Without the Screen Recording permission, JR Bot sees only program names, without titles.",
+        "openSettings": "Open Settings",
+        "samplerError": "Observation stopped because of an error.",
+        "retry": "Try again",
+        "actionFailed": "Could not finish that. Try again."
+      },
+      "insights": {
+        "title": "Insights",
+        "generate": "Generate insights now",
+        "empty": "No insights yet. They are created once a day, or when you ask.",
+        "period": "{{date}} · last 24 h",
+        "timePerApp": "Time per program",
+        "repetitive": "Repetitive",
+        "times": "{{times}}× · {{minutes}} min",
+        "tip": "Tip",
+        "teach": "Teach this task",
+        "delete": "Delete",
+        "generated": "Insights generated.",
+        "errors": {
+          "no-data": "Not enough data yet. Use the computer for a few minutes and try again.",
+          "offline": "No connection to the JR server.",
+          "model-error": "The AI could not create insights now. Try again later.",
+          "unavailable": "Insights are unavailable right now.",
+          "busy": "Insights are already being generated."
+        }
+      },
+      "exclusions": {
+        "title": "Don't observe",
+        "hint": "Matching programs and sites are dropped without a trace.",
+        "add": "Add",
+        "restore": "Restore defaults",
+        "remove": "Remove",
+        "patternPlaceholder": "e.g. mybank.com",
+        "kind": {
+          "app": "Program",
+          "domain": "Site",
+          "title": "Title contains"
+        },
+        "groups": {
+          "bank": "Banks",
+          "whatsapp": "WhatsApp",
+          "mail": "Personal e-mail"
+        },
+        "empty": "Nothing excluded."
+      },
+      "data": {
+        "title": "Your data",
+        "rawHours": "Raw records: {{count}} h stored (deleted within 48 h)",
+        "wipeNow": "Delete now",
+        "wipeConfirm": "Delete the raw records stored on this computer now?",
+        "accepted": "Term accepted on {{date}} (v{{version}})",
+        "readTerm": "Read term",
+        "turnOff": "Turn off",
+        "revoke": "Revoke consent and delete everything",
+        "revokeConfirm": "This deletes the raw records and insights now and turns the feature off. To turn it on again you will need to accept the term again.",
+        "revokeDone": "Consent revoked. Your data was deleted."
       }
     }
   }
