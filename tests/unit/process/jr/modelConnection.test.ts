@@ -1,9 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  chatCompletion,
-  getJrModelConnection,
-  setJrModelConnection,
-} from '@/process/services/jr/modelConnection';
+import { chatCompletion, getJrModelConnection, setJrModelConnection } from '@/process/services/jr/modelConnection';
 
 const connection = { url: 'http://127.0.0.1:4321/v1', token: 'cap-token', model: 'MiniMax-M2' };
 const messages = [

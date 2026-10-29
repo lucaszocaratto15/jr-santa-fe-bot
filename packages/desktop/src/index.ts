@@ -34,7 +34,12 @@ import {
   setJrAccessController,
 } from './process/services/jr/auth';
 import { createVaultStore } from './process/services/teach/vault/vault';
-import { getLearnService, getTeachServices, getTeachSession, setTeachServices } from './process/services/teach/registry';
+import {
+  getLearnService,
+  getTeachServices,
+  getTeachSession,
+  setTeachServices,
+} from './process/services/teach/registry';
 import { startLearnService } from './process/services/teach/learn/learnIpc';
 import { createRecorder, sweepTaughtTasks } from './process/services/teach/recording/recorder';
 import { TAUGHT_TASKS_DIRNAME } from './process/services/teach/recording/teachSession';

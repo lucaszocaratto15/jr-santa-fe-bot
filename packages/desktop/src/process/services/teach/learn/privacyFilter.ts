@@ -67,7 +67,10 @@ export const DEFAULT_EXCLUSIONS: readonly LearnExclusion[] = Object.freeze([
 
 /** Lowercase with accents stripped, for case- and accent-insensitive matching. */
 export function normalizeForMatch(text: string): string {
-  return text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  return text
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase();
 }
 
 /** A domain pattern may be typed with a scheme, `www.` or a path: keep only the host. */
@@ -93,7 +96,10 @@ function hostOf(url: string | undefined): string | null {
  * `app`/`title` rules match by normalized substring. `domain` rules match the url host by dot
  * suffix, or, for a sample without a usable url, the normalized title by substring.
  */
-export function isExcluded(sample: Pick<LearnSample, 'app' | 'title' | 'url'>, rules: readonly LearnExclusion[]): boolean {
+export function isExcluded(
+  sample: Pick<LearnSample, 'app' | 'title' | 'url'>,
+  rules: readonly LearnExclusion[]
+): boolean {
   const app = normalizeForMatch(sample.app);
   const title = sample.title ? normalizeForMatch(sample.title) : '';
   const host = hostOf(sample.url);

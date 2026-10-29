@@ -28,7 +28,9 @@ describe('parseInsightReply', () => {
     const parsed = parseInsightReply(
       reply({
         repetitivas: [],
-        sugestoes: [{ tipo: 'ensinar', titulo: 'T', descricao: 'D', descricaoTarefa: 'X', url: 'https://evil.example/a' }],
+        sugestoes: [
+          { tipo: 'ensinar', titulo: 'T', descricao: 'D', descricaoTarefa: 'X', url: 'https://evil.example/a' },
+        ],
       }),
       ctx
     );
@@ -37,7 +39,9 @@ describe('parseInsightReply', () => {
 
   it('drops an http url on a seen host', () => {
     const parsed = parseInsightReply(
-      reply({ sugestoes: [{ tipo: 'ensinar', titulo: 'T', descricao: 'D', url: 'http://nfse.prefeitura.sp.gov.br/x' }] }),
+      reply({
+        sugestoes: [{ tipo: 'ensinar', titulo: 'T', descricao: 'D', url: 'http://nfse.prefeitura.sp.gov.br/x' }],
+      }),
       ctx
     );
     expect(parsed?.suggestions[0].kind).toBe('tip');

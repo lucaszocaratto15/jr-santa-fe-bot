@@ -9,7 +9,10 @@ import { fakeEncryption, fakeSpawn } from './fakes';
 
 const T0 = Date.parse('2026-10-29T12:00:00Z');
 const connection = { url: 'http://127.0.0.1:1/v1', token: 't', model: 'MiniMax-M2' };
-const modelReply = JSON.stringify({ repetitivas: [{ titulo: 'Baixar NF', descricao: 'd', vezes: 3, minutos: 9 }], sugestoes: [] });
+const modelReply = JSON.stringify({
+  repetitivas: [{ titulo: 'Baixar NF', descricao: 'd', vezes: 3, minutos: 9 }],
+  sugestoes: [],
+});
 const okRequest = () =>
   vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: modelReply } }] })));
 
@@ -479,7 +482,11 @@ describe('retention and insights runs', () => {
     await h.service.accept(LEARN_TERM_VERSION);
     const s = store();
     for (let i = 0; i < 30; i += 1) {
-      await s.append({ t: T0 + i * 15_000, app: 'Chrome', title: i % 2 ? 'Digite sua senha' : 'Caixa - ana@jrsantafe.com.br' });
+      await s.append({
+        t: T0 + i * 15_000,
+        app: 'Chrome',
+        title: i % 2 ? 'Digite sua senha' : 'Caixa - ana@jrsantafe.com.br',
+      });
     }
     await h.service.generateNow();
     const body = JSON.parse(String((h.request.mock.calls[0] as unknown as [string, RequestInit])[1].body));

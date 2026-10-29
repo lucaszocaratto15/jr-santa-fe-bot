@@ -63,11 +63,7 @@ vi.mock('@/common', () => ({
 import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import {
-  initLearnBridge,
-  startLearnService,
-  UNAVAILABLE_LEARN_STATE,
-} from '@process/services/teach/learn/learnIpc';
+import { initLearnBridge, startLearnService, UNAVAILABLE_LEARN_STATE } from '@process/services/teach/learn/learnIpc';
 import { getLearnService, setLearnService } from '@process/services/teach/registry';
 import type { LearnService } from '@process/services/teach/learn/learnService';
 

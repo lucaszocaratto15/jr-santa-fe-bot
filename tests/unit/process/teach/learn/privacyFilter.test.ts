@@ -56,7 +56,9 @@ describe('isExcluded with custom rules', () => {
     expect(isExcluded({ app: 'Excel', title: 'NF.xlsx' }, rules)).toBe(false);
   });
   it('matches a domain rule given with a scheme and path', () => {
-    const rules: LearnExclusion[] = [{ id: 'd', kind: 'domain', pattern: 'https://portal.exemplo.com/x', builtin: false }];
+    const rules: LearnExclusion[] = [
+      { id: 'd', kind: 'domain', pattern: 'https://portal.exemplo.com/x', builtin: false },
+    ];
     expect(isExcluded({ app: 'JR Bot', title: null, url: 'https://a.portal.exemplo.com/y' }, rules)).toBe(true);
   });
   it('keeps everything with no rules', () => {

@@ -95,7 +95,9 @@ describe('sample store', () => {
 
   it('refuses to write when encryption is unavailable', async () => {
     const store = createSampleStore(root, { ...encryption, getSelectedStorageBackend: () => 'basic_text' });
-    await expect(store.append({ t: Date.now(), app: 'A', title: 'secret' })).rejects.toThrow('LEARN_ENCRYPTION_UNAVAILABLE');
+    await expect(store.append({ t: Date.now(), app: 'A', title: 'secret' })).rejects.toThrow(
+      'LEARN_ENCRYPTION_UNAVAILABLE'
+    );
     await expect(stat(join(root, 'samples'))).rejects.toThrow();
   });
 

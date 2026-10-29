@@ -102,7 +102,10 @@ const ConsentModal: React.FC<ConsentModalProps> = ({ visible, reconsent, onClose
               <li>{t('common.jr.learn.consent.never4')}</li>
             </ul>
           )}
-          {section('common.jr.learn.consent.whereTitle', <p className='m-0'>{t('common.jr.learn.consent.whereBody')}</p>)}
+          {section(
+            'common.jr.learn.consent.whereTitle',
+            <p className='m-0'>{t('common.jr.learn.consent.whereBody')}</p>
+          )}
           {section(
             'common.jr.learn.consent.whoTitle',
             <p className='m-0' data-testid='learn-consent-who'>

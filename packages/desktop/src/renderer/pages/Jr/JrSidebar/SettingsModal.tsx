@@ -129,7 +129,9 @@ const JrSettingsModal: React.FC<{
           {tab === 'usage' && <UsagePanel />}
           {tab === 'vault' && <VaultPanel />}
           {tab === 'tasks' && <TasksPanel onClose={onClose} />}
-          {tab === 'learn' && <LearnPanel autoConsent={autoConsent} onTeach={(suggestion) => void teachSuggestion(suggestion)} />}
+          {tab === 'learn' && (
+            <LearnPanel autoConsent={autoConsent} onTeach={(suggestion) => void teachSuggestion(suggestion)} />
+          )}
           {tab === 'updates' && <UpdatesPanel />}
         </div>
       </div>

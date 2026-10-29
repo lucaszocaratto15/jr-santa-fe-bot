@@ -95,7 +95,7 @@ export async function chatCompletion(
     text = await response.text();
   } catch (error) {
     if (error instanceof Error && error.message === 'model_error') throw error;
-    throw new Error('offline');
+    throw new Error('offline', { cause: error });
   }
   if (Buffer.byteLength(text) > MAX_REPLY_BYTES) throw new Error('model_error');
   const streamed = response.headers.get('Content-Type')?.startsWith('text/event-stream') || /^\s*data:/.test(text);

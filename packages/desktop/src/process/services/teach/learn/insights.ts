@@ -106,7 +106,12 @@ export function parseInsightReply(
       const description = text(item.descricao);
       const url = item.tipo === 'ensinar' ? seenUrl(item.url, ctx.browserOrigins) : null;
       if (!url) return { kind: 'tip', title, description };
-      return { kind: 'teach', title, description, teach: { description: text(item.descricaoTarefa) || description || title, url } };
+      return {
+        kind: 'teach',
+        title,
+        description,
+        teach: { description: text(item.descricaoTarefa) || description || title, url },
+      };
     })
     .filter((item): item is LearnSuggestion => item !== null)
     .slice(0, MAX_ITEMS);

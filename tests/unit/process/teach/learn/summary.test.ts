@@ -60,7 +60,12 @@ describe('buildLearnSummary', () => {
   });
 
   it('stays within maxBytes', () => {
-    const samples = seq(Array.from({ length: 5_000 }, (_, i) => ({ app: `App ${i % 300}x`, title: `Título único ${'é'.repeat(50)} ${String.fromCharCode(65 + (i % 26))}${i}` })));
+    const samples = seq(
+      Array.from({ length: 5_000 }, (_, i) => ({
+        app: `App ${i % 300}x`,
+        title: `Título único ${'é'.repeat(50)} ${String.fromCharCode(65 + (i % 26))}${i}`,
+      }))
+    );
     const { text } = buildLearnSummary(samples, opts);
     expect(Buffer.byteLength(text)).toBeLessThanOrEqual(16_384);
     expect(Buffer.byteLength(buildLearnSummary(samples, { tickMs: TICK, maxBytes: 2_000 }).text)).toBeLessThanOrEqual(

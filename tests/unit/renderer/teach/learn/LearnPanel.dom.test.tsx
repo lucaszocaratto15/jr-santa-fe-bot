@@ -202,9 +202,7 @@ describe('LearnPanel', () => {
     expect(screen.queryByRole('button', { name: 'Restaurar padrão' })).not.toBeInTheDocument();
     const close = banks.closest('.arco-tag')?.querySelector('.arco-tag-close-btn');
     fireEvent.click(close as Element);
-    await waitFor(() =>
-      expect(learn.setExclusions.invoke).toHaveBeenCalledWith([defaults[1], defaults[2]])
-    );
+    await waitFor(() => expect(learn.setExclusions.invoke).toHaveBeenCalledWith([defaults[1], defaults[2]]));
     fireEvent.click(await screen.findByRole('button', { name: 'Restaurar padrão' }));
     await waitFor(() => expect(learn.restoreDefaultExclusions.invoke).toHaveBeenCalled());
     expect(await screen.findByText('Bancos')).toBeInTheDocument();

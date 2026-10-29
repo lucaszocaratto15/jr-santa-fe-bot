@@ -31,7 +31,10 @@ export type LearnSummary = {
 /** Collapse whitespace and control characters so a title can never start a new line. */
 const flat = (text: string): string =>
   // eslint-disable-next-line no-control-regex -- Untrusted window titles may carry control bytes.
-  text.replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, ' ').replace(/\s+/g, ' ').trim();
+  text
+    .replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 
 /** App names keep their wording but lose e-mails, documents and long numbers. */
 const cleanApp = (app: string): string => {
@@ -116,10 +119,7 @@ const iso = (t: number): string => new Date(t).toISOString().slice(0, 16).replac
  * JR Bot browser contributes urls (origin + cleaned path). Truncated by dropping the
  * lowest-ranked lines until the text fits `maxBytes`.
  */
-export function buildLearnSummary(
-  input: LearnSample[],
-  opts: { tickMs: number; maxBytes: number }
-): LearnSummary {
+export function buildLearnSummary(input: LearnSample[], opts: { tickMs: number; maxBytes: number }): LearnSummary {
   const samples = input.toSorted((a, b) => a.t - b.t);
   const periodStart = samples[0]?.t ?? 0;
   const periodEnd = samples.length ? samples[samples.length - 1].t + opts.tickMs : 0;
@@ -147,9 +147,7 @@ export function buildLearnSummary(
   const browserLines = ranked(tallyRuns(browserKeys))
     .slice(0, TOP_BROWSER)
     .map(([key, tally]) => `- ${key} | ${minutes(tally.count, opts.tickMs)} | ${tally.visits}`);
-  const labels = samples.map((sample, i) =>
-    isJr(sample) ? (urls[i]?.label ?? titles[i] ?? JR_APP_LABEL) : apps[i]
-  );
+  const labels = samples.map((sample, i) => (isJr(sample) ? (urls[i]?.label ?? titles[i] ?? JR_APP_LABEL) : apps[i]));
   const tripleLines = repeatedTriples(samples, labels).map(([triple, count]) => `- ${triple} (${count}×)`);
 
   const render = () =>

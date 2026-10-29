@@ -94,9 +94,10 @@ export const LEARN_ERRORS = {
   badPause: 'LEARN_BAD_PAUSE',
 } as const;
 
+const pad = (n: number) => String(n).padStart(2, '0');
+
 const localDay = (t: number): string => {
   const date = new Date(t);
-  const pad = (n: number) => String(n).padStart(2, '0');
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 };
 

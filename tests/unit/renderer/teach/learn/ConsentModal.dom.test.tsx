@@ -22,10 +22,7 @@ const renderModal = (props: Partial<React.ComponentProps<typeof ConsentModal>> =
   const onClose = vi.fn();
   const onAccepted = vi.fn();
   render(
-    withI18n(
-      i18n,
-      <ConsentModal visible reconsent={false} onClose={onClose} onAccepted={onAccepted} {...props} />
-    )
+    withI18n(i18n, <ConsentModal visible reconsent={false} onClose={onClose} onAccepted={onAccepted} {...props} />)
   );
   return { onClose, onAccepted };
 };
