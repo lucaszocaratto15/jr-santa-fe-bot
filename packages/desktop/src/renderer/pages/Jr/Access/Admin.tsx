@@ -41,6 +41,8 @@ const AdminContent: React.FC = () => {
           revokedAt: null,
           blocked: false,
           blockedAt: null,
+          blockedReason: null,
+          maxDevices: 1,
           tokenLimit: null,
           accessStart: null,
           accessEnd: null,

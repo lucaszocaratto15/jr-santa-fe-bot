@@ -611,3 +611,74 @@ it('does not restore access when response JSON arrives after a concurrent logout
   expect(controller.state.status).toBe('signed-out');
   expect(configureCore).not.toHaveBeenCalled();
 });
+
+describe('stage 1 client states and admin calls', () => {
+  const replaced = () => Response.json({ error: { code: 'session_replaced' } }, { status: 401 });
+
+  it('session_replaced 401 publishes revoked with the replaced notice and stops the core', async () => {
+    const { controller, request, stopCore } = setup(stored);
+    await controller.initialize();
+    request.mockResolvedValueOnce(replaced());
+    await controller.refresh();
+    expect(controller.state).toEqual({ status: 'revoked', user: null, notice: 'replaced' });
+    expect(stopCore).toHaveBeenCalled();
+  });
+
+  it('session_replaced from the local proxy publishes the replaced notice', async () => {
+    const { controller } = setup(stored);
+    await controller.initialize();
+    applyJrProxyDenial(controller, token, { status: 401, code: 'session_replaced' });
+    await vi.waitFor(() => expect(controller.state.status).toBe('revoked'));
+    expect(controller.state.notice).toBe('replaced');
+  });
+
+  it('plain 401 still publishes revoked without a notice', async () => {
+    const { controller, request } = setup(stored);
+    await controller.initialize();
+    request.mockResolvedValueOnce(Response.json({ error: { code: 'invalid_session' } }, { status: 401 }));
+    await controller.refresh();
+    expect(controller.state).toEqual({ status: 'revoked', user: null });
+  });
+
+  it('employees parse maxDevices and blockedReason, defaulting for older servers', async () => {
+    const { controller, request } = setup(stored);
+    request.mockResolvedValueOnce(Response.json({ user: { ...user, role: 'admin' } }));
+    await controller.initialize();
+    const base = {
+      ...user,
+      createdAt: '2026-10-22T15:00:00Z',
+      revoked: false,
+      revokedAt: null,
+      devices: [],
+      usage: null,
+    };
+    request.mockResolvedValueOnce(
+      Response.json({
+        employees: [
+          { ...base, maxDevices: 3, blockedReason: 'auto_hours' },
+          { ...base, id: 'employee-2' },
+        ],
+      })
+    );
+    const employees = await controller.listEmployees();
+    expect(employees[0]).toMatchObject({ maxDevices: 3, blockedReason: 'auto_hours' });
+    expect(employees[1]).toMatchObject({ maxDevices: 1, blockedReason: null });
+  });
+
+  it('disconnectDevice posts to the device route and validates ids', async () => {
+    const { controller, request } = setup(stored);
+    request.mockResolvedValueOnce(Response.json({ user: { ...user, role: 'admin' } }));
+    await controller.initialize();
+    request.mockResolvedValueOnce(Response.json({ disconnected: true }));
+    await controller.disconnectDevice({ employeeId: 'employee-2', deviceId: 'device-12345' });
+    const call = request.mock.calls.at(-1)!;
+    expect(String(call[0])).toMatch(/\/admin\/employees\/employee-2\/devices\/device-12345\/disconnect$/);
+    expect(call[1]?.method).toBe('POST');
+    await expect(controller.disconnectDevice({ employeeId: 'employee-2', deviceId: 'short' })).rejects.toThrow(
+      'JR_ACCESS_INVALID_DEVICE'
+    );
+    await expect(controller.disconnectDevice({ employeeId: '../x', deviceId: 'device-12345' })).rejects.toThrow(
+      'JR_ACCESS_INVALID_EMPLOYEE'
+    );
+  });
+});

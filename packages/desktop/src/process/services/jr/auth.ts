@@ -42,6 +42,8 @@ type ControllerOptions = {
   request?: typeof fetch;
   pilot?: boolean;
   beforeFirstLogin?: () => Promise<void>;
+  /** Called when the owner of the saved session changes (used by the handover flow). */
+  onOwnerChange?: () => Promise<void>;
 };
 
 function fail(code: string): never {
@@ -320,12 +322,12 @@ export class JrAccessController {
       this.blockingTransitions -= 1;
     }
   }
-  async rejectSession(expectedToken?: string): Promise<JrAccessState> {
+  async rejectSession(expectedToken?: string, notice?: 'replaced'): Promise<JrAccessState> {
     if (expectedToken && expectedToken !== this.saved?.token) return this.state;
     return this.blockTransitions(async () => {
       this.generation += 1;
       const token = this.saved?.token;
-      this.publish('revoked');
+      this.publish('revoked', null, notice ?? null);
       await this.stopCore();
       try {
         if (this.saved?.token === token) await this.clearToken();
@@ -428,7 +430,10 @@ export class JrAccessController {
       try {
         const response = await this.remote('/auth/session', {}, token);
         if (epoch !== this.generation) return this.state;
-        if (response.status === 401) return this.rejectSession(token);
+        if (response.status === 401) {
+          const code = await responseCode(response);
+          return this.rejectSession(token, code === 'session_replaced' ? 'replaced' : undefined);
+        }
         if (response.status === 403) {
           const restriction = restrictionStatus((await responseCode(response)) ?? '');
           return restriction ? this.applyRestriction(restriction, token) : this.rejectSession(token);
@@ -696,7 +701,19 @@ export class JrAccessController {
       const accessStart =
         entry.accessStart == null ? null : validClock(entry.accessStart) ? entry.accessStart : undefined;
       const accessEnd = entry.accessEnd == null ? null : validClock(entry.accessEnd) ? entry.accessEnd : undefined;
+      const maxDevices = entry.maxDevices == null ? 1 : entry.maxDevices;
+      const blockedReason: JrEmployee['blockedReason'] | undefined =
+        entry.blockedReason == null
+          ? null
+          : entry.blockedReason === 'auto_volume' || entry.blockedReason === 'auto_hours'
+            ? entry.blockedReason
+            : undefined;
       if (
+        typeof maxDevices !== 'number' ||
+        !Number.isInteger(maxDevices) ||
+        maxDevices < 1 ||
+        maxDevices > 5 ||
+        blockedReason === undefined ||
         (tokenLimit !== null && (!Number.isSafeInteger(tokenLimit) || tokenLimit < 0)) ||
         accessStart === undefined ||
         accessEnd === undefined ||
@@ -715,6 +732,8 @@ export class JrAccessController {
         revokedAt: entry.revokedAt as string | null,
         blocked: entry.blocked === true,
         blockedAt: (entry.blockedAt as string | null | undefined) ?? null,
+        blockedReason,
+        maxDevices,
         tokenLimit,
         accessStart,
         accessEnd,
@@ -803,9 +822,18 @@ export class JrAccessController {
     tokenLimit: number | null;
     accessStart: string | null;
     accessEnd: string | null;
-  }): Promise<{ tokenLimit: number | null; accessStart: string | null; accessEnd: string | null }> {
+    maxDevices: number;
+  }): Promise<{
+    tokenLimit: number | null;
+    accessStart: string | null;
+    accessEnd: string | null;
+    maxDevices: number;
+  }> {
     if (
       !validId(input?.employeeId) ||
+      !Number.isInteger(input.maxDevices) ||
+      input.maxDevices < 1 ||
+      input.maxDevices > 5 ||
       (input.tokenLimit !== null && (!Number.isSafeInteger(input.tokenLimit) || input.tokenLimit < 0)) ||
       (input.accessStart === null) !== (input.accessEnd === null) ||
       (input.accessStart !== null && !validClock(input.accessStart)) ||
@@ -821,6 +849,7 @@ export class JrAccessController {
           tokenLimit: input.tokenLimit,
           accessStart: input.accessStart,
           accessEnd: input.accessEnd,
+          maxDevices: input.maxDevices,
         }),
       },
       true
@@ -829,10 +858,27 @@ export class JrAccessController {
       !record(value) ||
       value.tokenLimit !== input.tokenLimit ||
       value.accessStart !== input.accessStart ||
-      value.accessEnd !== input.accessEnd
+      value.accessEnd !== input.accessEnd ||
+      value.maxDevices !== input.maxDevices
     )
       return fail('JR_ACCESS_INVALID_RESPONSE');
-    return { tokenLimit: value.tokenLimit, accessStart: value.accessStart, accessEnd: value.accessEnd };
+    return {
+      tokenLimit: value.tokenLimit,
+      accessStart: value.accessStart,
+      accessEnd: value.accessEnd,
+      maxDevices: value.maxDevices,
+    };
+  }
+  async disconnectDevice(input: { employeeId: string; deviceId: string }): Promise<void> {
+    if (!validId(input?.employeeId)) return fail('JR_ACCESS_INVALID_EMPLOYEE');
+    if (typeof input.deviceId !== 'string' || !/^[A-Za-z0-9_-]{8,128}$/.test(input.deviceId))
+      return fail('JR_ACCESS_INVALID_DEVICE');
+    const value = await this.authorized(
+      `/admin/employees/${encodeURIComponent(input.employeeId)}/devices/${encodeURIComponent(input.deviceId)}/disconnect`,
+      { method: 'POST' },
+      true
+    );
+    if (!record(value) || value.disconnected !== true) return fail('JR_ACCESS_INVALID_RESPONSE');
   }
 }
 
@@ -849,7 +895,7 @@ export function applyJrProxyDenial(
       : notice?.status === 403 && notice.code === 'outside_access_hours'
         ? controller.noteGatewayRestriction('outside-hours', token)
         : notice?.status === 401
-          ? controller.rejectSession(token)
+          ? controller.rejectSession(token, notice.code === 'session_replaced' ? 'replaced' : undefined)
           : Promise.resolve(controller.state);
   void action.catch(onError);
 }
