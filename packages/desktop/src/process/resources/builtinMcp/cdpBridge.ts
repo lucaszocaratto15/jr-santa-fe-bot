@@ -175,7 +175,7 @@ const attachInternal = (webContentsId: number): { ok: true } | { ok: false; reas
     }
     if (!isInternalBindingEvent(method, params)) {
       // While a secret is live, request bodies (login POST) never reach clients.
-      const safe = method.startsWith('Network.') && currentSecrets().length > 0 ? stripPostData(params) : params;
+      const safe = currentSecrets().length > 0 ? stripPostData(params) : params;
       broadcast({ method, params: safe ?? {}, sessionId: SINGLE_SESSION_ID });
     }
   };

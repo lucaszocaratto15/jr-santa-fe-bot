@@ -130,6 +130,17 @@ describe('cdpBridge redaction + internal api', () => {
     expect(contents.sent.length).toBe(0);
   });
 
+  it('strips request bodies from Fetch.requestPaused while a secret is live', async () => {
+    handle.addSecret(contents.id, SECRET);
+    contents.emitDbg('Fetch.requestPaused', {
+      requestId: 'f1',
+      request: { url: 'u', postData: `pw=${SECRET}`, postDataEntries: [{ bytes: 'eA==' }] },
+    });
+    await waitFor(() => frames.some((f) => f.method === 'Fetch.requestPaused'));
+    const f = frames.find((x) => x.method === 'Fetch.requestPaused')!;
+    expect(f.params.request).toEqual({ url: 'u' });
+  });
+
   it('keeps redacting after navigation and after detach + re-attach', async () => {
     handle.addSecret(contents.id, SECRET);
     contents.emitDbg('Page.frameNavigated', { frame: { id: '1', url: 'https://x.test/next' } });

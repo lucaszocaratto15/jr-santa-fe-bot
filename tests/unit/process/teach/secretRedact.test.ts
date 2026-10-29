@@ -37,6 +37,13 @@ describe('redaction variants', () => {
   });
 });
 
+describe('form encoding', () => {
+  it('matches real x-www-form-urlencoded for ! and space', () => {
+    const p = 'Pa ss!word9';
+    expect(redactSecrets('pw=Pa+ss%21word9&x=1', [p])).toBe('pw=«segredo»&x=1');
+  });
+});
+
 describe('stripPostData', () => {
   it('removes postData and postDataEntries from request', () => {
     const out = stripPostData({

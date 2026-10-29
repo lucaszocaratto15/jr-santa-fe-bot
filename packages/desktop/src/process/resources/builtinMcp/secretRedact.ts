@@ -45,6 +45,7 @@ export const redactSecrets = (text: string, secrets: readonly string[]): string 
       jsonInner(jsonInner(secret)),
       enc,
       enc.replace(/%20/g, '+'),
+      enc.replace(/[!'()~]/g, (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase()).replace(/%20/g, '+'),
       jsonInner(Array.from(secret).reverse().join('')),
       b64,
       b64.replace(/=+$/, ''),
