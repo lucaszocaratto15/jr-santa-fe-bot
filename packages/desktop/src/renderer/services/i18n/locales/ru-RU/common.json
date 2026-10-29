@@ -672,7 +672,13 @@
         "editDescription": "What it does",
         "editBody": "Steps and instructions",
         "editSaved": "Task saved. The change applies from the next run.",
-        "editFailed": "Couldn't open or save the task."
+        "editFailed": "Couldn't open or save the task.",
+        "schedule": "Schedule",
+        "more": "More actions",
+        "scheduleFailed": "Couldn't prepare the schedule. Check the JR connection and try again.",
+        "deleteConfirmScheduled": "Delete this task? Its schedules will be removed too.",
+        "runningScheduled": "Running scheduled task: {{name}}",
+        "runningScheduledBody": "Open JR Bot to follow along."
       },
       "generating": {
         "title": "Creating the task…",

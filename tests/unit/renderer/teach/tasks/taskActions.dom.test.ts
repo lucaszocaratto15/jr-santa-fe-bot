@@ -5,11 +5,13 @@ const { startJrConversation } = vi.hoisted(() => ({ startJrConversation: vi.fn()
 
 vi.mock('@renderer/pages/Jr/jrBots', () => ({ startJrConversation }));
 
+import type { ICronJob } from '@/common/adapter/ipcBridge';
 import type { JrBot } from '@renderer/pages/Jr/jrBots';
 import {
   buildRunPrompt,
   pickRunBot,
   runTaughtTask,
+  taughtJobsBySkill,
   taughtSkillFromPrompt,
 } from '@renderer/pages/Jr/JrSidebar/Teach/taskActions';
 import { takeConversationIntent } from '@renderer/pages/conversation/Preview/browser/TeachCards/teachStore';
@@ -92,5 +94,23 @@ describe('runTaughtTask', () => {
     await expect(runTaughtTask({ bot: bot('a'), prompt: 'PROMPT', navigate })).rejects.toThrow('offline');
     expect(navigate).not.toHaveBeenCalled();
     expect(sessionStorage.length).toBe(0);
+  });
+});
+
+describe('taughtJobsBySkill', () => {
+  const job = (id: string, text: string) => ({ id, target: { payload: { kind: 'message', text } } }) as ICronJob;
+
+  it('groups taught jobs by skill and skips ordinary jobs', () => {
+    const map = taughtJobsBySkill([
+      job('j1', 'rode `jr-tarefa-nfs`'),
+      job('j2', 'Resumo diário'),
+      job('j3', 'de novo `jr-tarefa-nfs`'),
+    ]);
+    expect([...map.keys()]).toEqual(['jr-tarefa-nfs']);
+    expect(map.get('jr-tarefa-nfs')?.map((item) => item.id)).toEqual(['j1', 'j3']);
+  });
+
+  it('tolerates a job without a payload', () => {
+    expect(taughtJobsBySkill([{ id: 'x' } as unknown as ICronJob]).size).toBe(0);
   });
 });

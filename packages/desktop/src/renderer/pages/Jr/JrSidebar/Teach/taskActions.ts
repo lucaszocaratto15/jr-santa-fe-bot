@@ -5,6 +5,7 @@
  */
 
 import type { TFunction } from 'i18next';
+import type { ICronJob } from '@/common/adapter/ipcBridge';
 import { queueConversationIntent } from '@renderer/pages/conversation/Preview/browser/TeachCards/teachStore';
 import { startJrConversation, type JrBot } from '@renderer/pages/Jr/jrBots';
 
@@ -19,6 +20,16 @@ export type TaughtTaskSummary = { name: string; description: string };
 /** The taught skill a prompt (or a cron job's message) runs, or null. */
 export function taughtSkillFromPrompt(text: string): string | null {
   return TAUGHT_SKILL_IN_PROMPT_RE.exec(text)?.[1] ?? null;
+}
+
+/** Jobs that run a taught task, grouped by the skill they run (first job first). */
+export function taughtJobsBySkill(jobs: readonly ICronJob[]): Map<string, ICronJob[]> {
+  const out = new Map<string, ICronJob[]>();
+  for (const job of jobs) {
+    const skill = taughtSkillFromPrompt(job.target?.payload?.text ?? '');
+    if (skill) out.set(skill, [...(out.get(skill) ?? []), job]);
+  }
+  return out;
 }
 
 /** The message that runs a taught task now (`now`) or from a schedule (`scheduled`). */

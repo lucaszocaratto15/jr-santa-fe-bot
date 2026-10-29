@@ -28,7 +28,7 @@ vi.mock('swr', () => ({
   mutate: vi.fn(),
 }));
 vi.mock('@/common', () => ({
-  ipcBridge: { conversation: { listChanged: { on: () => () => {} } } },
+  ipcBridge: { conversation: { listChanged: { on: () => () => {} }, artifactStream: { on: () => () => {} } } },
 }));
 vi.mock('@/renderer/pages/Jr/jrBots', () => ({
   listJrBots: vi.fn(),

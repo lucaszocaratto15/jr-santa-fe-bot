@@ -670,7 +670,13 @@
         "editDescription": "O que faz",
         "editBody": "Passos e instruções",
         "editSaved": "Tarefa salva. A mudança vale a partir da próxima execução.",
-        "editFailed": "Não foi possível abrir ou salvar a tarefa."
+        "editFailed": "Não foi possível abrir ou salvar a tarefa.",
+        "schedule": "Agendar",
+        "more": "Mais ações",
+        "scheduleFailed": "Não foi possível preparar o agendamento. Verifique a conexão do JR e tente de novo.",
+        "deleteConfirmScheduled": "Excluir esta tarefa? Os agendamentos dela também serão removidos.",
+        "runningScheduled": "Executando tarefa agendada: {{name}}",
+        "runningScheduledBody": "Abra o JR Bot para acompanhar."
       },
       "generating": {
         "title": "Gerando tarefa…",

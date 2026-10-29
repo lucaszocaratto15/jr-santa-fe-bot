@@ -43,6 +43,7 @@ import JrSettingsModal, { type SettingsTab } from './SettingsModal';
 import { initialsFromName, sidebarProfile } from './sidebarProfile';
 import { readSidebarLayout, writeSidebarLayout } from './preferences';
 import styles from './JrSidebar.module.css';
+import { useTaughtRunWatcher } from './Teach/useTaughtRunWatcher';
 
 const JrConnections = lazy(() => import('../Connections'));
 const JrBotTeamDialog = lazy(() => import('../JrBotTeamDialog'));
@@ -133,6 +134,7 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
+  useTaughtRunWatcher();
   const { state, logout } = useJrAccess();
   const { user } = useAuth();
   const [connectionsOpen, setConnectionsOpen] = useState(false);

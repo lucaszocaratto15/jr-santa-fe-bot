@@ -362,7 +362,7 @@ async function ensureJrGateway(): Promise<void> {
  * The renderer catalog can miss a provider owned by `system_default_user`.
  * The main process reads the same loopback list the gateway writer uses.
  */
-async function providersForNewConversation(): Promise<{
+export async function providersForNewConversation(): Promise<{
   providers: IProvider[] | null | undefined;
   listError: unknown;
 }> {

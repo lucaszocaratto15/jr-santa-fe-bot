@@ -33,6 +33,23 @@ const FormItem = Form.Item;
 const TextArea = Input.TextArea;
 const Option = Select.Option;
 
+/**
+ * Values a caller pre-fills a new task with (the "Agendar" action of a taught task).
+ * Ignored in edit mode.
+ */
+export type CronTaskPrefill = {
+  name: string;
+  prompt: string;
+  assistantId: string;
+  model: { providerId: string; modelId: string };
+  workspace: string;
+  frequency: 'daily' | 'weekdays' | 'weekly';
+  time: string; // 'HH:mm'
+  executionMode: 'existing';
+  /** Called on submit, before addJob; its id becomes `conversation_id`. */
+  resolveConversation: () => Promise<{ id: string; title: string }>;
+};
+
 interface CreateTaskDialogProps {
   visible: boolean;
   onClose: () => void;
@@ -40,6 +57,8 @@ interface CreateTaskDialogProps {
   editJob?: ICronJob;
   conversation_id?: string;
   conversation_title?: string;
+  /** Initial values of a new task; its conversation is created only on submit. */
+  prefill?: CronTaskPrefill;
 }
 
 type FrequencyType = 'manual' | 'hourly' | 'daily' | 'weekdays' | 'weekly' | 'custom';
@@ -237,6 +256,7 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
   editJob,
   conversation_id: _conversation_id,
   conversation_title,
+  prefill,
 }) => {
   const { t, i18n } = useTranslation();
   const localeKey = resolveLocaleKey(i18n?.language ?? 'en-US');
@@ -295,6 +315,21 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
       setModelId(editJob.metadata.agent_config?.model_id ?? editJob.metadata.agent_config?.model?.model);
       setConfigOptions(editJob.metadata.agent_config?.config_options);
       setWorkspace(editJob.metadata.agent_config?.workspace);
+    } else if (prefill) {
+      form.resetFields();
+      setFrequency(prefill.frequency);
+      setTime(prefill.time);
+      setWeekday('MON');
+      setCustomSchedule(createDefaultCustomSchedule());
+      setExecutionMode(prefill.executionMode);
+      setQueueEnabled(false);
+      setAdvancedOpen(false);
+      setModelId(prefill.model.modelId);
+      setConfigOptions(undefined);
+      setWorkspace(prefill.workspace);
+      setSelectedAssistantId(prefill.assistantId);
+      setTeamOwnershipStatus('standalone');
+      form.setFieldsValue({ name: prefill.name, assistant: prefill.assistantId, prompt: prefill.prompt });
     } else {
       form.resetFields();
       setFrequency('manual');
@@ -310,7 +345,7 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
       setSelectedAssistantId(undefined);
       setTeamOwnershipStatus('standalone');
     }
-  }, [visible, editJob, form]);
+  }, [visible, editJob, prefill, form]);
 
   useEffect(() => {
     if (!visible || !editJob?.metadata.conversation_id) {
@@ -392,7 +427,9 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
     if (resolvedBackend !== 'aionrs' || !model_id) return undefined;
 
     const editedProviderId =
-      resolvedBackend === 'aionrs' ? editJob?.metadata.agent_config?.model?.provider_id : undefined;
+      resolvedBackend === 'aionrs'
+        ? (editJob?.metadata.agent_config?.model?.provider_id ?? prefill?.model.providerId)
+        : undefined;
     if (editedProviderId) {
       const byId = filteredProviders.find((p) => p.id === editedProviderId);
       if (byId && getAvailableModels(byId).includes(model_id)) {
@@ -406,7 +443,7 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
       }
     }
     return undefined;
-  }, [resolvedBackend, model_id, filteredProviders, getAvailableModels, editJob]);
+  }, [resolvedBackend, model_id, filteredProviders, getAvailableModels, editJob, prefill]);
 
   const handleGeminiModelSelect = useCallback(async (model: TProviderWithModel) => {
     setModelId(model.use_model);
@@ -496,6 +533,8 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
   const isCheckingTeamOwnership = teamOwnershipStatus === 'checking';
   const isTeamOwnedTask = teamOwnershipStatus === 'team';
   const isExecutionModeLocked = isCheckingTeamOwnership || isTeamOwnedTask;
+  // A prefilled task always runs in the conversation created for it on submit.
+  const isPrefillCreate = Boolean(prefill) && !isEditMode;
   const canEditAgentConfig =
     !isExecutionModeLocked && !isOriginalExistingConversationTask && (!isEditMode || execution_mode !== 'existing');
 
@@ -531,7 +570,8 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
       const scheduleDesc = scheduleInfo.description;
       const schedule = createCronSchedule(scheduleExpr, scheduleDesc);
       const assistantValue = typeof values.assistant === 'string' ? values.assistant : selectedAssistantId;
-      const resolvedExecutionMode: ExecutionMode = isTeamOwnedTask ? 'existing' : execution_mode;
+      const resolvedExecutionMode: ExecutionMode =
+        isTeamOwnedTask || isPrefillCreate ? 'existing' : execution_mode;
 
       let agent_config: ICreateCronJobParams['agent_config'] | ICronJobUpdateParams['metadata']['agent_config'];
       if (canEditAgentConfig) {
@@ -585,13 +625,14 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
         });
         Message.success(t('cron.page.updateSuccess'));
       } else {
-        // Create mode
+        // Create mode. A prefilled task gets its conversation only now, after validation.
+        const target = isPrefillCreate && prefill ? await prefill.resolveConversation() : null;
         const params: ICreateCronJobParams = {
           name: values.name,
           schedule,
           prompt: values.prompt,
-          conversation_id: _conversation_id ?? '',
-          conversation_title,
+          conversation_id: target?.id ?? _conversation_id ?? '',
+          conversation_title: target?.title ?? conversation_title,
           created_by: 'user',
           execution_mode: resolvedExecutionMode,
           queue_enabled: queueEnabled,
@@ -701,7 +742,7 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
           <FormItem label={t('cron.page.form.executionMode')}>
             <Radio.Group
               value={execution_mode}
-              disabled={isExecutionModeLocked}
+              disabled={isExecutionModeLocked || isPrefillCreate}
               onChange={(value) => setExecutionMode(value as ExecutionMode)}
               className='flex flex-wrap items-center gap-20px'
             >
@@ -710,7 +751,7 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
                   <Radio
                     key={option.value}
                     value={option.value}
-                    className={`m-0 min-w-0 text-14px text-t-secondary ${isExecutionModeLocked ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                    className={`m-0 min-w-0 text-14px text-t-secondary ${isExecutionModeLocked || isPrefillCreate ? 'cursor-not-allowed' : 'cursor-pointer'}`}
                   >
                     <span className='ps-4px text-14px font-medium text-t-primary'>{option.label}</span>
                   </Radio>

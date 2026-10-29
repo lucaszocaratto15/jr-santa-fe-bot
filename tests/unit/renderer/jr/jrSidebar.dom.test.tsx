@@ -32,7 +32,7 @@ vi.mock('swr', () => ({
 }));
 vi.mock('@/common', () => ({
   ipcBridge: {
-    conversation: { listChanged: { on: () => () => {} } },
+    conversation: { listChanged: { on: () => () => {} }, artifactStream: { on: () => () => {} } },
     team: { list: { invoke: vi.fn() } },
     database: { getConversationMessages: { invoke: mocks.messages } },
   },
