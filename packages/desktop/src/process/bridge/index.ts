@@ -14,6 +14,7 @@ import { initWebuiBridge } from './webuiBridge';
 import { initThemeBridge } from './themeBridge';
 import { initSecureInputBridge, initTeachBridge, initVaultBridge } from '@process/services/teach/control/teachIpc';
 import { initLearnBridge } from '@process/services/teach/learn/learnIpc';
+import { initHandbookBridge } from '@process/services/teach/handbook/handbookIpc';
 
 export type BridgeDependencies = Record<string, never>;
 
@@ -30,6 +31,7 @@ export function initAllBridges(_deps: BridgeDependencies = {}): void {
   initSecureInputBridge();
   initTeachBridge();
   initLearnBridge();
+  initHandbookBridge();
 }
 
 export {

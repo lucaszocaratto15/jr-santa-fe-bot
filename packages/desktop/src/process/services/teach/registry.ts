@@ -1,4 +1,5 @@
 import type { SecureInputBroker } from './control/secureInput';
+import type { HandbookService } from './handbook/handbookService';
 import type { LearnService } from './learn/learnService';
 import type { Recorder } from './recording/recorder';
 import type { TeachSession } from './recording/teachSession';
@@ -39,3 +40,12 @@ export const setLearnService = (next: LearnService | null): void => {
 };
 
 export const getLearnService = (): LearnService | null => learn;
+
+let handbook: HandbookService | null = null;
+
+/** "Manual da função": null until startup wires it (desktop with a JR access controller). */
+export const setHandbookService = (next: HandbookService | null): void => {
+  handbook = next;
+};
+
+export const getHandbookService = (): HandbookService | null => handbook;

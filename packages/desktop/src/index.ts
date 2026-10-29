@@ -41,6 +41,7 @@ import {
   setTeachServices,
 } from './process/services/teach/registry';
 import { startLearnService } from './process/services/teach/learn/learnIpc';
+import { startHandbookService } from './process/services/teach/handbook/handbookIpc';
 import { createRecorder, sweepTaughtTasks } from './process/services/teach/recording/recorder';
 import { SHOT_MAX_WIDTH } from './process/services/teach/recording/stepShots';
 import { TAUGHT_TASKS_DIRNAME } from './process/services/teach/recording/teachSession';
@@ -1047,6 +1048,8 @@ const handleAppReady = async (): Promise<void> => {
         }
       }),
   });
+  // "Manual da função": drafts, employee-approved publishing and the role handbook reads.
+  startHandbookService(app.getPath('userData'), (target, init, admin) => controller.call(target, init, admin));
   jrAccessController = controller;
   setJrAccessController(controller);
   const debugBackendStartupFailure = resolveDebugBackendStartupFailure();

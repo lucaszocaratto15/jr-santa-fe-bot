@@ -40,7 +40,7 @@ const requireSession = () => {
  * The user skills dir the backend lists, imports into and deletes from. Falls back to the
  * desktop's own `getSkillsDir()` when the backend cannot answer.
  */
-async function userSkillsDir(): Promise<string> {
+export async function userSkillsDir(): Promise<string> {
   try {
     const { user_skills_dir: dir } = await ipcBridge.fs.getSkillPaths.invoke();
     if (dir) return dir;

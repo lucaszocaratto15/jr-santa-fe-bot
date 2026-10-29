@@ -15,7 +15,7 @@ import { getCdpBridgeHandle } from '@process/utils/cdpBridgeRegistry';
 import i18n from '@process/services/i18n';
 import { hasTray, isMainWindowOnScreen, rebuildTrayMenu } from '@process/utils/tray';
 import { sanitizeUrl } from '../recording/urlSanitizer';
-import { getLearnService, setLearnService } from '../registry';
+import { getHandbookService, getLearnService, setLearnService } from '../registry';
 import { learnIndicatorReachable, learnServiceMenuItems } from './learnMenu';
 import { createLearnService, type LearnService } from './learnService';
 
@@ -152,8 +152,8 @@ export async function startLearnService(userDataDir: string): Promise<LearnServi
       ipcBridge.learn.stateChanged.emit(state);
       syncLearnMenus();
     },
-    // Wired by the "Manual da função" plan to withdraw observation items from the server.
-    onRevoke: async () => {},
+    // Revoking Aprender withdraws the employee's observed (learn) items from the role handbook.
+    onRevoke: () => getHandbookService()?.withdrawLearnItems() ?? Promise.resolve(),
   });
   setLearnService(service);
   await service.init();

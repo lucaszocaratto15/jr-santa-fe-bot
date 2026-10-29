@@ -201,7 +201,33 @@ export const jr = {
       'jr-admin-set-title'
     ),
   },
+  /**
+   * "Manual da função". Only the employee approves (publish = approve); admins only read.
+   * Images cross as data URLs; the JR token stays in main. Errors are HandbookError codes.
+   */
+  handbook: {
+    mine: bridge.buildProvider<HandbookView, void>('jr-handbook-mine'),
+    drafts: bridge.buildProvider<HandbookDraftsResult, void>('jr-handbook-drafts'),
+    publish: bridge.buildProvider<void, { key: string; body: HandbookDraftBody; keepShots: number[] }>(
+      'jr-handbook-publish'
+    ),
+    dismiss: bridge.buildProvider<void, { key: string }>('jr-handbook-dismiss'),
+    withdraw: bridge.buildProvider<void, { itemId: string }>('jr-handbook-withdraw'),
+    media: bridge.buildProvider<string, { id: string }>('jr-handbook-media'),
+    /** A local screenshot of a draft, for the review editor. */
+    draftShot: bridge.buildProvider<string, { key: string; shot: number }>('jr-handbook-draft-shot'),
+    /** Mermaid of an activity being edited. */
+    preview: bridge.buildProvider<string, { body: HandbookActivityBody }>('jr-handbook-preview'),
+    adminRoles: bridge.buildProvider<HandbookRoleSummary[], void>('jr-handbook-admin-roles'),
+    adminRole: bridge.buildProvider<HandbookView, { key: string }>('jr-handbook-admin-role'),
+  },
 };
+
+type HandbookView = import('@/common/types/agent/handbookTypes').HandbookView;
+type HandbookDraftsResult = import('@/common/types/agent/handbookTypes').HandbookDraftsResult;
+type HandbookDraftBody = import('@/common/types/agent/handbookTypes').HandbookDraftBody;
+type HandbookActivityBody = import('@/common/types/agent/handbookTypes').HandbookActivityBody;
+type HandbookRoleSummary = import('@/common/types/agent/handbookTypes').HandbookRoleSummary;
 
 // ---------------------------------------------------------------------------
 // Assistants — routed to /api/assistants/*
@@ -2608,6 +2634,8 @@ export const teach = {
   readTask: bridge.buildProvider<TaughtTaskContent, { name: string }>('teach:read-task'),
   /** Rewrites a taught task's SKILL.md; rejects with a {@link TaughtTaskErrorCode}. */
   saveTask: bridge.buildProvider<void, TaughtTaskContent>('teach:save-task'),
+  /** Main → renderer: show the "Manual da função" card of an activity (from `handbook_show`). */
+  showHandbook: bridge.buildEmitter<{ activityId: string }>('teach:show-handbook'),
 };
 
 // ---------------------------------------------------------------------------

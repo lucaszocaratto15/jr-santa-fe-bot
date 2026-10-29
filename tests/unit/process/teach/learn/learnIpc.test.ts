@@ -83,7 +83,9 @@ import {
   startLearnService,
   UNAVAILABLE_LEARN_STATE,
 } from '@process/services/teach/learn/learnIpc';
-import { getLearnService, setLearnService } from '@process/services/teach/registry';
+import { getLearnService, setHandbookService, setLearnService } from '@process/services/teach/registry';
+import type { HandbookService } from '@process/services/teach/handbook/handbookService';
+import { LEARN_TERM_VERSION } from '@/common/types/agent/learnTypes';
 import type { LearnService } from '@process/services/teach/learn/learnService';
 
 const active = { ...UNAVAILABLE_LEARN_STATE, status: 'active' as const, unavailableReason: null };
@@ -181,6 +183,25 @@ describe('learn menus', () => {
       expect(rebuildTrayMenu).toHaveBeenCalled();
       service.dispose();
     } finally {
+      setLearnService(null);
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('revoke withdraws the handbook learn items', () => {
+  it.skipIf(process.platform === 'linux')('calls withdrawLearnItems of the handbook service', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'learn-revoke-'));
+    const withdrawLearnItems = vi.fn(async () => {});
+    setHandbookService({ withdrawLearnItems } as unknown as HandbookService);
+    try {
+      const service = await startLearnService(dir);
+      await service.accept(LEARN_TERM_VERSION);
+      await service.revoke();
+      expect(withdrawLearnItems).toHaveBeenCalledTimes(1);
+      service.dispose();
+    } finally {
+      setHandbookService(null);
       setLearnService(null);
       await rm(dir, { recursive: true, force: true });
     }
