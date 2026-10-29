@@ -178,6 +178,7 @@
 }
 .row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 16px;
   padding: 16px 18px;
@@ -215,6 +216,26 @@
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 2px;
+}
+.rowDevices {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-basis: 100%;
+  padding-top: 10px;
+  border-top: 1px solid var(--jr-hairline);
+}
+.deviceLimit,
+.device {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--color-text-3);
+}
+.deviceLimit :global(.arco-input-number) {
+  width: 64px;
 }
 .quiet:global(.arco-btn-text) {
   color: var(--color-text-2);

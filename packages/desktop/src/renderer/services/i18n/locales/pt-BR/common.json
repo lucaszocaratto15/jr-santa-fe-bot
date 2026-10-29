@@ -452,7 +452,13 @@
       "openAccess": "Sem horário de início ou de fim. O consumo fica registrado e não bloqueia o acesso.",
       "noLimitPlaceholder": "Sem limite",
       "unlimited": "Sem limite",
-      "tokensUsed": "Tokens usados: {{used}}"
+      "tokensUsed": "Tokens usados: {{used}}",
+      "replaced": "Seu acesso foi movido para outro computador. Peça um novo código ao administrador se precisar usar este.",
+      "maxDevicesLabel": "PCs permitidos",
+      "disconnectDevice": "Desconectar este PC",
+      "autoBlockedVolume": "{{name}} foi bloqueado automaticamente às {{time}}: uso muito acima do normal.",
+      "autoBlockedHours": "{{name}} foi bloqueado automaticamente às {{time}}: tentativas repetidas fora do horário.",
+      "handoverFailed": "Não foi possível limpar os dados do funcionário anterior neste computador. Feche e abra o JR Bot e peça um novo código ao administrador."
     },
     "executing": "Executando",
     "look": {
