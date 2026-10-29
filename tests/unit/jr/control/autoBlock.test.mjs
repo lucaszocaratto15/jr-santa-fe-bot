@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import {
+  DENIAL_EPISODE_MS,
   HOURS_DENIALS_LIMIT,
   VOLUME_FLOOR_TOKENS,
   VOLUME_MULTIPLIER,
@@ -72,35 +73,41 @@ async function nightSetup(t) {
   return { app, admin, employee, clock };
 }
 
-test('outside-hours login attempts block on the third in a day', async (t) => {
+const chatOnce = (app, token) =>
+  app.request('/v1/chat/completions', {
+    method: 'POST',
+    token,
+    body: { messages: [{ role: 'user', content: 'oi' }] },
+  });
+
+test('outside-hours login attempts block on the third episode in a day', async (t) => {
   const { app, admin, employee, clock } = await nightSetup(t);
+  // The owner has no access hours, so the admin list stays readable at night.
   clock.now = NIGHT;
   for (let attempt = 1; attempt < HOURS_DENIALS_LIMIT; attempt += 1) {
     const denied = await app.login(employee.code, 'night');
     assert.equal(denied.response.status, 403);
     assert.equal(denied.error.code, 'outside_access_hours');
-    clock.now = WORKDAY;
     const row = await employeeRow(app, admin, employee.id);
-    clock.now = NIGHT;
     assert.equal(row.blocked, false);
     assert.equal(row.blockedReason, null);
+    clock.now += DENIAL_EPISODE_MS + 60_000;
   }
   await app.login(employee.code, 'night');
-  clock.now = WORKDAY;
   const row = await employeeRow(app, admin, employee.id);
   assert.equal(row.blocked, true);
   assert.equal(row.blockedReason, 'auto_hours');
   const blocked = await app.login(employee.code, 'day');
   assert.equal(blocked.error.code, 'employee_blocked');
   // Denials from before the owner lifts the block do not count again the same night.
+  clock.now += 60_000;
   await app.request(`/admin/employees/${employee.id}/block`, {
     method: 'POST',
     token: admin,
     body: { blocked: false },
   });
-  clock.now = NIGHT + 60_000;
+  clock.now += 60_000;
   assert.equal((await app.login(employee.code, 'night')).error.code, 'outside_access_hours');
-  clock.now = WORKDAY;
   assert.equal((await employeeRow(app, admin, employee.id)).blocked, false);
 });
 
@@ -112,22 +119,31 @@ test('outside-hours model requests count, session polling outside hours never co
     const response = await app.request('/auth/session', { token });
     assert.equal(response.status, 403);
     assert.deepEqual(await response.json(), { error: { code: 'outside_access_hours' } });
+    clock.now += DENIAL_EPISODE_MS + 60_000;
   }
-  clock.now = WORKDAY;
   assert.equal((await employeeRow(app, admin, employee.id)).blocked, false);
-  clock.now = NIGHT;
   for (let attempt = 0; attempt < HOURS_DENIALS_LIMIT; attempt += 1) {
-    const response = await app.request('/v1/chat/completions', {
-      method: 'POST',
-      token,
-      body: { messages: [{ role: 'user', content: 'oi' }] },
-    });
-    assert.equal(response.status, 403);
+    assert.equal((await chatOnce(app, token)).status, 403);
+    clock.now += DENIAL_EPISODE_MS + 60_000;
   }
-  clock.now = WORKDAY;
   const row = await employeeRow(app, admin, employee.id);
   assert.equal(row.blocked, true);
   assert.equal(row.blockedReason, 'auto_hours');
+});
+
+test('concurrent requests denied at closing time count as one episode', async (t) => {
+  const { app, admin, employee, clock } = await nightSetup(t);
+  const token = (await app.login(employee.code, 'day')).token;
+  // 18:00 in São Paulo: the window just closed while four conversations were running.
+  clock.now = Date.parse('2026-10-29T21:00:00Z');
+  const burst = await Promise.all(Array.from({ length: 4 }, () => chatOnce(app, token)));
+  assert.deepEqual(
+    burst.map((response) => response.status),
+    [403, 403, 403, 403]
+  );
+  clock.now += 30_000;
+  for (let retry = 0; retry < 4; retry += 1) assert.equal((await chatOnce(app, token)).status, 403);
+  assert.equal((await employeeRow(app, admin, employee.id)).blocked, false);
 });
 
 test('a volume spike blocks and unblocking clears the reason', async (t) => {
@@ -156,6 +172,9 @@ test('a volume spike blocks and unblocking clears the reason', async (t) => {
   assert.equal(row.blocked, true);
   assert.equal(row.blockedReason, 'auto_volume');
   assert.equal((await chat()).status, 403);
+  // A manual block over an automatic one makes it the owner's decision: no automatic reason.
+  await app.request(`/admin/employees/${employee.id}/block`, { method: 'POST', token: admin, body: { blocked: true } });
+  assert.equal((await employeeRow(app, admin, employee.id)).blockedReason, null);
   const unblock = await app.request(`/admin/employees/${employee.id}/block`, {
     method: 'POST',
     token: admin,
@@ -267,23 +286,39 @@ test('prune also runs when the store opens', async (t) => {
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM requests').get().n, 0);
 });
 
-test('upstream receives X-JR-Employee', async (t) => {
+test('upstream receives X-JR-Employee, fallbacks never do', async (t) => {
   const seen = [];
+  let primaryDown = false;
   const app = await startControl(t, {
-    upstreamFetch: async (_url, init) => {
-      seen.push(init.headers);
+    log: () => {},
+    openRouterKey: 'openrouter-test-key-not-real',
+    openRouterModels: 'deepseek/deepseek-chat:free',
+    geminiKey: 'gemini-test-key-not-real-xx',
+    upstreamFetch: async (url, init) => {
+      seen.push({ url, headers: init.headers });
+      if (primaryDown && url.includes('/mmx/')) return new Response('unavailable', { status: 401 });
+      if (primaryDown && url.includes('openrouter')) return new Response('busy', { status: 429 });
       return Response.json({ choices: [], usage: { prompt_tokens: 1, completion_tokens: 1 } });
     },
   });
   const admin = (await app.login()).token;
   const employee = await app.invite(admin);
   const token = (await app.login(employee.code, 'day')).token;
-  const response = await app.request('/v1/chat/completions', {
-    method: 'POST',
-    token,
-    body: { messages: [{ role: 'user', content: 'oi' }] },
-  });
-  assert.equal(response.status, 200);
+  const chat = () =>
+    app.request('/v1/chat/completions', {
+      method: 'POST',
+      token,
+      body: { messages: [{ role: 'user', content: 'oi' }] },
+    });
+  assert.equal((await chat()).status, 200);
   assert.equal(seen.length, 1);
-  assert.equal(seen[0]['X-JR-Employee'], employee.id);
+  assert.equal(seen[0].headers['X-JR-Employee'], employee.id);
+  seen.length = 0;
+  primaryDown = true;
+  assert.equal((await chat()).status, 200);
+  const fallbacks = seen.filter((call) => !call.url.includes('/mmx/'));
+  assert.ok(fallbacks.some((call) => call.url.includes('openrouter')));
+  assert.ok(fallbacks.some((call) => call.url.includes('generativelanguage')));
+  for (const call of fallbacks) assert.equal('X-JR-Employee' in call.headers, false);
+  assert.equal(seen.find((call) => call.url.includes('/mmx/')).headers['X-JR-Employee'], employee.id);
 });

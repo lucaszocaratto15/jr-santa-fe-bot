@@ -15,6 +15,11 @@ export const VOLUME_MULTIPLIER = 5;
 export const VOLUME_FLOOR_TOKENS = 50_000_000;
 /** Outside-hours denials in one São Paulo day that block the employee. */
 export const HOURS_DENIALS_LIMIT = 3;
+/**
+ * Denials within this long of a counted denial belong to the same episode and do not count again,
+ * so several conversations cut off together when the access window closes are one denial.
+ */
+export const DENIAL_EPISODE_MS = 10 * 60_000;
 
 /** Nearest-rank 95th percentile; 0 for an empty list. */
 function p95(values) {

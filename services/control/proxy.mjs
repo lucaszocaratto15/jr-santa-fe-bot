@@ -566,7 +566,10 @@ export function createModelProxy({
           if (requestId) {
             store.finishRequest(requestId, { status, usage, firstByteMs, upstreamStatus });
             try {
-              if (store.checkAutoBlock(session.user.id)) abortWhere((entry) => entry.userId === session.user.id);
+              // Abort the user's other in-flight requests; this one has already finished.
+              const self = active.get(id);
+              if (store.checkAutoBlock(session.user.id))
+                abortWhere((entry) => entry !== self && entry.userId === session.user.id);
             } catch {
               // An automatic-block failure never fails the request.
             }

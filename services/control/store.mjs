@@ -2,7 +2,7 @@ import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypt
 import { chmodSync, mkdirSync } from 'node:fs';
 import { dirname, isAbsolute } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { HOURS_DENIALS_LIMIT, VOLUME_FLOOR_TOKENS, volumeThreshold } from './autoBlock.mjs';
+import { DENIAL_EPISODE_MS, HOURS_DENIALS_LIMIT, VOLUME_FLOOR_TOKENS, volumeThreshold } from './autoBlock.mjs';
 import { httpError } from './validation.mjs';
 
 const DAY = 86_400_000;
@@ -167,7 +167,8 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
     );
     CREATE INDEX IF NOT EXISTS requests_user ON requests(user_id, started_at);
     CREATE TABLE IF NOT EXISTS denials (
-      user_id TEXT NOT NULL, at INTEGER NOT NULL, kind TEXT NOT NULL CHECK (kind IN ('login','request'))
+      user_id TEXT NOT NULL, at INTEGER NOT NULL, kind TEXT NOT NULL CHECK (kind IN ('login','request')),
+      counted INTEGER NOT NULL DEFAULT 1
     );
     CREATE INDEX IF NOT EXISTS denials_user ON denials(user_id, at);
     CREATE INDEX IF NOT EXISTS requests_started ON requests(started_at);
@@ -200,6 +201,13 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
       .all()
       .map((column) => column.name)
   );
+  const denialColumns = new Set(
+    db
+      .prepare('PRAGMA table_info(denials)')
+      .all()
+      .map((column) => column.name)
+  );
+  if (!denialColumns.has('counted')) db.exec('ALTER TABLE denials ADD COLUMN counted INTEGER NOT NULL DEFAULT 1');
   if (!sessionColumns.has('revoked_reason')) db.exec('ALTER TABLE sessions ADD COLUMN revoked_reason TEXT');
   db.prepare("INSERT OR IGNORE INTO users (id,name,role,created_at) VALUES ('owner',?,'admin',?)").run(
     OWNER_PROFILE_NAME,
@@ -243,7 +251,17 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
       .get(userId);
   const recordDenial = (userId, kind) => {
     const timestamp = now();
-    db.prepare('INSERT INTO denials (user_id,at,kind) VALUES (?,?,?)').run(userId, timestamp, kind);
+    // One episode per DENIAL_EPISODE_MS: requests cut off together at closing time count once.
+    const sameEpisode = db
+      .prepare('SELECT 1 FROM denials WHERE user_id = ? AND counted = 1 AND at > ? LIMIT 1')
+      .get(userId, timestamp - DENIAL_EPISODE_MS);
+    db.prepare('INSERT INTO denials (user_id,at,kind,counted) VALUES (?,?,?,?)').run(
+      userId,
+      timestamp,
+      kind,
+      sameEpisode ? 0 : 1
+    );
+    if (sameEpisode) return null;
     const user = employeeRow(userId);
     if (!user) return null;
     const local = timestamp + LOCAL_OFFSET_MS;
@@ -251,7 +269,7 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
     // Denials before the owner lifted a block do not count again.
     const since = Math.max(dayStart, (user.unblocked_at ?? -1) + 1);
     const { count } = db
-      .prepare('SELECT COUNT(*) AS count FROM denials WHERE user_id = ? AND at >= ?')
+      .prepare('SELECT COUNT(*) AS count FROM denials WHERE user_id = ? AND counted = 1 AND at >= ?')
       .get(userId, since);
     if (count < HOURS_DENIALS_LIMIT) return null;
     return autoBlock(userId, 'auto_hours') ? 'auto_hours' : null;
@@ -488,9 +506,11 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
         if (!user) throw httpError(404, 'not_found');
         if (user.revoked_at !== null) throw httpError(409, 'employee_revoked');
         if (blocked) {
-          // A manual block keeps an existing block (and its reason) or starts one without a reason.
-          if (user.blocked_at === null)
-            db.prepare('UPDATE users SET blocked_at = ?, blocked_reason = NULL WHERE id = ?').run(now(), id);
+          // A manual block is the owner's decision, so it never carries an automatic reason.
+          db.prepare('UPDATE users SET blocked_at = COALESCE(blocked_at, ?), blocked_reason = NULL WHERE id = ?').run(
+            now(),
+            id
+          );
         } else if (user.blocked_at !== null) {
           // Usage and denials from before the unblock do not trigger an automatic block again.
           db.prepare('UPDATE users SET blocked_at = NULL, blocked_reason = NULL, unblocked_at = ? WHERE id = ?').run(
