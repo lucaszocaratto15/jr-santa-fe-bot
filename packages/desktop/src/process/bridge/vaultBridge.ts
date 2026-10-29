@@ -38,4 +38,5 @@ export function initTeachBridge(): void {
   ipcBridge.teach.discard.provider(async () => requireSession().discard());
   ipcBridge.teach.saveDraft.provider(async (input) => requireSession().saveDraft(input));
   ipcBridge.teach.takeOver.provider(async ({ on }) => requireSession().takeOver(on));
+  ipcBridge.teach.takeOverState.provider(async () => getTeachSession()?.takeOverState() ?? { on: false });
 }

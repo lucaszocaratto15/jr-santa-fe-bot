@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { buildDraftPrompt, parseDraft, withDraftName } from '@process/services/teach/recording/skillDraft';
+import {
+  buildDraftPrompt,
+  parseDraft,
+  withDraftDescription,
+  withDraftName,
+} from '@process/services/teach/recording/skillDraft';
 
 const VALID = `---
 name: jr-tarefa-relatorio-nfs
@@ -66,7 +71,11 @@ describe('parseDraft', () => {
   });
 
   it('rejects a draft without frontmatter', () => {
-    expect(parseDraft('## Passos\n1. Abrir o site\n')).toEqual({ ok: false, error: expect.any(String) });
+    expect(parseDraft('## Passos\n1. Abrir o site\n')).toEqual({
+      ok: false,
+      code: 'no_frontmatter',
+      error: expect.any(String),
+    });
   });
 
   it('rejects a missing description', () => {
@@ -75,7 +84,7 @@ describe('parseDraft', () => {
 
   it('rejects a draft without a ## Passos section', () => {
     const parsed = parseDraft(VALID.replace('## Passos', '## Etapas'));
-    expect(parsed).toEqual({ ok: false, error: expect.stringContaining('Passos') });
+    expect(parsed).toEqual({ ok: false, code: 'no_steps', error: expect.stringContaining('Passos') });
   });
 
   it('rejects an empty ## Passos section', () => {
@@ -85,7 +94,7 @@ describe('parseDraft', () => {
 
   it('rejects drafts larger than 64 KB', () => {
     const parsed = parseDraft(`${VALID}\n${'x'.repeat(64 * 1024)}`);
-    expect(parsed).toEqual({ ok: false, error: expect.stringContaining('64 KB') });
+    expect(parsed).toEqual({ ok: false, code: 'too_large', error: expect.stringContaining('64 KB') });
   });
 
   it('keeps login items that do not use the cofre: prefix', () => {
@@ -100,6 +109,13 @@ describe('withDraftName', () => {
     const parsed = parseDraft(renamed);
     expect(parsed.ok && parsed.name).toBe('jr-tarefa-nfs-prefeitura');
     expect(renamed.replace('jr-tarefa-nfs-prefeitura', 'jr-tarefa-relatorio-nfs')).toBe(VALID);
+  });
+});
+
+describe('withDraftDescription', () => {
+  it('replaces the frontmatter description with a single line, keeping $ patterns literal', () => {
+    const parsed = parseDraft(withDraftDescription(VALID, 'Baixa\n  as NFs $1 do mês'));
+    expect(parsed.ok && parsed.description).toBe('Baixa as NFs $1 do mês');
   });
 });
 

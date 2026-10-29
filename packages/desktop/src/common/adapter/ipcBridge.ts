@@ -2565,6 +2565,7 @@ export type TeachStateEvent = import('@process/services/teach/recording/teachSes
 export type TeachStopResult = import('@process/services/teach/recording/teachSession').TeachStopResult;
 export type TeachDraftEvent = import('@process/services/teach/recording/teachSession').TeachDraftEvent;
 export type TeachSaveDraftInput = import('@process/services/teach/recording/teachSession').TeachSaveDraftInput;
+export type TeachDraftRejectedEvent = import('@process/services/teach/recording/teachSession').TeachDraftRejectedEvent;
 
 export const teach = {
   openTab: bridge.buildEmitter<{ url: string; openerWebContentsId: number }>('teach:open-tab'),
@@ -2590,8 +2591,12 @@ export const teach = {
   state: bridge.buildEmitter<TeachStateEvent>('teach:state'),
   /** Main → renderer: a validated draft from `teach_submit_draft`, for the review card. */
   draft: bridge.buildEmitter<TeachDraftEvent>('teach:draft'),
+  /** Main → renderer: the bot's draft was refused (code only, no draft content). */
+  draftRejected: bridge.buildEmitter<TeachDraftRejectedEvent>('teach:draft-rejected'),
   /** Writes the reviewed SKILL.md; `skillPath` is the skill directory for `fs.importSkill`. */
   saveDraft: bridge.buildProvider<{ skillPath: string }, TeachSaveDraftInput>('teach:save-draft'),
   /** "Assumir" / "Devolver ao bot": locks the agent out of the in-app browser. */
   takeOver: bridge.buildProvider<void, { on: boolean }>('teach:take-over'),
+  /** Current take-over state, read by the toolbar on mount. */
+  takeOverState: bridge.buildProvider<{ on: boolean }, void>('teach:take-over-state'),
 };

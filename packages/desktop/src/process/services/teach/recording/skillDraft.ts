@@ -18,7 +18,10 @@ export type TeachDraft = {
   logins: string[];
 };
 
-export type ParsedDraft = ({ ok: true } & TeachDraft) | { ok: false; error: string };
+/** Value-free reason a draft was refused; the renderer maps it to i18n. */
+export type DraftErrorCode = 'too_large' | 'no_frontmatter' | 'bad_name' | 'no_description' | 'no_steps';
+
+export type ParsedDraft = ({ ok: true } & TeachDraft) | { ok: false; code: DraftErrorCode; error: string };
 
 /** Taught skills are named `jr-tarefa-<slug>`. */
 export const TAUGHT_SKILL_NAME_RE = /^jr-tarefa-[a-z0-9-]{3,48}$/;
@@ -115,22 +118,27 @@ const sections = (body: string): Map<string, string[]> => {
 /** Validates a submitted SKILL.md and extracts what the review card shows. */
 export function parseDraft(markdown: string): ParsedDraft {
   if (Buffer.byteLength(markdown, 'utf8') > MAX_DRAFT_BYTES) {
-    return { ok: false, error: 'o rascunho passa de 64 KB; resuma os passos' };
+    return { ok: false, code: 'too_large', error: 'o rascunho passa de 64 KB; resuma os passos' };
   }
   const text = markdown.replace(/\r\n/g, '\n');
   const front = FRONTMATTER_RE.exec(text);
-  if (!front) return { ok: false, error: 'faltou o frontmatter (--- name/description ---) no início' };
+  if (!front)
+    return { ok: false, code: 'no_frontmatter', error: 'faltou o frontmatter (--- name/description ---) no início' };
   const meta = parseFrontmatter(front[1]);
   const name = meta.name ?? '';
   if (!TAUGHT_SKILL_NAME_RE.test(name)) {
-    return { ok: false, error: 'name deve ser jr-tarefa-<apelido> com 3 a 48 letras minúsculas, números ou hífens' };
+    return {
+      ok: false,
+      code: 'bad_name',
+      error: 'name deve ser jr-tarefa-<apelido> com 3 a 48 letras minúsculas, números ou hífens',
+    };
   }
   const description = meta.description ?? '';
-  if (!description) return { ok: false, error: 'faltou description no frontmatter' };
+  if (!description) return { ok: false, code: 'no_description', error: 'faltou description no frontmatter' };
   const parts = sections(text.slice(front[0].length));
   const steps = parts.get('passos');
-  if (!steps) return { ok: false, error: 'faltou a seção ## Passos' };
-  if (steps.length === 0) return { ok: false, error: 'a seção ## Passos não tem nenhum passo' };
+  if (!steps) return { ok: false, code: 'no_steps', error: 'faltou a seção ## Passos' };
+  if (steps.length === 0) return { ok: false, code: 'no_steps', error: 'a seção ## Passos não tem nenhum passo' };
   return {
     ok: true,
     name,
@@ -144,5 +152,11 @@ export function parseDraft(markdown: string): ParsedDraft {
 
 /** Replaces the frontmatter `name` (the review card lets the employee rename the task). */
 export function withDraftName(markdown: string, name: string): string {
-  return markdown.replace(/^(---\r?\n[\s\S]*?^name:)[^\r\n]*/m, `$1 ${name}`);
+  return markdown.replace(/^(---\r?\n[\s\S]*?^name:)[^\r\n]*/m, (_match, head: string) => `${head} ${name}`);
+}
+
+/** Replaces the frontmatter `description` with one line (the review card lets the employee edit it). */
+export function withDraftDescription(markdown: string, description: string): string {
+  const line = description.replace(/\s+/g, ' ').trim();
+  return markdown.replace(/^(---\r?\n[\s\S]*?^description:)[^\r\n]*/m, (_match, head: string) => `${head} ${line}`);
 }

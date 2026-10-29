@@ -56,6 +56,7 @@ export function createMainTeachDeps(): TeachHandlerDeps {
     },
     emitState: (event) => ipcBridge.teach.state.emit(event),
     emitDraft: (event) => ipcBridge.teach.draft.emit(event),
+    emitDraftRejected: (event) => ipcBridge.teach.draftRejected.emit(event),
     dir: path.join(app.getPath('userData'), TAUGHT_TASKS_DIRNAME),
   });
   setTeachSession(session);

@@ -14,7 +14,14 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { CdpBridgeHandle } from '@process/resources/builtinMcp/cdpBridge';
 import type { Recorder, RecorderState } from './recorder';
-import { buildDraftPrompt, parseDraft, withDraftName, type TeachDraft } from './skillDraft';
+import {
+  buildDraftPrompt,
+  parseDraft,
+  withDraftDescription,
+  withDraftName,
+  type DraftErrorCode,
+  type TeachDraft,
+} from './skillDraft';
 import { summarizeEvents } from './timeline';
 
 export type TeachStateEvent = { state: RecorderState; elapsedMs: number };
@@ -30,7 +37,13 @@ export type TeachStopResult = {
 
 export type TeachDraftEvent = { markdown: string; recordingId: string; draft: TeachDraft };
 
-export type TeachSaveDraftInput = { markdown: string; recordingId: string; name?: string };
+/** Main → renderer when the bot's draft was refused. Carries a code, never the draft. */
+export type TeachDraftRejectedEvent = { recordingId: string; error: DraftErrorCode };
+
+export type TeachSaveDraftInput = { markdown: string; recordingId: string; name?: string; description?: string };
+
+/** Error messages of saveDraft are codes the renderer maps to i18n. */
+export type TeachSaveErrorCode = DraftErrorCode | 'no_review';
 
 export type TeachSubmitResult = { ok: true; result: string } | { ok: false; error: string };
 
@@ -42,6 +55,7 @@ export type TeachSessionDeps = {
   offerSave(origin: string): void;
   emitState(event: TeachStateEvent): void;
   emitDraft(event: TeachDraftEvent): void;
+  emitDraftRejected(event: TeachDraftRejectedEvent): void;
   /** `<userData>/taught-tasks` (same base dir as the recorder). */
   dir: string;
   now?: () => number;
@@ -60,6 +74,8 @@ export type TeachSession = {
   submitDraft(markdown: string): Promise<TeachSubmitResult>;
   saveDraft(input: TeachSaveDraftInput): Promise<{ skillPath: string }>;
   takeOver(on: boolean): void;
+  /** Whether the employee currently holds the browser ("Assumir"), for renderer resync. */
+  takeOverState(): { on: boolean };
 };
 
 /** Reason surfaced to the agent (`browser locked: …`) while the employee drives. */
@@ -75,6 +91,8 @@ export const TEACH_ERRORS = {
 export const TAUGHT_TASKS_DIRNAME = 'taught-tasks';
 const TICK_MS = 1_000;
 
+const fail = (code: TeachSaveErrorCode): Error => new Error(code);
+
 export function createTeachSession(deps: TeachSessionDeps): TeachSession {
   const now = deps.now ?? Date.now;
   const tickMs = deps.tickMs ?? TICK_MS;
@@ -82,6 +100,7 @@ export function createTeachSession(deps: TeachSessionDeps): TeachSession {
   let startedAt = 0;
   let ticker: ReturnType<typeof setInterval> | null = null;
   let awaiting: { id: string; description: string } | null = null;
+  let takenOver = false;
 
   const requireRecorder = (): Recorder => {
     const recorder = deps.recorder();
@@ -130,6 +149,8 @@ export function createTeachSession(deps: TeachSessionDeps): TeachSession {
         awaiting = null;
       }
       const started = await recorder.start(trimmed);
+      // The recorder owns the browser lock now and releases it when it stops.
+      takenOver = false;
       description = trimmed;
       startedAt = now();
       stopTicker();
@@ -170,17 +191,21 @@ export function createTeachSession(deps: TeachSessionDeps): TeachSession {
     async submitDraft(markdown) {
       if (!awaiting) return { ok: false, error: TEACH_ERRORS.noReview };
       const parsed = parseDraft(markdown);
-      if (parsed.ok === false) return { ok: false, error: parsed.error };
+      if (parsed.ok === false) {
+        deps.emitDraftRejected({ recordingId: awaiting.id, error: parsed.code });
+        return { ok: false, error: parsed.error };
+      }
       const { ok: _ok, ...draft } = parsed;
       deps.emitDraft({ markdown, recordingId: awaiting.id, draft });
       return { ok: true, result: 'cartão de revisão exibido' };
     },
 
-    async saveDraft({ markdown, recordingId, name }) {
-      if (!awaiting || awaiting.id !== recordingId) throw new Error(TEACH_ERRORS.noReview);
-      const text = name ? withDraftName(markdown, name) : markdown;
+    async saveDraft({ markdown, recordingId, name, description: edited }) {
+      if (!awaiting || awaiting.id !== recordingId) throw fail('no_review');
+      let text = name ? withDraftName(markdown, name) : markdown;
+      if (edited !== undefined) text = withDraftDescription(text, edited);
       const parsed = parseDraft(text);
-      if (parsed.ok === false) throw new Error(parsed.error);
+      if (parsed.ok === false) throw fail(parsed.code);
       // recordingId came from the recorder (a UUID) and the name passed TAUGHT_SKILL_NAME_RE.
       const skillPath = path.join(deps.dir, recordingId, 'skill', parsed.name);
       await mkdir(skillPath, { recursive: true });
@@ -195,6 +220,9 @@ export function createTeachSession(deps: TeachSessionDeps): TeachSession {
       const bridge = deps.bridge();
       if (!bridge) throw new Error(TEACH_ERRORS.unavailable);
       bridge.setClientsLocked(on, on ? TAKE_OVER_REASON : undefined);
+      takenOver = on;
     },
+
+    takeOverState: () => ({ on: takenOver }),
   };
 }

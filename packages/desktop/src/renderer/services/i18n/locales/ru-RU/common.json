@@ -614,7 +614,7 @@
       "describe": {
         "title": "What does this task do?",
         "placeholder": "e.g. Download this month's invoice report from the city hall portal",
-        "hint": "Then do the task in the browser as usual. The recording stops at 10 minutes.",
+        "hint": "Then do the task in the browser as usual. The recording stops at 10 minutes, paused time included.",
         "start": "Start",
         "cancel": "Cancel",
         "startFailed": "Couldn't start recording. Try again."
@@ -649,8 +649,8 @@
         "save": "Save",
         "saved": "Task saved. Available in a new conversation.",
         "saveFailed": "Couldn't save the task.",
-        "error": "Couldn't save: {{error}}",
-        "askAgain": "Ask again"
+        "askAgain": "Ask again",
+        "description": "What it does"
       },
       "tasks": {
         "title": "My tasks",
@@ -660,6 +660,19 @@
         "deleteConfirm": "Delete this task?",
         "deleteFailed": "Couldn't delete the task.",
         "loadFailed": "Couldn't load the tasks."
+      },
+      "generating": {
+        "title": "Creating the task…",
+        "sendFailed": "Couldn't send it to the bot.",
+        "rejected": "The bot's draft wasn't valid. Ask again."
+      },
+      "errors": {
+        "too_large": "The draft is too long (over 64 KB).",
+        "no_frontmatter": "The draft is missing its header (name and description).",
+        "bad_name": "The name must start with jr-tarefa- and use only lowercase letters, numbers and hyphens (3 to 48).",
+        "no_description": "The task needs a description.",
+        "no_steps": "The draft has no steps.",
+        "no_review": "This recording is no longer waiting for review."
       }
     }
   }

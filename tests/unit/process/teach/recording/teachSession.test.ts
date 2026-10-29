@@ -67,6 +67,7 @@ const setup = async (recorder: Recorder | null = fakeRecorder()) => {
     offerSave: vi.fn(),
     emitState: vi.fn(),
     emitDraft: vi.fn(),
+    emitDraftRejected: vi.fn(),
     dir,
     now: () => 1_000,
   };
@@ -129,6 +130,9 @@ describe('teach session', () => {
     const result = await session.submitDraft(DRAFT.replace('## Passos', '## Etapas'));
     expect(result).toEqual({ ok: false, error: expect.stringContaining('Passos') });
     expect(deps.emitDraft).not.toHaveBeenCalled();
+    expect(deps.emitDraftRejected).toHaveBeenCalledWith({ recordingId: ID, error: 'no_steps' });
+    // The event is value-free: nothing of the draft goes to the renderer.
+    expect(JSON.stringify(deps.emitDraftRejected.mock.calls)).not.toContain('jr-tarefa-relatorio-nfs');
   });
 
   it('saves the draft as <dir>/<id>/skill/<name>/SKILL.md, applying a renamed name', async () => {
@@ -144,12 +148,28 @@ describe('teach session', () => {
     expect(await readFile(join(skillPath, 'SKILL.md'), 'utf8')).toContain('name: jr-tarefa-nfs-prefeitura');
   });
 
+  it('applies an edited description as one frontmatter line', async () => {
+    const { session } = await setup();
+    await session.start('Baixar NFs');
+    await session.stop();
+    const { skillPath } = await session.saveDraft({
+      markdown: DRAFT,
+      recordingId: ID,
+      description: 'Baixa as NFs\n do mês',
+    });
+    const saved = await readFile(join(skillPath, 'SKILL.md'), 'utf8');
+    expect(saved).toContain('description: Baixa as NFs do mês\nsource: taught');
+  });
+
   it('refuses to save for another recording or an invalid name', async () => {
     const { session } = await setup();
     await session.start('Baixar NFs');
     await session.stop();
-    await expect(session.saveDraft({ markdown: DRAFT, recordingId: '../x' })).rejects.toThrow();
-    await expect(session.saveDraft({ markdown: DRAFT, recordingId: ID, name: '../evil' })).rejects.toThrow();
+    await expect(session.saveDraft({ markdown: DRAFT, recordingId: '../x' })).rejects.toThrow('no_review');
+    await expect(session.saveDraft({ markdown: DRAFT, recordingId: ID, name: '../evil' })).rejects.toThrow('bad_name');
+    await expect(session.saveDraft({ markdown: DRAFT, recordingId: ID, description: '  ' })).rejects.toThrow(
+      'no_description'
+    );
   });
 
   it('discard removes the awaiting recording and forgets it', async () => {
@@ -183,12 +203,16 @@ describe('teach session', () => {
 
   it('take-over locks the agent out with a clear reason, and is refused while recording', async () => {
     const { session, setClientsLocked } = await setup();
+    expect(session.takeOverState()).toEqual({ on: false });
     session.takeOver(true);
+    expect(session.takeOverState()).toEqual({ on: true });
     expect(setClientsLocked).toHaveBeenLastCalledWith(true, TAKE_OVER_REASON);
     expect(TAKE_OVER_REASON).toContain('aguarde ele devolver');
     session.takeOver(false);
     expect(setClientsLocked).toHaveBeenLastCalledWith(false, undefined);
+    session.takeOver(true);
     await session.start('Baixar NFs');
+    expect(session.takeOverState()).toEqual({ on: false });
     expect(() => session.takeOver(false)).toThrow();
   });
 });

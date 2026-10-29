@@ -5,8 +5,8 @@
  */
 
 import { ipcBridge } from '@/common';
-import type { TeachDraftEvent, TeachStateEvent } from '@/common/adapter/ipcBridge';
-import { emitter } from '@/renderer/utils/emitter';
+import type { TeachDraftEvent, TeachDraftRejectedEvent, TeachStateEvent } from '@/common/adapter/ipcBridge';
+import { emitter, type SendBoxSendRequest } from '@/renderer/utils/emitter';
 import { useEffect, useSyncExternalStore } from 'react';
 
 /**
@@ -33,6 +33,10 @@ export type TeachUiState = {
   recordingId: string | null;
   prompt: string | null;
   draft: TeachDraftEvent | null;
+  /** The last message to the bot could not be sent (no send box, queue full, send error). */
+  sendFailed: boolean;
+  /** Code of the bot's last refused draft (shown on the generating card). */
+  draftError: TeachDraftRejectedEvent['error'] | null;
   takenOver: boolean;
   /** Conversation ids of the mounted card hosts, most recent last. */
   hosts: string[];
@@ -46,6 +50,8 @@ const initial: TeachUiState = {
   recordingId: null,
   prompt: null,
   draft: null,
+  sendFailed: false,
+  draftError: null,
   takenOver: false,
   hosts: [],
 };
@@ -58,12 +64,38 @@ const set = (patch: Partial<TeachUiState>): void => {
   listeners.forEach((listener) => listener());
 };
 
-const resetFlow = (): void => set({ phase: 'idle', elapsedMs: 0, recordingId: null, prompt: null, draft: null });
+const resetFlow = (): void =>
+  set({
+    phase: 'idle',
+    elapsedMs: 0,
+    recordingId: null,
+    prompt: null,
+    draft: null,
+    sendFailed: false,
+    draftError: null,
+  });
 
-/** Sends text as a normal user message of the teach conversation. */
+/**
+ * Sends text as a normal user message of the teach conversation. Failure (no send box of
+ * that conversation mounted, queue refused, send rejected) is recorded as `sendFailed`.
+ */
 export const sendToTeachConversation = (text: string): void => {
-  const target = state.conversationId ?? state.hosts.at(-1);
-  if (target) emitter.emit('sendbox.send', text, target);
+  const conversationId = state.conversationId ?? state.hosts.at(-1);
+  set({ sendFailed: false, draftError: null });
+  if (!conversationId) {
+    set({ sendFailed: true });
+    return;
+  }
+  const request: SendBoxSendRequest = {
+    text,
+    conversationId,
+    claimed: false,
+    onResult: (ok) => {
+      if (!ok) set({ sendFailed: true });
+    },
+  };
+  emitter.emit('sendbox.send', request);
+  if (!request.claimed) set({ sendFailed: true });
 };
 
 /** Stops the recording and asks the bot for a draft. Rejects when main could not stop. */
@@ -93,7 +125,11 @@ const onState = (event: TeachStateEvent): void => {
 };
 
 const onDraft = (event: TeachDraftEvent): void => {
-  set({ phase: 'review', draft: event, recordingId: event.recordingId });
+  set({ phase: 'review', draft: event, recordingId: event.recordingId, sendFailed: false, draftError: null });
+};
+
+const onDraftRejected = (event: TeachDraftRejectedEvent): void => {
+  if (state.phase === 'generating' && event.recordingId === state.recordingId) set({ draftError: event.error });
 };
 
 let subscribed = false;
@@ -102,6 +138,7 @@ const ensureSubscribed = (): void => {
   subscribed = true;
   ipcBridge.teach.state.on(onState);
   ipcBridge.teach.draft.on(onDraft);
+  ipcBridge.teach.draftRejected.on(onDraftRejected);
   ipcBridge.teach.available
     .invoke()
     .then((available) => set({ available }))
@@ -168,8 +205,15 @@ export const discardRecording = async (): Promise<void> => {
   }
 };
 
-/** The review is over (saved): forget the draft. */
-export const endReview = (): void => resetFlow();
+/** Reads main's take-over state (a reload must still show "Devolver ao bot"). */
+export const resyncTakeOver = async (): Promise<void> => {
+  try {
+    const { on } = await ipcBridge.teach.takeOverState.invoke();
+    set({ takenOver: on });
+  } catch {
+    // Keep what we have.
+  }
+};
 
 export const setTakenOver = async (on: boolean): Promise<void> => {
   await ipcBridge.teach.takeOver.invoke({ on });
@@ -180,4 +224,16 @@ export const setTakenOver = async (on: boolean): Promise<void> => {
 export const resetTeachUiForTests = (patch: Partial<TeachUiState> = {}): void => {
   state = { ...initial, ...patch };
   listeners.forEach((listener) => listener());
+};
+
+const KNOWN_ERRORS = ['too_large', 'no_frontmatter', 'bad_name', 'no_description', 'no_steps', 'no_review'] as const;
+export type TeachKnownError = (typeof KNOWN_ERRORS)[number];
+
+/**
+ * The known teach error code inside `message` (main sends codes; IPC may wrap them in
+ * "Error invoking …"), or null. Raw backend text is never shown to the employee.
+ */
+export const knownTeachError = (message: string | null | undefined): TeachKnownError | null => {
+  if (!message) return null;
+  return KNOWN_ERRORS.find((code) => new RegExp(`\\b${code}\\b`).test(message)) ?? null;
 };

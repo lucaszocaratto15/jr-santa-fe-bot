@@ -6,6 +6,7 @@
 
 import React, { useEffect } from 'react';
 import DescribeCard from './DescribeCard';
+import GeneratingCard from './GeneratingCard';
 import ReviewCard from './ReviewCard';
 import SecureCard from './SecureCard';
 import { registerTeachHost, useTeachUi } from './teachStore';
@@ -37,6 +38,7 @@ const TeachCardHost: React.FC<TeachCardHostProps> = ({ conversationId }) => {
   const ours = teach.conversationId === null || teach.conversationId === conversationId;
   if (!ours) return null;
   if (teach.phase === 'describing') return <DescribeCard />;
+  if (teach.phase === 'generating') return <GeneratingCard />;
   if (teach.phase === 'review' && teach.draft) {
     return <ReviewCard key={teach.draft.markdown} event={teach.draft} prompt={teach.prompt} />;
   }

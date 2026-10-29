@@ -37,7 +37,7 @@ import { allSupportedExts } from '@/renderer/services/FileService';
 import type { SessionRef } from '@/common/adapter/ipcBridge';
 import CrossSessionDisabledBanner from '@/renderer/components/chat/CrossSessionDisabledBanner';
 import { useCrossSessionMessageEnabled } from '@/renderer/hooks/chat/useCrossSessionMessageEnabled';
-import { emitter, useAddEventListener } from '@/renderer/utils/emitter';
+import { emitter, useAddEventListener, type SendBoxSendRequest } from '@/renderer/utils/emitter';
 import { getJrBot } from '@/renderer/pages/Jr/jrBots';
 import useSWR from 'swr';
 import { type ChatFileRef, isChatFileRef, uploadFileRef } from '@/common/types/chatFile';
@@ -368,15 +368,20 @@ const AionrsSendBox: React.FC<{
   };
 
   // Programmatic sends (teach cards) take the same path as Enter; queued while busy.
+  // executeCommand already shows its own failure toast; the result goes back to the caller.
   useAddEventListener(
     'sendbox.send',
-    (text: string, targetConversationId: string) => {
-      if (targetConversationId !== conversation_id) return;
+    (request: SendBoxSendRequest) => {
+      if (request.conversationId !== conversation_id) return;
+      request.claimed = true;
       if (isBusy) {
-        enqueue({ input: text, files: [] });
+        request.onResult(Boolean(enqueue({ input: request.text, files: [] })));
         return;
       }
-      void executeCommand({ input: text, files: [] }).catch(() => {});
+      executeCommand({ input: request.text, files: [] }).then(
+        () => request.onResult(true),
+        () => request.onResult(false)
+      );
     },
     [conversation_id, isBusy, enqueue, executeCommand]
   );

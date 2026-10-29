@@ -10,7 +10,7 @@ import { Alert, Button, Input, Message, Popconfirm } from '@arco-design/web-reac
 import { ListCheckbox } from '@icon-park/react';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { discardRecording, sendToTeachConversation } from './teachStore';
+import { discardRecording, knownTeachError, sendToTeachConversation, useTeachUi } from './teachStore';
 import styles from './TeachCards.module.css';
 
 type ReviewCardProps = {
@@ -28,7 +28,9 @@ type Busy = 'save' | 'discard' | null;
 const ReviewCard: React.FC<ReviewCardProps> = ({ event, prompt }) => {
   const { t } = useTranslation();
   const { draft } = event;
+  const { sendFailed } = useTeachUi();
   const [name, setName] = useState(draft.name);
+  const [description, setDescription] = useState(draft.description);
   const [busy, setBusy] = useState<Busy>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,14 +42,17 @@ const ReviewCard: React.FC<ReviewCardProps> = ({ event, prompt }) => {
         markdown: event.markdown,
         recordingId: event.recordingId,
         name: name.trim(),
+        description: description.trim(),
       });
       const imported = await ipcBridge.fs.importSkill.invoke({ skill_path: skillPath });
-      if (imported.failed?.length) throw new Error(imported.failed[0].code);
+      // Backend import codes are not shown as-is; the card falls back to the generic message.
+      if (imported.failed?.length) throw new Error('import_failed');
       // The skill is imported; the raw recording is no longer needed.
       await discardRecording().catch(() => {});
       Message.success(t('common.jr.teach.review.saved'));
     } catch (failure) {
-      setError(failure instanceof Error && failure.message ? failure.message : t('common.jr.teach.review.saveFailed'));
+      const code = knownTeachError(failure instanceof Error ? failure.message : String(failure));
+      setError(code ? t(`common.jr.teach.errors.${code}`) : t('common.jr.teach.review.saveFailed'));
       setBusy(null);
     }
   };
@@ -90,7 +95,14 @@ const ReviewCard: React.FC<ReviewCardProps> = ({ event, prompt }) => {
         aria-label={t('common.jr.teach.review.name')}
         addBefore={t('common.jr.teach.review.name')}
       />
-      <div className={styles.label}>{draft.description}</div>
+      <Input.TextArea
+        value={description}
+        onChange={setDescription}
+        disabled={busy !== null}
+        maxLength={300}
+        autoSize={{ minRows: 1, maxRows: 3 }}
+        aria-label={t('common.jr.teach.review.description')}
+      />
       {meta.length > 0 && (
         <dl className={styles.meta}>
           {meta.map((row) => (
@@ -109,7 +121,7 @@ const ReviewCard: React.FC<ReviewCardProps> = ({ event, prompt }) => {
       {error && (
         <Alert
           type='error'
-          content={t('common.jr.teach.review.error', { error })}
+          content={error}
           action={
             prompt ? (
               <Button size='mini' type='text' onClick={() => sendToTeachConversation(prompt)}>
@@ -119,6 +131,7 @@ const ReviewCard: React.FC<ReviewCardProps> = ({ event, prompt }) => {
           }
         />
       )}
+      {sendFailed && !error && <Alert type='warning' content={t('common.jr.teach.generating.sendFailed')} />}
       <div className={styles.actions}>
         <Popconfirm
           title={t('common.jr.teach.review.discardConfirm')}
@@ -136,7 +149,7 @@ const ReviewCard: React.FC<ReviewCardProps> = ({ event, prompt }) => {
         <Button
           type='primary'
           onClick={() => void save()}
-          disabled={busy !== null || !name.trim()}
+          disabled={busy !== null || !name.trim() || !description.trim()}
           loading={busy === 'save'}
         >
           {t('common.jr.teach.review.save')}

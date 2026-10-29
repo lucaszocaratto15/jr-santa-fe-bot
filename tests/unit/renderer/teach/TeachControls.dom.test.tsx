@@ -6,8 +6,9 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-const { takeOver, stop } = vi.hoisted(() => ({
+const { takeOver, takeOverState, stop } = vi.hoisted(() => ({
   takeOver: vi.fn(async (_input: { on: boolean }) => {}),
+  takeOverState: vi.fn(async () => ({ on: false })),
   stop: vi.fn(async () => ({ id: 'rec', timeline: '', description: 'x', secretOrigins: [], prompt: 'PROMPT' })),
 }));
 
@@ -18,6 +19,7 @@ vi.mock('@/common', () => ({
       state: { on: () => () => {} },
       draft: { on: () => () => {} },
       takeOver: { invoke: takeOver },
+      takeOverState: { invoke: takeOverState },
       stop: { invoke: stop },
     },
   },
@@ -43,13 +45,22 @@ describe('TeachControls', () => {
     expect(formatElapsed(600_000)).toBe('10:00');
   });
 
-  it('is hidden when teach is unavailable or no chat can show the cards', () => {
+  it('is hidden when teach is unavailable; Ensinar needs a chat that can show the cards', () => {
     resetTeachUiForTests({ available: false, hosts: ['c1'] });
-    const { rerender } = render(<TeachControls agentActive={false} />);
+    const { rerender } = render(<TeachControls agentActive />);
     expect(screen.queryByText('common.jr.teach.controls.teach')).toBeNull();
+    expect(screen.queryByText('common.jr.teach.controls.takeOver')).toBeNull();
     act(() => resetTeachUiForTests({ available: true, hosts: [] }));
-    rerender(<TeachControls agentActive={false} />);
+    rerender(<TeachControls agentActive />);
     expect(screen.queryByText('common.jr.teach.controls.teach')).toBeNull();
+    // Assumir does not depend on a mounted card host.
+    expect(screen.getByText('common.jr.teach.controls.takeOver')).toBeTruthy();
+  });
+
+  it('resyncs the take-over state from main on mount', async () => {
+    takeOverState.mockResolvedValueOnce({ on: true });
+    render(<TeachControls agentActive={false} />);
+    await waitFor(() => expect(screen.getByText('common.jr.teach.controls.giveBack')).toBeTruthy());
   });
 
   it('Ensinar opens the describe card', () => {

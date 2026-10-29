@@ -6,7 +6,7 @@
 
 import { Button, Message, Popconfirm } from '@arco-design/web-react';
 import { Pause, PlayOne, Record } from '@icon-park/react';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   discardRecording,
@@ -14,6 +14,7 @@ import {
   openDescribe,
   pauseRecording,
   resumeRecording,
+  resyncTakeOver,
   setTakenOver,
   useTeachUi,
 } from '@/renderer/pages/conversation/components/TeachCards/teachStore';
@@ -32,14 +33,20 @@ export const formatElapsed = (ms: number): string => {
 const ACTIVE_PHASES = new Set(['recording', 'paused', 'stopping', 'discarding']);
 
 /**
- * Browser nav bar slot: "Ensinar" (opens the describe card in the chat) and, while the agent
- * drives the browser, "Assumir" / "Devolver ao bot". Hidden when teach is unavailable
- * (CDP bridge off) or no chat that can show the teach cards is open.
+ * Browser nav bar slot: "Ensinar" (opens the describe card in the chat; needs a chat that can
+ * show the teach cards) and, while the agent drives the browser, "Assumir" / "Devolver ao
+ * bot". Hidden when teach is unavailable (CDP bridge off) or a recording is active.
  */
 const TeachControls: React.FC<{ agentActive: boolean }> = ({ agentActive }) => {
   const { t } = useTranslation();
   const teach = useTeachUi();
-  if (!teach.available || teach.hosts.length === 0 || ACTIVE_PHASES.has(teach.phase)) return null;
+  useEffect(() => {
+    void resyncTakeOver();
+  }, []);
+  if (!teach.available || ACTIVE_PHASES.has(teach.phase)) return null;
+  const canTeach = teach.hosts.length > 0;
+  const showTakeOver = agentActive || teach.takenOver;
+  if (!canTeach && !showTakeOver) return null;
 
   const toggleTakeOver = async () => {
     try {
@@ -51,19 +58,21 @@ const TeachControls: React.FC<{ agentActive: boolean }> = ({ agentActive }) => {
 
   return (
     <div className={styles.slot}>
-      {(agentActive || teach.takenOver) && (
+      {showTakeOver && (
         <Button size='small' type={teach.takenOver ? 'primary' : 'secondary'} onClick={() => void toggleTakeOver()}>
           {teach.takenOver ? t('common.jr.teach.controls.giveBack') : t('common.jr.teach.controls.takeOver')}
         </Button>
       )}
-      <Button
-        size='small'
-        icon={<Record theme='outline' size={14} />}
-        disabled={teach.phase !== 'idle'}
-        onClick={openDescribe}
-      >
-        {t('common.jr.teach.controls.teach')}
-      </Button>
+      {canTeach && (
+        <Button
+          size='small'
+          icon={<Record theme='outline' size={14} />}
+          disabled={teach.phase !== 'idle'}
+          onClick={openDescribe}
+        >
+          {t('common.jr.teach.controls.teach')}
+        </Button>
+      )}
     </div>
   );
 };

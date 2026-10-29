@@ -29,6 +29,7 @@ vi.mock('@/common', () => ({
       discard: channel('discard'),
       saveDraft: channel('saveDraft'),
       takeOver: channel('takeOver'),
+      takeOverState: channel('takeOverState'),
     },
   },
 }));
@@ -98,6 +99,7 @@ describe('vaultBridge', () => {
     initTeachBridge();
     setTeachSession(null);
     expect(await handlers.teachAvailable()).toBe(false);
+    expect(await handlers.takeOverState()).toEqual({ on: false });
     await expect(handlers.start({ description: 'x' })).rejects.toThrow(/indisponível/);
     const session = {
       available: vi.fn(() => true),
@@ -108,6 +110,7 @@ describe('vaultBridge', () => {
       discard: vi.fn(async () => {}),
       saveDraft: vi.fn(async () => ({ skillPath: '/s' })),
       takeOver: vi.fn(),
+      takeOverState: vi.fn(() => ({ on: true })),
     };
     setTeachSession(session as unknown as TeachSession);
     expect(await handlers.teachAvailable()).toBe(true);
@@ -122,6 +125,7 @@ describe('vaultBridge', () => {
     expect(session.saveDraft).toHaveBeenCalledWith(save);
     await handlers.takeOver({ on: true });
     expect(session.takeOver).toHaveBeenCalledWith(true);
+    expect(await handlers.takeOverState()).toEqual({ on: true });
     expect(session.pause).toHaveBeenCalled();
     expect(session.resume).toHaveBeenCalled();
     expect(session.discard).toHaveBeenCalled();
