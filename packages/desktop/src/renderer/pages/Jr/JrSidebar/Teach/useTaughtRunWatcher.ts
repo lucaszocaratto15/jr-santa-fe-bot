@@ -37,9 +37,9 @@ export function useTaughtRunWatcher(): void {
       } catch {
         return;
       }
-      if (!job || !taughtSkillFromPrompt(job.target.payload.text)) return;
+      if (!job || !taughtSkillFromPrompt(job.target?.payload?.text ?? '')) return;
       const conversationId = artifact.conversation_id;
-      const botId = job.metadata.agent_config?.assistant_id;
+      const botId = job.metadata?.agent_config?.assistant_id;
       queueConversationIntent(conversationId, { openBrowser: true });
       void navigate(`/conversation/${conversationId}${botId ? `?bot=${encodeURIComponent(botId)}` : ''}`);
       const notice = t('common.jr.teach.tasks.runningScheduled', { name: job.name });

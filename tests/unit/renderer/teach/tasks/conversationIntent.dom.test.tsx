@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import React from 'react';
 
 vi.mock('react-i18next', () => ({
@@ -54,6 +54,21 @@ describe('conversation intents', () => {
     first.unmount();
     render(<TeachCardHost conversationId='c1' />);
     expect(openBrowserTab).toHaveBeenCalledTimes(1);
+  });
+
+  it('a mounted TeachCardHost consumes an intent queued for its conversation at once', () => {
+    render(<TeachCardHost conversationId='c1' />);
+    expect(openBrowserTab).not.toHaveBeenCalled();
+    act(() => queueConversationIntent('c1', { openBrowser: true }));
+    expect(openBrowserTab).toHaveBeenCalledTimes(1);
+    expect(takeConversationIntent('c1')).toBeNull();
+  });
+
+  it('a mounted TeachCardHost leaves an intent queued for another conversation', () => {
+    render(<TeachCardHost conversationId='c1' />);
+    act(() => queueConversationIntent('c2', { openBrowser: true }));
+    expect(openBrowserTab).not.toHaveBeenCalled();
+    expect(takeConversationIntent('c2')).toEqual({ openBrowser: true });
   });
 
   it('ignores an intent queued for another conversation', () => {

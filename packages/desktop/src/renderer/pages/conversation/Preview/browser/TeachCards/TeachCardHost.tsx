@@ -10,7 +10,13 @@ import DescribeCard from './DescribeCard';
 import GeneratingCard from './GeneratingCard';
 import ReviewCard from './ReviewCard';
 import SecureCard from './SecureCard';
-import { openDescribe, registerTeachHost, takeConversationIntent, useTeachUi } from './teachStore';
+import {
+  openDescribe,
+  registerTeachHost,
+  takeConversationIntent,
+  useConversationIntentsVersion,
+  useTeachUi,
+} from './teachStore';
 import { dismissSecureRequest, resyncSecureRequests, useSecureRequests } from './useSecureRequests';
 
 type TeachCardHostProps = {
@@ -32,6 +38,8 @@ const TeachCardHost: React.FC<TeachCardHostProps> = ({ conversationId }) => {
   }, []);
   useEffect(() => registerTeachHost(conversationId), [conversationId]);
   const openBrowserTab = useOptionalPreviewContext()?.openBrowserTab;
+  // Re-checks when an intent is queued while this conversation is already on screen.
+  const intentsVersion = useConversationIntentsVersion();
   // Runs after registerTeachHost, so openDescribe targets this conversation.
   useEffect(() => {
     if (!openBrowserTab) return;
@@ -39,7 +47,7 @@ const TeachCardHost: React.FC<TeachCardHostProps> = ({ conversationId }) => {
     if (!intent) return;
     openBrowserTab(intent.url);
     if (intent.describe !== undefined) openDescribe(intent.describe);
-  }, [conversationId, openBrowserTab]);
+  }, [conversationId, openBrowserTab, intentsVersion]);
 
   const current = requests[0];
   if (current) {

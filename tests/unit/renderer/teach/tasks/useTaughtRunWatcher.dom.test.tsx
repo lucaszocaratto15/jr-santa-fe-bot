@@ -103,6 +103,16 @@ describe('useTaughtRunWatcher', () => {
     expect(takeConversationIntent('c1')).toBeNull();
   });
 
+  it('ignores a malformed job without a target payload', async () => {
+    getJob.mockResolvedValue({ id: 'job-1', name: 'x', metadata: {} });
+    renderHook(() => useTaughtRunWatcher());
+    emit(trigger());
+    await waitFor(() => expect(getJob).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(navigate).not.toHaveBeenCalled();
+    expect(takeConversationIntent('c1')).toBeNull();
+  });
+
   it('ignores skill_suggest artifacts', () => {
     renderHook(() => useTaughtRunWatcher());
     emit({ ...trigger(), kind: 'skill_suggest' } as unknown as IConversationArtifact);

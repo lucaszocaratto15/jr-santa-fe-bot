@@ -185,11 +185,26 @@ export const openDescribe = (prefill?: string): void => {
 export type ConversationIntent = { openBrowser: true; url?: string; describe?: string };
 
 const intents = new Map<string, ConversationIntent>();
+let intentsVersion = 0;
+const intentListeners = new Set<() => void>();
 
-/** Queues an intent for the next time `conversationId`'s card host mounts. */
+/**
+ * Queues an intent for `conversationId`'s card host: consumed at once when that host is
+ * already mounted (the conversation is on screen), else the next time it mounts.
+ */
 export const queueConversationIntent = (conversationId: string, intent: ConversationIntent): void => {
   intents.set(conversationId, intent);
+  intentsVersion += 1;
+  intentListeners.forEach((listener) => listener());
 };
+
+const subscribeIntents = (listener: () => void): (() => void) => {
+  intentListeners.add(listener);
+  return () => intentListeners.delete(listener);
+};
+
+/** Changes every time an intent is queued, so a mounted host can look for its own. */
+export const useConversationIntentsVersion = (): number => useSyncExternalStore(subscribeIntents, () => intentsVersion);
 
 /** The queued intent of `conversationId`, returned once and then cleared. */
 export const takeConversationIntent = (conversationId: string): ConversationIntent | null => {
