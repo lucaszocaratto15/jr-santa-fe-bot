@@ -36,6 +36,7 @@ const AdminContent: React.FC = () => {
           id: state.user.id,
           name: state.user.name,
           role: state.user.role,
+          title: state.user.title ?? null,
           revoked: false,
           createdAt: own.usage.startedAt,
           revokedAt: null,

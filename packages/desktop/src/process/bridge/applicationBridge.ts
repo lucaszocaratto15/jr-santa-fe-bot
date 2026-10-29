@@ -140,6 +140,7 @@ export function initApplicationBridge(): void {
   ipcBridge.jr.admin.revoke.provider((input) => getJrAccessController().revoke(input));
   ipcBridge.jr.admin.setBlocked.provider((input) => getJrAccessController().setBlocked(input));
   ipcBridge.jr.admin.updatePolicy.provider((input) => getJrAccessController().updatePolicy(input));
+  ipcBridge.jr.admin.setTitle.provider((input) => getJrAccessController().setEmployeeTitle(input));
 
   ipcBridge.application.restart.provider(async () => {
     // Backend subprocess shutdown is handled by backendManager.stop() in the

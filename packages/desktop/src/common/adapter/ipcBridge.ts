@@ -197,6 +197,9 @@ export const jr = {
       { tokenLimit: number | null; accessStart: string | null; accessEnd: string | null },
       { employeeId: string; tokenLimit: number | null; accessStart: string | null; accessEnd: string | null }
     >('jr-admin-update-policy'),
+    setTitle: bridge.buildProvider<{ title: string | null }, { employeeId: string; title: string | null }>(
+      'jr-admin-set-title'
+    ),
   },
 };
 
