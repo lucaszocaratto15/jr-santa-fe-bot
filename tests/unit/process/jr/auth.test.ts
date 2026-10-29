@@ -22,7 +22,7 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
-function setup(initial: JrStoredSession | null = null) {
+function setup(initial: JrStoredSession | null = null, onOwnerChange?: () => Promise<void>) {
   let data = initial;
   const store = {
     read: vi.fn(async () => data),
@@ -40,7 +40,7 @@ function setup(initial: JrStoredSession | null = null) {
   const configureCore = vi.fn(async () => {});
   const stopCore = vi.fn(async () => {});
   const onChange = vi.fn();
-  const controller = new JrAccessController({ url, store, request, configureCore, stopCore, onChange });
+  const controller = new JrAccessController({ url, store, request, configureCore, stopCore, onChange, onOwnerChange });
   return { controller, store, request, configureCore, stopCore, onChange };
 }
 
@@ -610,4 +610,145 @@ it('does not restore access when response JSON arrives after a concurrent logout
   await pending;
   expect(controller.state.status).toBe('signed-out');
   expect(configureCore).not.toHaveBeenCalled();
+});
+
+describe('stage 1 client states and admin calls', () => {
+  const replaced = () => Response.json({ error: { code: 'session_replaced' } }, { status: 401 });
+
+  it('session_replaced 401 publishes revoked with the replaced notice and stops the core', async () => {
+    const { controller, request, stopCore } = setup(stored);
+    await controller.initialize();
+    request.mockResolvedValueOnce(replaced());
+    await controller.refresh();
+    expect(controller.state).toEqual({ status: 'revoked', user: null, notice: 'replaced' });
+    expect(stopCore).toHaveBeenCalled();
+  });
+
+  it('session_replaced from the local proxy publishes the replaced notice', async () => {
+    const { controller } = setup(stored);
+    await controller.initialize();
+    applyJrProxyDenial(controller, token, { status: 401, code: 'session_replaced' });
+    await vi.waitFor(() => expect(controller.state.status).toBe('revoked'));
+    expect(controller.state.notice).toBe('replaced');
+  });
+
+  it('plain 401 still publishes revoked without a notice', async () => {
+    const { controller, request } = setup(stored);
+    await controller.initialize();
+    request.mockResolvedValueOnce(Response.json({ error: { code: 'invalid_session' } }, { status: 401 }));
+    await controller.refresh();
+    expect(controller.state).toEqual({ status: 'revoked', user: null });
+  });
+
+  it('employees parse maxDevices and blockedReason, defaulting for older servers', async () => {
+    const { controller, request } = setup(stored);
+    request.mockResolvedValueOnce(Response.json({ user: { ...user, role: 'admin' } }));
+    await controller.initialize();
+    const base = {
+      ...user,
+      createdAt: '2026-10-22T15:00:00Z',
+      revoked: false,
+      revokedAt: null,
+      devices: [],
+      usage: null,
+    };
+    request.mockResolvedValueOnce(
+      Response.json({
+        employees: [
+          { ...base, maxDevices: 3, blockedReason: 'auto_hours' },
+          { ...base, id: 'employee-2' },
+        ],
+      })
+    );
+    const employees = await controller.listEmployees();
+    expect(employees[0]).toMatchObject({ maxDevices: 3, blockedReason: 'auto_hours' });
+    expect(employees[1]).toMatchObject({ maxDevices: 1, blockedReason: null });
+  });
+
+  it('disconnectDevice posts to the device route and validates ids', async () => {
+    const { controller, request } = setup(stored);
+    request.mockResolvedValueOnce(Response.json({ user: { ...user, role: 'admin' } }));
+    await controller.initialize();
+    request.mockResolvedValueOnce(Response.json({ disconnected: true }));
+    await controller.disconnectDevice({ employeeId: 'employee-2', deviceId: 'device-12345' });
+    const call = request.mock.calls.at(-1)!;
+    expect(String(call[0])).toMatch(/\/admin\/employees\/employee-2\/devices\/device-12345\/disconnect$/);
+    expect(call[1]?.method).toBe('POST');
+    await expect(controller.disconnectDevice({ employeeId: 'employee-2', deviceId: 'short' })).rejects.toThrow(
+      'JR_ACCESS_INVALID_DEVICE'
+    );
+    await expect(controller.disconnectDevice({ employeeId: '../x', deviceId: 'device-12345' })).rejects.toThrow(
+      'JR_ACCESS_INVALID_EMPLOYEE'
+    );
+  });
+});
+
+describe('PC handover to a new employee', () => {
+  const next = { ...user, id: 'employee-2', name: 'Bia' };
+  const unboundPrior = { ...stored, token: null };
+
+  it('handover login wipes before persisting the new owner', async () => {
+    const order: string[] = [];
+    const onOwnerChange = vi.fn(async () => {
+      order.push('wipe');
+    });
+    const { controller, request, store, configureCore } = setup(unboundPrior, onOwnerChange);
+    await controller.initialize();
+    store.write.mockImplementation(async (value: JrStoredSession) => {
+      order.push(`write:${value.ownerId}`);
+    });
+    configureCore.mockImplementation(async () => {
+      order.push('configure');
+    });
+    request.mockResolvedValueOnce(Response.json({ token, user: next, handover: true }));
+    await controller.login({ code: 'a-company-invite' });
+    expect(onOwnerChange).toHaveBeenCalledOnce();
+    expect(order).toEqual(['wipe', 'write:employee-2', 'configure']);
+    expect(controller.state).toEqual({ status: 'authenticated', user: next });
+    expect(JSON.parse(String(request.mock.calls[0][1]?.body)).employeeId).toBe('employee-1');
+  });
+
+  it('handover wipe failure keeps the old binding and logs the token out', async () => {
+    const onOwnerChange = vi.fn(async () => {
+      throw new Error('EBUSY');
+    });
+    const { controller, request, store, configureCore } = setup(unboundPrior, onOwnerChange);
+    await controller.initialize();
+    request.mockResolvedValueOnce(Response.json({ token, user: next, handover: true }));
+    await expect(controller.login({ code: 'a-company-invite' })).rejects.toThrow('JR_ACCESS_HANDOVER_FAILED');
+    expect(store.write.mock.calls.some(([value]) => value.ownerId === 'employee-2')).toBe(false);
+    expect(configureCore).not.toHaveBeenCalled();
+    const logout = request.mock.calls.find(([input]) => String(input).endsWith('/auth/logout'));
+    expect(logout?.[1]?.method).toBe('POST');
+    expect(new Headers(logout?.[1]?.headers).get('Authorization')).toBe(`Bearer ${token}`);
+    expect(controller.state.status).toBe('signed-out');
+  });
+
+  it('handover without a wipe handler fails closed', async () => {
+    const { controller, request, store } = setup(unboundPrior);
+    await controller.initialize();
+    request.mockResolvedValueOnce(Response.json({ token, user: next, handover: true }));
+    await expect(controller.login({ code: 'a-company-invite' })).rejects.toThrow('JR_ACCESS_HANDOVER_FAILED');
+    expect(store.write.mock.calls.some(([value]) => value.ownerId === 'employee-2')).toBe(false);
+  });
+
+  it('different owner without handover flag is still refused', async () => {
+    const onOwnerChange = vi.fn(async () => {});
+    const { controller, request, store } = setup(unboundPrior, onOwnerChange);
+    await controller.initialize();
+    request.mockResolvedValueOnce(Response.json({ token, user: next }));
+    await expect(controller.login({ code: 'a-company-invite' })).rejects.toThrow('JR_ACCESS_DEVICE_BOUND');
+    expect(onOwnerChange).not.toHaveBeenCalled();
+    expect(store.write.mock.calls.some(([value]) => value.ownerId === 'employee-2')).toBe(false);
+  });
+
+  it('a handover flag for the same owner does not wipe', async () => {
+    const onOwnerChange = vi.fn(async () => {});
+    const { controller, request } = setup(unboundPrior, onOwnerChange);
+    await controller.initialize();
+    request.mockResolvedValueOnce(Response.json({ token, user, handover: true }));
+    await controller.login({ code: 'a-company-invite' });
+    expect(onOwnerChange).not.toHaveBeenCalled();
+    expect(controller.state.status).toBe('authenticated');
+  });
 });

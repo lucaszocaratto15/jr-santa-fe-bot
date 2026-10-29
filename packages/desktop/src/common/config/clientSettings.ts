@@ -127,7 +127,7 @@ export type JrAccessState = {
     | 'pilot';
   user: JrAccessUser | null;
   /** Set when sign-in is waiting on OS encryption rather than a missing service URL. */
-  notice?: 'storage';
+  notice?: 'storage' | 'replaced';
 };
 export type JrAdminEmployee = JrAccessUser & {
   email?: string | null;
@@ -138,6 +138,10 @@ export type JrAdminEmployee = JrAccessUser & {
   revokedAt: string | null;
   blocked: boolean;
   blockedAt: string | null;
+  /** Why the server blocked the account on its own; null for manual blocks. Missing on older servers. */
+  blockedReason: 'auto_volume' | 'auto_hours' | null;
+  /** How many PCs the employee may use at once. Defaults to 1 on older servers. */
+  maxDevices: number;
   tokenLimit: number | null;
   accessStart: string | null;
   accessEnd: string | null;

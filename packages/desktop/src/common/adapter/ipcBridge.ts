@@ -194,9 +194,18 @@ export const jr = {
       'jr-admin-set-blocked'
     ),
     updatePolicy: bridge.buildProvider<
-      { tokenLimit: number | null; accessStart: string | null; accessEnd: string | null },
-      { employeeId: string; tokenLimit: number | null; accessStart: string | null; accessEnd: string | null }
+      { tokenLimit: number | null; accessStart: string | null; accessEnd: string | null; maxDevices: number },
+      {
+        employeeId: string;
+        tokenLimit: number | null;
+        accessStart: string | null;
+        accessEnd: string | null;
+        maxDevices: number;
+      }
     >('jr-admin-update-policy'),
+    disconnectDevice: bridge.buildProvider<void, { employeeId: string; deviceId: string }>(
+      'jr-admin-disconnect-device'
+    ),
   },
 };
 

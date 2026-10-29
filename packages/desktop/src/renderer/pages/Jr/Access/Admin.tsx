@@ -1,7 +1,7 @@
 import { ipcBridge } from '@/common';
 import type { JrAdminEmployee, JrInvite } from '@/common/config/clientSettings';
-import { Alert, Button, Input, Modal, Spin } from '@arco-design/web-react';
-import React, { useState } from 'react';
+import { Alert, Button, Input, InputNumber, Modal, Popconfirm, Spin } from '@arco-design/web-react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import useSWR from 'swr';
 import { isJrAdmin, useJrAccess } from './context';
@@ -12,6 +12,57 @@ const statusKey = (person: JrAdminEmployee) => {
   if (person.revoked) return 'common.jr.access.revokedStatus';
   if (person.blocked) return 'common.jr.access.blockedStatus';
   return 'common.jr.access.activeStatus';
+};
+
+const formatTime = (iso: string | null) => {
+  const date = iso ? new Date(iso) : null;
+  if (!date || Number.isNaN(date.getTime())) return '--:--';
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+};
+
+const DISMISSED_KEY = 'jr.admin.dismissedBlocks';
+
+const readDismissed = (): string[] => {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(DISMISSED_KEY) ?? '[]');
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : [];
+  } catch {
+    return [];
+  }
+};
+
+const MIN_DEVICES = 1;
+const MAX_DEVICES = 5;
+
+const MaxDevicesField: React.FC<{
+  person: JrAdminEmployee;
+  disabled: boolean;
+  onSave: (person: JrAdminEmployee, maxDevices: number) => void;
+}> = ({ person, disabled, onSave }) => {
+  const { t } = useTranslation();
+  const [draft, setDraft] = useState<number>(person.maxDevices ?? MIN_DEVICES);
+  useEffect(() => setDraft(person.maxDevices), [person.maxDevices]);
+  const commit = () => {
+    if (draft !== person.maxDevices) onSave(person, draft);
+  };
+  return (
+    <label className={styles.deviceLimit}>
+      <span>{t('common.jr.access.maxDevicesLabel')}</span>
+      <InputNumber
+        size='mini'
+        min={MIN_DEVICES}
+        max={MAX_DEVICES}
+        precision={0}
+        hideControl
+        value={draft}
+        disabled={disabled}
+        aria-label={t('common.jr.access.maxDevicesLabel')}
+        onChange={(value) => setDraft(typeof value === 'number' ? value : person.maxDevices)}
+        onBlur={commit}
+        onKeyDown={(event) => (event as KeyboardEvent).key === 'Enter' && commit()}
+      />
+    </label>
+  );
 };
 
 const AdminContent: React.FC = () => {
@@ -41,6 +92,8 @@ const AdminContent: React.FC = () => {
           revokedAt: null,
           blocked: false,
           blockedAt: null,
+          blockedReason: null,
+          maxDevices: 1,
           tokenLimit: null,
           accessStart: null,
           accessEnd: null,
@@ -124,6 +177,52 @@ const AdminContent: React.FC = () => {
       setPending('');
     }
   };
+  const savePolicy = async (person: JrAdminEmployee, maxDevices: number) => {
+    if (pending) return;
+    setPending(person.id);
+    setFailed(false);
+    try {
+      await ipcBridge.jr.admin.updatePolicy.invoke({
+        employeeId: person.id,
+        tokenLimit: person.tokenLimit,
+        accessStart: person.accessStart,
+        accessEnd: person.accessEnd,
+        maxDevices,
+      });
+    } catch {
+      setFailed(true);
+    } finally {
+      setPending('');
+      await mutate().catch(() => {});
+    }
+  };
+  const disconnectDevice = async (person: JrAdminEmployee, deviceId: string) => {
+    if (pending) return;
+    setPending(person.id);
+    setFailed(false);
+    try {
+      await ipcBridge.jr.admin.disconnectDevice.invoke({ employeeId: person.id, deviceId });
+      await mutate();
+    } catch {
+      setFailed(true);
+    } finally {
+      setPending('');
+    }
+  };
+  const [dismissed, setDismissed] = useState<string[]>(readDismissed);
+  const blockKey = (person: JrAdminEmployee) => `${person.id}:${person.blockedAt}`;
+  const dismissBlock = (person: JrAdminEmployee) => {
+    const next = [...dismissed, blockKey(person)];
+    setDismissed(next);
+    try {
+      localStorage.setItem(DISMISSED_KEY, JSON.stringify(next));
+    } catch {
+      // Dismissal then only lasts for this session.
+    }
+  };
+  const autoBlocked = people.filter(
+    (person) => person.blocked && !person.revoked && person.blockedReason && !dismissed.includes(blockKey(person))
+  );
   const copy = async () => {
     if (!invite) return;
     try {
@@ -157,6 +256,33 @@ const AdminContent: React.FC = () => {
         <p className={styles.hint}>{t('common.jr.access.noPeople')}</p>
       ) : (
         <>
+          {autoBlocked.map((person) => (
+            <Alert
+              key={person.id}
+              type='warning'
+              content={t(
+                person.blockedReason === 'auto_hours'
+                  ? 'common.jr.access.autoBlockedHours'
+                  : 'common.jr.access.autoBlockedVolume',
+                { name: person.name, time: formatTime(person.blockedAt) }
+              )}
+              action={
+                <>
+                  <Button
+                    size='mini'
+                    disabled={Boolean(pending)}
+                    loading={pending === person.id}
+                    onClick={() => void setBlocked(person)}
+                  >
+                    {t('common.jr.access.unblockAction')}
+                  </Button>
+                  <Button size='mini' type='text' onClick={() => dismissBlock(person)}>
+                    {t('common.jr.access.dismissAction')}
+                  </Button>
+                </>
+              }
+            />
+          ))}
           <TeamUsage people={people} self={self} />
           <div className={styles.list}>
             {people.map((person) => (
@@ -202,6 +328,32 @@ const AdminContent: React.FC = () => {
                     >
                       {t('common.jr.access.revokeAction')}
                     </Button>
+                  </div>
+                )}
+                {person.role === 'employee' && !person.revoked && (
+                  <div className={styles.rowDevices}>
+                    <MaxDevicesField
+                      person={person}
+                      disabled={Boolean(pending)}
+                      onSave={(p, n) => void savePolicy(p, n)}
+                    />
+                    {(person.devices ?? []).map((device) => (
+                      <div key={device.id} className={styles.device}>
+                        <span className={styles.rowMeta}>{device.name}</span>
+                        {device.revokedAt === null && (
+                          <Popconfirm
+                            title={t('common.jr.access.disconnectDevice')}
+                            okText={t('common.confirm')}
+                            cancelText={t('common.cancel')}
+                            onOk={() => disconnectDevice(person, device.id)}
+                          >
+                            <Button size='mini' type='text' className={styles.dangerQuiet} disabled={Boolean(pending)}>
+                              {t('common.jr.access.disconnectDevice')}
+                            </Button>
+                          </Popconfirm>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 )}
               </article>

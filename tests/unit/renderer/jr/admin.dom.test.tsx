@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { SWRConfig } from 'swr';
 import type { JrAccessState } from '@/common/config/clientSettings';
@@ -10,12 +10,20 @@ const mocks = vi.hoisted(() => ({
   revoke: vi.fn(),
   updatePolicy: vi.fn(),
   setBlocked: vi.fn(),
+  disconnectDevice: vi.fn(),
+  accessStatus: vi.fn(),
+  login: vi.fn(),
 }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'pt-BR' } }) }));
 vi.mock('@/common', () => ({
   ipcBridge: {
     jr: {
+      accessStatus: { invoke: mocks.accessStatus },
+      accessChanged: { on: () => () => {} },
+      login: { invoke: mocks.login },
+      logout: { invoke: vi.fn() },
       admin: {
+        disconnectDevice: { invoke: mocks.disconnectDevice },
         list: { invoke: mocks.list },
         createInvite: { invoke: mocks.invite },
         reissue: { invoke: mocks.reissue },
@@ -28,6 +36,7 @@ vi.mock('@/common', () => ({
 }));
 import { JrAccessContext } from '@/renderer/pages/Jr/Access/context';
 import JrAdmin from '@/renderer/pages/Jr/Access/Admin';
+import JrAccessGate from '@/renderer/pages/Jr/Access';
 const show = (role: 'admin' | 'employee', id = 'staff-1') =>
   render(
     <SWRConfig value={{ provider: () => new Map() }}>
@@ -42,6 +51,7 @@ const show = (role: 'admin' | 'employee', id = 'staff-1') =>
     </SWRConfig>
   );
 beforeEach(() => {
+  localStorage.clear();
   vi.resetAllMocks();
   mocks.list.mockResolvedValue([]);
 });
@@ -182,4 +192,131 @@ it('reports a block failure and keeps the employee on the list', async () => {
   expect(await screen.findByText('common.jr.access.actionError')).toBeInTheDocument();
   expect(mocks.setBlocked).toHaveBeenCalledWith({ employeeId: 'person-1', blocked: true });
   expect(screen.getByRole('heading', { name: 'Ana' })).toBeInTheDocument();
+});
+
+const base = { role: 'employee', revoked: false, blocked: false, maxDevices: 1, devices: [] };
+it('lists auto-blocked employees in a banner and unblocks with setBlocked(false)', async () => {
+  mocks.list.mockResolvedValue([
+    { ...base, id: 'p1', name: 'Ana', blocked: true, blockedAt: '2026-10-29T15:30:00Z', blockedReason: 'auto_volume' },
+    { ...base, id: 'p2', name: 'Beto', blocked: true, blockedAt: '2026-10-29T15:30:00Z', blockedReason: 'auto_hours' },
+  ]);
+  mocks.setBlocked.mockResolvedValue(undefined);
+  show('admin', 'owner');
+  const alerts = await screen.findAllByRole('alert');
+  expect(alerts).toHaveLength(2);
+  const unblock = within(alerts[0]).getByRole('button', { name: 'common.jr.access.unblockAction' });
+  fireEvent.click(unblock);
+  await waitFor(() => expect(mocks.setBlocked).toHaveBeenCalledWith({ employeeId: 'p1', blocked: false }));
+});
+it('dismisses an auto-block banner until a new auto block appears', async () => {
+  const blocked = {
+    ...base,
+    id: 'p1',
+    name: 'Ana',
+    blocked: true,
+    blockedAt: '2026-10-29T15:30:00Z',
+    blockedReason: 'auto_volume',
+  };
+  mocks.list.mockResolvedValue([blocked]);
+  const view = show('admin', 'owner');
+  const alert = await screen.findByRole('alert');
+  fireEvent.click(within(alert).getByRole('button', { name: 'common.jr.access.dismissAction' }));
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  view.unmount();
+  const again = show('admin', 'owner');
+  expect(await screen.findByRole('heading', { name: 'Ana' })).toBeInTheDocument();
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  again.unmount();
+  mocks.list.mockResolvedValue([{ ...blocked, blockedAt: '2026-10-30T09:00:00Z' }]);
+  show('admin', 'owner');
+  expect(await screen.findByRole('alert')).toBeInTheDocument();
+});
+it('shows no banner for manual blocks', async () => {
+  mocks.list.mockResolvedValue([
+    { ...base, id: 'p1', name: 'Ana', blocked: true, blockedAt: '2026-10-29T15:30:00Z', blockedReason: null },
+  ]);
+  show('admin', 'owner');
+  expect(await screen.findByRole('heading', { name: 'Ana' })).toBeInTheDocument();
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});
+it('offers disconnect only for active devices and calls disconnectDevice after confirming', async () => {
+  mocks.list.mockResolvedValue([
+    {
+      ...base,
+      id: 'p1',
+      name: 'Ana',
+      devices: [
+        {
+          id: 'd1',
+          name: 'PC-A',
+          lastSeenAt: '2026-10-29T10:00:00Z',
+          expiresAt: '2026-11-29T10:00:00Z',
+          revokedAt: null,
+        },
+        {
+          id: 'd2',
+          name: 'PC-B',
+          lastSeenAt: '2026-10-28T10:00:00Z',
+          expiresAt: '2026-11-29T10:00:00Z',
+          revokedAt: '2026-10-29T09:00:00Z',
+        },
+      ],
+    },
+  ]);
+  mocks.disconnectDevice.mockResolvedValue(undefined);
+  show('admin', 'owner');
+  const buttons = await screen.findAllByRole('button', { name: 'common.jr.access.disconnectDevice' });
+  expect(buttons).toHaveLength(1);
+  fireEvent.click(buttons[0]);
+  fireEvent.click(await screen.findByRole('button', { name: 'common.confirm' }));
+  await waitFor(() => expect(mocks.disconnectDevice).toHaveBeenCalledWith({ employeeId: 'p1', deviceId: 'd1' }));
+});
+it('saves the PC limit through updatePolicy keeping the other fields, and hides it for the owner', async () => {
+  mocks.list.mockResolvedValue([
+    {
+      ...base,
+      id: 'p1',
+      name: 'Ana',
+      tokenLimit: 9000,
+      accessStart: '08:00',
+      accessEnd: '18:00',
+    },
+    { ...base, id: 'owner', name: 'Dono', role: 'admin' },
+  ]);
+  mocks.updatePolicy.mockResolvedValue(undefined);
+  show('admin', 'owner');
+  const fields = await screen.findAllByLabelText('common.jr.access.maxDevicesLabel');
+  expect(fields).toHaveLength(1);
+  fireEvent.change(fields[0], { target: { value: '3' } });
+  fireEvent.blur(fields[0]);
+  await waitFor(() =>
+    expect(mocks.updatePolicy).toHaveBeenCalledWith({
+      employeeId: 'p1',
+      tokenLimit: 9000,
+      accessStart: '08:00',
+      accessEnd: '18:00',
+      maxDevices: 3,
+    })
+  );
+});
+it('shows the replaced message on the login screen', async () => {
+  mocks.accessStatus.mockResolvedValue({ status: 'revoked', user: null, notice: 'replaced' });
+  render(
+    <JrAccessGate>
+      <div />
+    </JrAccessGate>
+  );
+  expect(await screen.findByText('common.jr.access.replaced')).toBeInTheDocument();
+});
+it('maps a handover failure to its own message', async () => {
+  mocks.accessStatus.mockResolvedValue({ status: 'signed-out', user: null });
+  mocks.login.mockRejectedValue(new Error('JR_ACCESS_HANDOVER_FAILED'));
+  render(
+    <JrAccessGate>
+      <div />
+    </JrAccessGate>
+  );
+  fireEvent.change(await screen.findByLabelText('common.jr.access.code'), { target: { value: 'abc' } });
+  fireEvent.click(screen.getByRole('button', { name: 'common.jr.access.enter' }));
+  expect(await screen.findByText('common.jr.access.handoverFailed')).toBeInTheDocument();
 });

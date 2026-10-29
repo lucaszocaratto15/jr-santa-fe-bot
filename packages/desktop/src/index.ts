@@ -935,6 +935,21 @@ const handleAppReady = async (): Promise<void> => {
         throw new Error('JR_ACCESS_PROFILE_UNBOUND');
       }
     },
+    // Handover wipe: the previous employee's teach vault and bot browser profile must not
+    // reach the next owner. Errors propagate so the login fails closed.
+    onOwnerChange: async () => {
+      // Stop the core first; its process-tree kill also ends the Chrome MCP that holds the profile.
+      await stopJrRuntime();
+      const { getSystemDir } = await import('./process/utils/initStorage');
+      const userData = app.getPath('userData');
+      const wipe = { recursive: true, force: true };
+      await fs.promises.rm(path.join(userData, 'jr-vault'), wipe);
+      // Same base the renderer passes to createChromeDraft (backend cache_dir = getSystemDir().cacheDir).
+      // On macOS that is a CLI-safe symlink to <userData>/config; also remove the real path,
+      // sequentially, so a custom cache dir or a broken symlink still leaves nothing behind.
+      await fs.promises.rm(path.join(getSystemDir().cacheDir, 'jr-chrome-profile'), wipe);
+      await fs.promises.rm(path.join(userData, 'config', 'jr-chrome-profile'), wipe);
+    },
     onChange: (state) => ipcBridge.jr.accessChanged.emit(state),
     onDiagnostic: (cause) => {
       console.warn(`[JR] ${cause}`);

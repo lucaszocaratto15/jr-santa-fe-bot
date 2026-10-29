@@ -13,7 +13,14 @@ const JrAccessGate: React.FC<React.PropsWithChildren> = ({ children }) => {
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<
-    'invalidCode' | 'profileUnbound' | 'deviceBound' | 'storageUnavailable' | 'blocked' | 'outsideHours' | null
+    | 'invalidCode'
+    | 'profileUnbound'
+    | 'deviceBound'
+    | 'storageUnavailable'
+    | 'blocked'
+    | 'outsideHours'
+    | 'handoverFailed'
+    | null
   >(null);
   const refresh = useCallback(async () => {
     try {
@@ -55,7 +62,9 @@ const JrAccessGate: React.FC<React.PropsWithChildren> = ({ children }) => {
                 ? 'blocked'
                 : message.includes('JR_ACCESS_OUTSIDE_HOURS')
                   ? 'outsideHours'
-                  : 'invalidCode'
+                  : message.includes('JR_ACCESS_HANDOVER_FAILED')
+                    ? 'handoverFailed'
+                    : 'invalidCode'
       );
     } finally {
       setBusy(false);
@@ -66,17 +75,19 @@ const JrAccessGate: React.FC<React.PropsWithChildren> = ({ children }) => {
   const message =
     state.notice === 'storage'
       ? 'common.jr.access.storageUnavailable'
-      : state.status === 'revoked'
-        ? 'common.jr.access.revoked'
-        : state.status === 'blocked'
-          ? 'common.jr.access.blocked'
-          : state.status === 'outside-hours'
-            ? 'common.jr.access.outsideHours'
-            : state.status === 'offline'
-              ? 'common.jr.access.offline'
-              : state.status === 'unconfigured'
-                ? 'common.jr.access.unconfigured'
-                : null;
+      : state.notice === 'replaced'
+        ? 'common.jr.access.replaced'
+        : state.status === 'revoked'
+          ? 'common.jr.access.revoked'
+          : state.status === 'blocked'
+            ? 'common.jr.access.blocked'
+            : state.status === 'outside-hours'
+              ? 'common.jr.access.outsideHours'
+              : state.status === 'offline'
+                ? 'common.jr.access.offline'
+                : state.status === 'unconfigured'
+                  ? 'common.jr.access.unconfigured'
+                  : null;
   return (
     <main className={styles.page}>
       <section className={styles.login} aria-labelledby='jr-access-title'>

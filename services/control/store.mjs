@@ -2,9 +2,14 @@ import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypt
 import { chmodSync, mkdirSync } from 'node:fs';
 import { dirname, isAbsolute } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { DENIAL_EPISODE_MS, HOURS_DENIALS_LIMIT, VOLUME_FLOOR_TOKENS, volumeThreshold } from './autoBlock.mjs';
 import { httpError } from './validation.mjs';
 
 const DAY = 86_400_000;
+const HOUR = 3_600_000;
+/** Request and denial rows older than this are deleted. */
+const RETENTION_MS = 183 * DAY;
+const BASELINE_DAYS = 14;
 const ACCESS_TIME_ZONE = 'America/Sao_Paulo';
 const hash = (value) => createHash('sha256').update(value).digest();
 const keyHash = (value) => hash(value).toString('hex');
@@ -61,7 +66,9 @@ function validatePolicy(value = {}) {
   ) {
     throw httpError(400, 'invalid_policy');
   }
-  return { tokenLimit, accessStart, accessEnd };
+  const maxDevices = value.maxDevices ?? 1;
+  if (!Number.isSafeInteger(maxDevices) || maxDevices < 1 || maxDevices > 5) throw httpError(400, 'invalid_policy');
+  return { tokenLimit, accessStart, accessEnd, maxDevices };
 }
 
 function isWithinAccessHours(start, end, timestamp) {
@@ -159,6 +166,12 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
       prompt_tokens INTEGER, completion_tokens INTEGER, cached_prompt_tokens INTEGER
     );
     CREATE INDEX IF NOT EXISTS requests_user ON requests(user_id, started_at);
+    CREATE TABLE IF NOT EXISTS denials (
+      user_id TEXT NOT NULL, at INTEGER NOT NULL, kind TEXT NOT NULL CHECK (kind IN ('login','request')),
+      counted INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE INDEX IF NOT EXISTS denials_user ON denials(user_id, at);
+    CREATE INDEX IF NOT EXISTS requests_started ON requests(started_at);
   `);
   const userColumns = new Set(
     db
@@ -173,9 +186,29 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
     ['access_end', 'TEXT'],
     ['email', 'TEXT'],
     ['title', 'TEXT'],
+    ['blocked_reason', 'TEXT'],
+    ['unblocked_at', 'INTEGER'],
   ]) {
     if (!userColumns.has(name)) db.exec(`ALTER TABLE users ADD COLUMN ${name} ${type}`);
   }
+  if (!userColumns.has('max_devices')) {
+    db.exec('ALTER TABLE users ADD COLUMN max_devices INTEGER NOT NULL DEFAULT 1');
+    db.prepare("UPDATE users SET max_devices = 2 WHERE lower(trim(name)) = 'bruno yanes' AND max_devices = 1").run();
+  }
+  const sessionColumns = new Set(
+    db
+      .prepare('PRAGMA table_info(sessions)')
+      .all()
+      .map((column) => column.name)
+  );
+  const denialColumns = new Set(
+    db
+      .prepare('PRAGMA table_info(denials)')
+      .all()
+      .map((column) => column.name)
+  );
+  if (!denialColumns.has('counted')) db.exec('ALTER TABLE denials ADD COLUMN counted INTEGER NOT NULL DEFAULT 1');
+  if (!sessionColumns.has('revoked_reason')) db.exec('ALTER TABLE sessions ADD COLUMN revoked_reason TEXT');
   db.prepare("INSERT OR IGNORE INTO users (id,name,role,created_at) VALUES ('owner',?,'admin',?)").run(
     OWNER_PROFILE_NAME,
     now()
@@ -203,6 +236,58 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
     db.prepare('INSERT INTO invites (hash,user_id,expires_at) VALUES (?,?,?)').run(keyHash(code), userId, expiresAt);
     return { id: userId, code, expiresAt: iso(expiresAt) };
   };
+  /** Block an employee automatically; owner/admin and already blocked or revoked users are left alone. */
+  const autoBlock = (userId, reason) =>
+    db
+      .prepare(
+        "UPDATE users SET blocked_at = ?, blocked_reason = ? WHERE id = ? AND id != 'owner' AND role = 'employee' AND blocked_at IS NULL AND revoked_at IS NULL"
+      )
+      .run(now(), reason, userId).changes > 0;
+  const employeeRow = (userId) =>
+    db
+      .prepare(
+        "SELECT unblocked_at FROM users WHERE id = ? AND id != 'owner' AND role = 'employee' AND blocked_at IS NULL AND revoked_at IS NULL"
+      )
+      .get(userId);
+  const recordDenial = (userId, kind) => {
+    const timestamp = now();
+    // One episode per DENIAL_EPISODE_MS: requests cut off together at closing time count once.
+    const sameEpisode = db
+      .prepare('SELECT 1 FROM denials WHERE user_id = ? AND counted = 1 AND at > ? LIMIT 1')
+      .get(userId, timestamp - DENIAL_EPISODE_MS);
+    db.prepare('INSERT INTO denials (user_id,at,kind,counted) VALUES (?,?,?,?)').run(
+      userId,
+      timestamp,
+      kind,
+      sameEpisode ? 0 : 1
+    );
+    if (sameEpisode) return null;
+    const user = employeeRow(userId);
+    if (!user) return null;
+    const local = timestamp + LOCAL_OFFSET_MS;
+    const dayStart = timestamp - (((local % DAY) + DAY) % DAY);
+    // Denials before the owner lifted a block do not count again.
+    const since = Math.max(dayStart, (user.unblocked_at ?? -1) + 1);
+    const { count } = db
+      .prepare('SELECT COUNT(*) AS count FROM denials WHERE user_id = ? AND counted = 1 AND at >= ?')
+      .get(userId, since);
+    if (count < HOURS_DENIALS_LIMIT) return null;
+    return autoBlock(userId, 'auto_hours') ? 'auto_hours' : null;
+  };
+  const prune = () => {
+    const cutoff = now() - RETENTION_MS;
+    db.prepare('DELETE FROM requests WHERE started_at < ?').run(cutoff);
+    db.prepare('DELETE FROM denials WHERE at < ?').run(cutoff);
+  };
+  prune();
+  const pruneTimer = setInterval(() => {
+    try {
+      prune();
+    } catch {
+      // A failed cleanup retries on the next day; it never stops the service.
+    }
+  }, DAY);
+  pruneTimer.unref();
   const windowTokens = (sum, unmetered) => (unmetered > 0 && sum == null ? null : (sum ?? 0));
   const usageFor = (userId) => {
     const timestamp = now();
@@ -257,48 +342,123 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
       lastRequestAt: iso(row.last_request),
     };
   };
-  return {
-    login({ code, deviceId, deviceName, employeeId }) {
-      return transaction(() => {
-        const timestamp = now();
-        let user;
-        const isOwner = timingSafeEqual(hash(code), ownerHash);
-        if (isOwner) {
-          user = db.prepare("SELECT * FROM users WHERE id = 'owner'").get();
-        } else {
-          user = db
-            .prepare(`SELECT users.*, invites.hash AS invite_hash FROM invites JOIN users ON users.id = invites.user_id
+  /** Validate a login code and open a session; `onHoursDenied` learns who was turned away by access hours. */
+  const loginTransaction = ({ code, deviceId, deviceName, employeeId }, onHoursDenied) =>
+    transaction(() => {
+      const timestamp = now();
+      let user;
+      const isOwner = timingSafeEqual(hash(code), ownerHash);
+      if (isOwner) {
+        user = db.prepare("SELECT * FROM users WHERE id = 'owner'").get();
+      } else {
+        user = db
+          .prepare(`SELECT users.*, invites.hash AS invite_hash FROM invites JOIN users ON users.id = invites.user_id
             WHERE invites.hash = ? AND invites.used_at IS NULL AND invites.expires_at > ? AND users.revoked_at IS NULL`)
-            .get(keyHash(code), timestamp);
+          .get(keyHash(code), timestamp);
+      }
+      if (!user) throw httpError(401, 'invalid_credentials');
+      let handover = false;
+      if (employeeId && user.id !== employeeId) {
+        const previous = db.prepare('SELECT revoked_at FROM users WHERE id = ?').get(employeeId);
+        const usedDevice =
+          previous?.revoked_at != null &&
+          db.prepare('SELECT 1 FROM sessions WHERE user_id = ? AND device_id = ? LIMIT 1').get(employeeId, deviceId);
+        if (!usedDevice) throw httpError(403, 'device_bound_to_other_employee');
+        handover = true;
+      }
+      if (user.blocked_at !== null) throw httpError(403, 'employee_blocked');
+      if (!isWithinAccessHours(user.access_start, user.access_end, timestamp)) {
+        onHoursDenied(user.id);
+        throw httpError(403, 'outside_access_hours');
+      }
+      if (!isOwner) db.prepare('UPDATE invites SET used_at = ? WHERE hash = ?').run(timestamp, user.invite_hash);
+      const replacedSessions = [];
+      if (!isOwner) {
+        const active = 'user_id = ? AND revoked_at IS NULL AND expires_at > ?';
+        const evictDevice = (device) => {
+          const rows = db
+            .prepare(`SELECT hash FROM sessions WHERE ${active} AND device_id = ?`)
+            .all(user.id, timestamp, device);
+          for (const row of rows) {
+            db.prepare("UPDATE sessions SET revoked_at = ?, revoked_reason = 'replaced' WHERE hash = ?").run(
+              timestamp,
+              row.hash
+            );
+            replacedSessions.push(row.hash);
+          }
+        };
+        evictDevice(deviceId);
+        for (;;) {
+          const devices = db
+            .prepare(
+              `SELECT device_id, MAX(last_seen_at) AS seen FROM sessions WHERE ${active} GROUP BY device_id ORDER BY seen, device_id`
+            )
+            .all(user.id, timestamp);
+          if (devices.length < user.max_devices) break;
+          evictDevice(devices[0].device_id);
         }
-        if (!user) throw httpError(401, 'invalid_credentials');
-        if (employeeId && user.id !== employeeId) throw httpError(403, 'device_bound_to_other_employee');
-        if (user.blocked_at !== null) throw httpError(403, 'employee_blocked');
-        if (!isWithinAccessHours(user.access_start, user.access_end, timestamp))
-          throw httpError(403, 'outside_access_hours');
-        if (!isOwner) db.prepare('UPDATE invites SET used_at = ? WHERE hash = ?').run(timestamp, user.invite_hash);
-        const token = randomBytes(32).toString('base64url');
-        db.prepare(
-          'INSERT INTO sessions (hash,user_id,device_id,device_name,created_at,last_seen_at,expires_at) VALUES (?,?,?,?,?,?,?)'
-        ).run(keyHash(token), user.id, deviceId, deviceName, timestamp, timestamp, timestamp + 30 * DAY);
-        return { token, user: publicUser(user) };
-      });
+      }
+      const token = randomBytes(32).toString('base64url');
+      db.prepare(
+        'INSERT INTO sessions (hash,user_id,device_id,device_name,created_at,last_seen_at,expires_at) VALUES (?,?,?,?,?,?,?)'
+      ).run(keyHash(token), user.id, deviceId, deviceName, timestamp, timestamp, timestamp + 30 * DAY);
+      return { token, user: publicUser(user), replacedSessions, ...(handover ? { handover: true } : {}) };
+    });
+  return {
+    login(input) {
+      let deniedUserId = null;
+      try {
+        return loginTransaction(input, (userId) => {
+          deniedUserId = userId;
+        });
+      } catch (error) {
+        if (deniedUserId !== null && error?.code === 'outside_access_hours') {
+          try {
+            // A new hire retrying an invite outside hours has no session yet and is never auto-blocked.
+            if (db.prepare('SELECT 1 FROM sessions WHERE user_id = ? LIMIT 1').get(deniedUserId))
+              recordDenial(deniedUserId, 'login');
+          } catch {
+            // Counting a denial must never change the login answer.
+          }
+        }
+        throw error;
+      }
     },
     session(token) {
       if (typeof token !== 'string' || !/^[a-zA-Z0-9_-]{43}$/u.test(token)) return null;
       const sessionHash = keyHash(token);
+      const replaced = db
+        .prepare("SELECT 1 FROM sessions WHERE hash = ? AND revoked_at IS NOT NULL AND revoked_reason = 'replaced'")
+        .get(sessionHash);
+      if (replaced) return { denied: 'session_replaced' };
       const user = db
         .prepare(`SELECT users.*, sessions.hash AS session_hash FROM sessions JOIN users ON users.id = sessions.user_id
         WHERE sessions.hash = ? AND sessions.revoked_at IS NULL AND sessions.expires_at > ? AND users.revoked_at IS NULL`)
         .get(sessionHash, now());
       if (!user) return null;
       if (user.blocked_at !== null) return { denied: 'employee_blocked' };
-      if (!isWithinAccessHours(user.access_start, user.access_end, now())) return { denied: 'outside_access_hours' };
+      if (!isWithinAccessHours(user.access_start, user.access_end, now()))
+        return { denied: 'outside_access_hours', userId: user.id };
       db.prepare('UPDATE sessions SET last_seen_at = ? WHERE hash = ?').run(now(), sessionHash);
       return { user: publicUser(user), sessionHash: user.session_hash };
     },
     logout(sessionHash) {
-      db.prepare('UPDATE sessions SET revoked_at = ? WHERE hash = ?').run(now(), sessionHash);
+      db.prepare(
+        "UPDATE sessions SET revoked_at = ?, revoked_reason = 'logout' WHERE hash = ? AND revoked_at IS NULL"
+      ).run(now(), sessionHash);
+    },
+    disconnectDevice(userId, deviceId) {
+      return transaction(() => {
+        const rows = db
+          .prepare('SELECT hash FROM sessions WHERE user_id = ? AND device_id = ? AND revoked_at IS NULL')
+          .all(userId, deviceId);
+        for (const row of rows)
+          db.prepare("UPDATE sessions SET revoked_at = ?, revoked_reason = 'admin' WHERE hash = ?").run(
+            now(),
+            row.hash
+          );
+        return rows.map((row) => row.hash);
+      });
     },
     invite(name, input = {}) {
       const policy = validatePolicy(input);
@@ -306,8 +466,8 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
       const title = optionalTitle(input.title);
       return transaction(() => {
         const id = randomUUID();
-        db.prepare(`INSERT INTO users (id,name,role,created_at,token_limit,access_start,access_end,email,title)
-          VALUES (?,?,'employee',?,?,?,?,?,?)`).run(
+        db.prepare(`INSERT INTO users (id,name,role,created_at,token_limit,access_start,access_end,email,title,max_devices)
+          VALUES (?,?,'employee',?,?,?,?,?,?,?)`).run(
           id,
           name,
           now(),
@@ -315,7 +475,8 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
           policy.accessStart,
           policy.accessEnd,
           email,
-          title
+          title,
+          policy.maxDevices
         );
         return issueInvite(id);
       });
@@ -334,7 +495,9 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
         if (!user) throw httpError(404, 'not_found');
         const timestamp = now();
         db.prepare('UPDATE users SET revoked_at = COALESCE(revoked_at,?) WHERE id = ?').run(timestamp, id);
-        db.prepare('UPDATE sessions SET revoked_at = COALESCE(revoked_at,?) WHERE user_id = ?').run(timestamp, id);
+        db.prepare(
+          "UPDATE sessions SET revoked_at = COALESCE(revoked_at,?), revoked_reason = COALESCE(revoked_reason,'revoked') WHERE user_id = ?"
+        ).run(timestamp, id);
         db.prepare('DELETE FROM invites WHERE user_id = ?').run(id);
       });
     },
@@ -344,8 +507,19 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
         const user = db.prepare("SELECT * FROM users WHERE id = ? AND role = 'employee'").get(id);
         if (!user) throw httpError(404, 'not_found');
         if (user.revoked_at !== null) throw httpError(409, 'employee_revoked');
-        const blockedAt = blocked ? (user.blocked_at ?? now()) : null;
-        db.prepare('UPDATE users SET blocked_at = ? WHERE id = ?').run(blockedAt, id);
+        if (blocked) {
+          // A manual block is the owner's decision, so it never carries an automatic reason.
+          db.prepare('UPDATE users SET blocked_at = COALESCE(blocked_at, ?), blocked_reason = NULL WHERE id = ?').run(
+            now(),
+            id
+          );
+        } else if (user.blocked_at !== null) {
+          // Usage and denials from before the unblock do not trigger an automatic block again.
+          db.prepare('UPDATE users SET blocked_at = NULL, blocked_reason = NULL, unblocked_at = ? WHERE id = ?').run(
+            now(),
+            id
+          );
+        }
         return { blocked };
       });
     },
@@ -355,13 +529,12 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
         const user = db.prepare("SELECT * FROM users WHERE id = ? AND role = 'employee'").get(id);
         if (!user) throw httpError(404, 'not_found');
         if (user.revoked_at !== null) throw httpError(409, 'employee_revoked');
-        db.prepare('UPDATE users SET token_limit = ?, access_start = ?, access_end = ? WHERE id = ?').run(
-          policy.tokenLimit,
-          policy.accessStart,
-          policy.accessEnd,
-          id
-        );
-        return policy;
+        // An update that does not mention maxDevices keeps the stored value instead of resetting it.
+        const maxDevices = input?.maxDevices === undefined ? user.max_devices : policy.maxDevices;
+        db.prepare(
+          'UPDATE users SET token_limit = ?, access_start = ?, access_end = ?, max_devices = ? WHERE id = ?'
+        ).run(policy.tokenLimit, policy.accessStart, policy.accessEnd, maxDevices, id);
+        return { ...policy, maxDevices };
       });
     },
     tokenPolicy(userId) {
@@ -388,22 +561,28 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
           revokedAt: iso(row.revoked_at),
           blocked: row.blocked_at !== null,
           blockedAt: iso(row.blocked_at),
+          blockedReason: row.blocked_at === null ? null : (row.blocked_reason ?? null),
           email: row.email ?? null,
           title: row.title ?? null,
           tokenLimit: row.token_limit,
           accessStart: row.access_start,
           accessEnd: row.access_end,
+          maxDevices: row.max_devices,
           devices: db
             .prepare(
-              'SELECT device_id,device_name,last_seen_at,expires_at,revoked_at FROM sessions WHERE user_id = ? ORDER BY last_seen_at DESC'
+              `SELECT device_id, MAX(last_seen_at) AS last_seen_at, MAX(expires_at) AS expires_at,
+                (SELECT s2.device_name FROM sessions s2 WHERE s2.user_id = s.user_id AND s2.device_id = s.device_id
+                  AND s2.revoked_at IS NULL AND s2.expires_at > ? ORDER BY s2.last_seen_at DESC LIMIT 1) AS device_name
+              FROM sessions s WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ?
+              GROUP BY device_id ORDER BY last_seen_at DESC`
             )
-            .all(row.id)
+            .all(now(), row.id, now())
             .map((device) => ({
               id: device.device_id,
               name: device.device_name,
               lastSeenAt: iso(device.last_seen_at),
               expiresAt: iso(device.expires_at),
-              revokedAt: iso(device.revoked_at),
+              revokedAt: null,
             })),
           usage: usageFor(row.id),
         }));
@@ -428,7 +607,31 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
         id
       );
     },
+    /** Block an employee whose last 60 minutes exceed their own usual volume. */
+    checkAutoBlock(userId) {
+      const user = employeeRow(userId);
+      if (!user) return null;
+      const timestamp = now();
+      const windowStart = Math.max(timestamp - HOUR, (user.unblocked_at ?? -1) + 1);
+      const tokens = 'COALESCE(prompt_tokens,0) + COALESCE(completion_tokens,0)';
+      const { recent } = db
+        .prepare(`SELECT COALESCE(SUM(${tokens}),0) AS recent FROM requests WHERE user_id = ? AND started_at >= ?`)
+        .get(userId, windowStart);
+      const baselineEnd = timestamp - HOUR;
+      const hourly = db
+        .prepare(
+          `SELECT SUM(${tokens}) AS total FROM requests WHERE user_id = ? AND started_at >= ? AND started_at < ?
+          GROUP BY started_at / ${HOUR} HAVING total > 0`
+        )
+        .all(userId, baselineEnd - BASELINE_DAYS * DAY, baselineEnd)
+        .map((row) => row.total);
+      if (recent <= volumeThreshold(hourly, VOLUME_FLOOR_TOKENS)) return null;
+      return autoBlock(userId, 'auto_volume') ? 'auto_volume' : null;
+    },
+    recordDenial,
+    prune,
     close() {
+      clearInterval(pruneTimer);
       db.close();
     },
   };

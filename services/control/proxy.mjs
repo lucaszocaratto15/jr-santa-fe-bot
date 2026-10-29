@@ -313,6 +313,8 @@ export function createModelProxy({
                 Authorization: `Bearer ${provider.key}`,
                 'Content-Type': 'application/json',
                 Accept: stream ? 'text/event-stream' : 'application/json',
+                // Only our own gateway learns who is asking; third-party fallbacks do not.
+                ...(provider.id === 'minimax' ? { 'X-JR-Employee': session.user.id } : {}),
               },
               body: JSON.stringify({ ...payload, model: provider.model }),
               signal: attempt.signal,
@@ -561,7 +563,17 @@ export function createModelProxy({
         controller.signal.removeEventListener('abort', cancelReader);
         await reader?.cancel().catch(() => {});
         try {
-          if (requestId) store.finishRequest(requestId, { status, usage, firstByteMs, upstreamStatus });
+          if (requestId) {
+            store.finishRequest(requestId, { status, usage, firstByteMs, upstreamStatus });
+            try {
+              // Abort the user's other in-flight requests; this one has already finished.
+              const self = active.get(id);
+              if (store.checkAutoBlock(session.user.id))
+                abortWhere((entry) => entry !== self && entry.userId === session.user.id);
+            } catch {
+              // An automatic-block failure never fails the request.
+            }
+          }
         } finally {
           active.delete(id);
           resolveDone();
