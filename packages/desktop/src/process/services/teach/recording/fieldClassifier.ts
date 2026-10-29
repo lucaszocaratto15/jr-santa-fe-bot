@@ -17,9 +17,27 @@ export type FieldAttrs = {
 /** Matched against each whitespace-separated autocomplete token. */
 export const SECRET_AUTOCOMPLETE_RE = /^(?:current-password|new-password|one-time-code|cc-[a-z-]+)$/i;
 
-/** Matched against name, id, label and placeholder. */
+/**
+ * Matched against name, id, label and placeholder. `código`/`code` count only as a separate
+ * token (anything but a letter or digit around it, so `_` and `-` are boundaries): `codigo`,
+ * `sms-code` and `codigo_produto` match (false positives only mask), `zipcode` does not.
+ */
 export const SECRET_TEXT_RE =
-  /senha|password|passwd|pwd|otp|token|c[oó]digo de verifica|verification code|cvv|cvc|cart[aã]o|card number|pin\b/i;
+  /senha|password|passwd|pwd|otp|token|verifica[cç][aã]o|verification code|cvv|cvc|cart[aã]o|card number|pin\b|(?:^|[^a-z0-9])(?:c[oó]digo|code)(?:$|[^a-z0-9])/i;
+
+const PASSWORD_AUTOCOMPLETE_RE = /^(?:current-password|new-password)$/i;
+
+/**
+ * True only for a real password field (type=password or a password autocomplete token), as
+ * opposed to OTP or card fields. Only these earn a "save to the vault" offer.
+ */
+export function isPasswordField(a: FieldAttrs): boolean {
+  if ((a.type ?? '').toLowerCase() === 'password') return true;
+  return (a.autocomplete ?? '')
+    .trim()
+    .split(/\s+/)
+    .some((token) => PASSWORD_AUTOCOMPLETE_RE.test(token));
+}
 
 /** True when the field must be masked as `«segredo»` and its value never recorded. */
 export function isSecretField(a: FieldAttrs): boolean {

@@ -1,9 +1,9 @@
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CdpBridgeHandle } from '@/process/resources/builtinMcp/cdpBridge';
-import { createRecorder } from '@/process/services/teach/recording/recorder';
+import { createRecorder, sweepTaughtTasks } from '@/process/services/teach/recording/recorder';
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -125,6 +125,27 @@ describe('teach recorder', () => {
     expect(inputs.map((e) => e.value)).toEqual(['«segredo»', '«segredo»']);
     expect(result.secretOrigins).toEqual(['https://portal.example.com']);
     expect(text.trim().split('\n')).toHaveLength(result.events.length);
+  });
+
+  it('offers saving only for real password fields, not OTP or card fields', async () => {
+    const { fake, recorder } = await setup();
+    await recorder.start('login');
+    fake.page({ kind: 'input', url: 'https://otp.example.com/', field: { tag: 'input', type: 'text', name: 'otp' } });
+    fake.page({
+      kind: 'input',
+      url: 'https://card.example.com/',
+      field: { tag: 'input', type: 'text', autocomplete: 'cc-number' },
+    });
+    fake.page({ kind: 'submit', url: 'https://submit.example.com/', secret: true, target: [{ css: 'form' }] });
+    fake.page({
+      kind: 'input',
+      url: 'https://ac.example.com/',
+      field: { tag: 'input', type: 'text', autocomplete: 'section-x current-password' },
+    });
+    fake.page({ kind: 'input', url: 'https://pw.example.com/', field: { tag: 'input', type: 'password' } });
+    const result = await recorder.stop();
+    expect(result.events.filter((e) => e.kind === 'input').every((e) => e.value === '«segredo»')).toBe(true);
+    expect(result.secretOrigins).toEqual(['https://ac.example.com', 'https://pw.example.com']);
   });
 
   it('records non-secret values truncated to 500 chars and never records paste', async () => {
@@ -313,5 +334,24 @@ describe('teach recorder', () => {
     const { recorder } = await setup();
     await recorder.start('x');
     await expect(recorder.start('y')).rejects.toThrow();
+  });
+});
+
+describe('sweepTaughtTasks', () => {
+  it('deletes every leftover recording dir and keeps the base dir', async () => {
+    const base = await mkdtemp(join(tmpdir(), 'jr-sweep-'));
+    try {
+      await mkdir(join(base, 'old-1', 'skill'), { recursive: true });
+      await writeFile(join(base, 'old-1', 'events.jsonl'), '{}\n');
+      await mkdir(join(base, 'old-2'));
+      expect(await sweepTaughtTasks(base)).toBe(2);
+      expect(await readdir(base)).toEqual([]);
+    } finally {
+      await rm(base, { recursive: true, force: true });
+    }
+  });
+
+  it('is a no-op when the dir does not exist', async () => {
+    expect(await sweepTaughtTasks(join(tmpdir(), 'jr-sweep-missing-' + Date.now()))).toBe(0);
   });
 });

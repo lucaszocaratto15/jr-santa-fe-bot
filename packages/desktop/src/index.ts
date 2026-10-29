@@ -35,7 +35,7 @@ import {
 } from './process/services/jr/auth';
 import { createVaultStore } from './process/services/teach/vault/vault';
 import { getTeachServices, getTeachSession, setTeachServices } from './process/services/teach/registry';
-import { createRecorder } from './process/services/teach/recording/recorder';
+import { createRecorder, sweepTaughtTasks } from './process/services/teach/recording/recorder';
 import { TAUGHT_TASKS_DIRNAME } from './process/services/teach/recording/teachSession';
 import { getCdpBridgeHandle } from './process/utils/cdpBridgeRegistry';
 import { startJrAuthProxy } from './process/services/jr/authProxy';
@@ -948,13 +948,16 @@ const handleAppReady = async (): Promise<void> => {
     console.warn('[JR] Invalid company access configuration.');
   }
   const teachBridge = getCdpBridgeHandle();
+  const taughtTasksDir = path.join(app.getPath('userData'), TAUGHT_TASKS_DIRNAME);
+  // No recording can be active yet: raw recordings left by a crashed/killed run are deleted.
+  void sweepTaughtTasks(taughtTasksDir);
   setTeachServices({
     vault: createVaultStore(app.getPath('userData'), safeStorage),
     // Teach recording needs the CDP bridge; without it the Ensinar button stays hidden.
     recorder: teachBridge
       ? createRecorder({
           bridge: teachBridge,
-          dir: path.join(app.getPath('userData'), TAUGHT_TASKS_DIRNAME),
+          dir: taughtTasksDir,
           onAutoStop: () => void getTeachSession()?.handleAutoStop(),
         })
       : null,

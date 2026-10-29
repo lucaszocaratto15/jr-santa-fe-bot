@@ -115,6 +115,11 @@ describe('capture script', () => {
       { type: 'text', placeholder: 'Número do cartão' },
       { type: 'text', id: 'pin' },
       { type: 'email', id: 'email' },
+      { type: 'text', name: 'codigo' },
+      { type: 'text', id: 'sms-code' },
+      { type: 'text', name: 'zipcode' },
+      { type: 'text', name: 'codigo_produto' },
+      { type: 'text', placeholder: 'Verificação' },
     ];
     for (const attrs of cases) {
       calls = [];

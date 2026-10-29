@@ -10,13 +10,14 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { appendFile, mkdir, rm } from 'node:fs/promises';
+import { appendFile, mkdir, readdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 import type { CdpBridgeHandle } from '@process/resources/builtinMcp/cdpBridge';
 import { REDACTED } from '@process/resources/builtinMcp/secretRedact';
 import { CAPTURE_BINDING, buildCaptureScript } from './captureScript';
-import { isSecretField, type FieldAttrs } from './fieldClassifier';
+import { isPasswordField, isSecretField, type FieldAttrs } from './fieldClassifier';
 import { sanitizeUrl } from './urlSanitizer';
+import type { RecorderState } from '@/common/types/agent/teachTypes';
 
 export type Locator = {
   role?: string;
@@ -41,7 +42,7 @@ export type TeachEvent = {
   fileName?: string;
 };
 
-export type RecorderState = 'idle' | 'recording' | 'paused';
+export type { RecorderState };
 
 export type RecordingResult = { id: string; events: TeachEvent[]; secretOrigins: string[] };
 
@@ -134,6 +135,29 @@ const sanitizeField = (value: unknown): FieldAttrs | null => {
   };
 };
 
+/**
+ * Deletes every raw recording dir (`<dir>/<id>/`) left by a previous run. Call once at app
+ * start, before any recording can begin. Never throws; returns how many entries it removed.
+ */
+export async function sweepTaughtTasks(dir: string): Promise<number> {
+  let names: string[];
+  try {
+    names = await readdir(dir);
+  } catch {
+    return 0;
+  }
+  let removed = 0;
+  for (const name of names) {
+    try {
+      await rm(path.join(dir, name), { recursive: true, force: true });
+      removed += 1;
+    } catch (error) {
+      console.warn('[teach] could not remove leftover recording', error instanceof Error ? error.name : undefined);
+    }
+  }
+  return removed;
+}
+
 export function createRecorder(deps: RecorderDeps): Recorder {
   const now = deps.now ?? Date.now;
   const limitMs = deps.limitMs ?? RECORDING_LIMIT_MS;
@@ -206,7 +230,8 @@ export function createRecorder(deps: RecorderDeps): Recorder {
     if (kind === 'input') {
       event.value = secret ? REDACTED : (str(payload.value) ?? '').slice(0, MAX_VALUE);
     }
-    if (secret) {
+    // Only real password fields earn a save offer; OTP and card fields are masked but not offered.
+    if (secret && field !== null && isPasswordField(field)) {
       const origin = originOf(sanitizeUrl(url));
       if (origin) s.secretOrigins.add(origin);
     }
