@@ -177,9 +177,12 @@ export function createVaultStore(userDataDir: string, encryption: OsEncryption):
       data.items = data.items.filter((item) => item.id !== id);
       await save(data);
     },
+    /** Needs no encryption: offboarding must work on machines without a usable keychain. */
     async wipe() {
-      requireAvailable();
-      await save({ version: 1, items: [] });
+      if (!isAbsolute(userDataDir)) throw unavailable();
+      await unlink(file).catch((error: unknown) => {
+        if (!(record(error) && error.code === 'ENOENT')) throw error;
+      });
     },
     async readSecret(id, field) {
       if (!available()) return null;

@@ -92,6 +92,16 @@ describe('vault store', () => {
     expect(await store.list()).toEqual([]);
   });
 
+  it('wipe() works when encryption is unavailable', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'jr-vault-'));
+    roots.push(root);
+    await createVaultStore(root, fakeEncryption(true)).upsert(input);
+    const store = createVaultStore(root, fakeEncryption(false));
+    await expect(store.wipe()).resolves.toBeUndefined();
+    await expect(readFile(file(root))).rejects.toThrow();
+    await expect(store.wipe()).resolves.toBeUndefined();
+  });
+
   it('file is written with mode 0o600', async () => {
     if (process.platform === 'win32') return;
     const { root, store } = await setup();
