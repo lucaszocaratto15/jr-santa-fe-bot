@@ -1,4 +1,5 @@
 import type { SecureInputBroker } from './control/secureInput';
+import type { LearnService } from './learn/learnService';
 import type { Recorder } from './recording/recorder';
 import type { TeachSession } from './recording/teachSession';
 import type { VaultStore } from './vault/vault';
@@ -29,3 +30,12 @@ export const setTeachSession = (next: TeachSession | null): void => {
 };
 
 export const getTeachSession = (): TeachSession | null => session;
+
+let learn: LearnService | null = null;
+
+/** "Aprender com seu trabalho": null on platforms without a sampler or before startup wires it. */
+export const setLearnService = (next: LearnService | null): void => {
+  learn = next;
+};
+
+export const getLearnService = (): LearnService | null => learn;

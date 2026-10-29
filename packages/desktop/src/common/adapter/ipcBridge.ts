@@ -2606,3 +2606,37 @@ export const teach = {
   /** Rewrites a taught task's SKILL.md; rejects with a {@link TaughtTaskErrorCode}. */
   saveTask: bridge.buildProvider<void, TaughtTaskContent>('teach:save-task'),
 };
+
+// ---------------------------------------------------------------------------
+// Aprender com seu trabalho — state, exclusions and insights only. No channel returns raw samples.
+// ---------------------------------------------------------------------------
+
+export type LearnState = import('@/common/types/agent/learnTypes').LearnState;
+export type LearnExclusion = import('@/common/types/agent/learnTypes').LearnExclusion;
+export type LearnInsightBatch = import('@/common/types/agent/learnTypes').LearnInsightBatch;
+export type LearnSuggestion = import('@/common/types/agent/learnTypes').LearnSuggestion;
+export type LearnGenerateResult = import('@/common/types/agent/learnTypes').LearnGenerateResult;
+
+export const learn = {
+  state: bridge.buildProvider<LearnState, void>('learn:state'),
+  /** Main → renderer: every state change (status, pause, raw hours, sampler error). */
+  stateChanged: bridge.buildEmitter<LearnState>('learn:state-changed'),
+  /** Records the LGPD accept; main refuses any version other than LEARN_TERM_VERSION. */
+  accept: bridge.buildProvider<LearnState, { termVersion: string }>('learn:accept'),
+  /** Re-enables after "Desligar" when the stored accept is for the current term. */
+  turnOn: bridge.buildProvider<LearnState, void>('learn:turn-on'),
+  /** `minutes: null` pauses until resumed. */
+  pause: bridge.buildProvider<LearnState, { minutes: number | null }>('learn:pause'),
+  resume: bridge.buildProvider<LearnState, void>('learn:resume'),
+  turnOff: bridge.buildProvider<LearnState, void>('learn:turn-off'),
+  /** Wipes raw samples and insights, then records the revoke. */
+  revoke: bridge.buildProvider<LearnState, void>('learn:revoke'),
+  getExclusions: bridge.buildProvider<LearnExclusion[], void>('learn:get-exclusions'),
+  setExclusions: bridge.buildProvider<LearnExclusion[], LearnExclusion[]>('learn:set-exclusions'),
+  listInsights: bridge.buildProvider<LearnInsightBatch[], void>('learn:list-insights'),
+  deleteInsight: bridge.buildProvider<void, { id: string }>('learn:delete-insight'),
+  generateNow: bridge.buildProvider<LearnGenerateResult, void>('learn:generate-now'),
+  wipeSamples: bridge.buildProvider<LearnState, void>('learn:wipe-samples'),
+  /** macOS only: opens System Settings → Privacy → Screen Recording. */
+  openScreenRecordingSettings: bridge.buildProvider<void, void>('learn:open-screen-recording-settings'),
+};

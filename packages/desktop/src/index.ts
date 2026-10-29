@@ -34,7 +34,8 @@ import {
   setJrAccessController,
 } from './process/services/jr/auth';
 import { createVaultStore } from './process/services/teach/vault/vault';
-import { getTeachServices, getTeachSession, setTeachServices } from './process/services/teach/registry';
+import { getLearnService, getTeachServices, getTeachSession, setTeachServices } from './process/services/teach/registry';
+import { startLearnService } from './process/services/teach/learn/learnIpc';
 import { createRecorder, sweepTaughtTasks } from './process/services/teach/recording/recorder';
 import { TAUGHT_TASKS_DIRNAME } from './process/services/teach/recording/teachSession';
 import { getCdpBridgeHandle } from './process/utils/cdpBridgeRegistry';
@@ -1180,6 +1181,11 @@ const handleAppReady = async (): Promise<void> => {
     appReadyDone = true;
     mark('createWindow');
 
+    // "Aprender com seu trabalho": off until the user accepts the LGPD term.
+    void startLearnService(app.getPath('userData')).catch((error) =>
+      console.warn('[JR] Learn service could not start:', error instanceof Error ? error.message : error)
+    );
+
     // Initialize desktop pet (delayed to not block main window)
     setTimeout(() => {
       void (async () => {
@@ -1331,6 +1337,8 @@ installQuitCleanup({
   // Stop aioncore subprocess — backend shutdown kills all agent children
   // transitively (no separate frontend workerTaskManager remains).
   stopBackend: async () => {
+    // Stops the sampler child and the learn timers.
+    getLearnService()?.dispose();
     jrAccessController?.dispose();
     await stopJrRuntime();
   },
