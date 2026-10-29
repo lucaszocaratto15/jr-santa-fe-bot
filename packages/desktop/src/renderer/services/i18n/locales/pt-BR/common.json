@@ -464,7 +464,8 @@
         "general": "Geral",
         "computer": "Computador",
         "usage": "Uso e cobrança",
-        "updates": "Atualizações"
+        "updates": "Atualizações",
+        "vault": "Cofre"
       },
       "generalTitle": "Geral",
       "account": "Conta",
@@ -565,6 +566,31 @@
       "dayTooltip": "{{date}}: {{tokens}} tokens, {{requests}} pedidos",
       "noLimitYet": "Ainda não há limite de uso. Estes números servem para definir um limite justo mais adiante.",
       "adminHint": "Clique na seta de uma linha para ver o uso dia a dia. Use a coluna Pico em 5h para escolher o limite de 5 horas."
+    },
+    "vault": {
+      "title": "Cofre",
+      "subtitle": "Senhas ficam só neste computador, criptografadas.",
+      "add": "Adicionar",
+      "empty": "Nenhum login salvo ainda.",
+      "passwordSaved": "senha salva",
+      "edit": "Editar",
+      "delete": "Excluir",
+      "deleteConfirm": "Excluir este login?",
+      "confirmOk": "Excluir",
+      "cancel": "Cancelar",
+      "save": "Salvar",
+      "unavailable": "Cofre indisponível: este computador não oferece criptografia segura.",
+      "name": "Nome",
+      "origins": "Endereços do site",
+      "originsPlaceholder": "https://exemplo.com (separe vários com vírgula)",
+      "username": "Usuário",
+      "password": "Senha",
+      "passwordKeep": "Deixe em branco para manter",
+      "hints": "Observações",
+      "formAdd": "Adicionar login",
+      "formEdit": "Editar login",
+      "saveFailed": "Não foi possível salvar. Confira o endereço do site.",
+      "deleteFailed": "Não foi possível excluir."
     }
   }
 }

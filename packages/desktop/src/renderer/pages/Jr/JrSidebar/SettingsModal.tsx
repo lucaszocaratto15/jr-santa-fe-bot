@@ -1,26 +1,29 @@
 import { Button } from '@arco-design/web-react';
-import { ChartHistogram, Close, Computer, Download, SettingTwo } from '@icon-park/react';
+import { ChartHistogram, Close, Computer, Download, Lock, SettingTwo } from '@icon-park/react';
 import React, { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { isMacOS } from '@/renderer/utils/platform';
 import { ComputerPanel, GeneralPanel, UpdatesPanel } from './panels';
 import UsagePanel from './Usage/UsagePanel';
+import VaultPanel from './VaultPanel';
 import styles from './JrSidebar.module.css';
 
-export const SETTINGS_TABS = ['general', 'computer', 'usage', 'updates'] as const;
+export const SETTINGS_TABS = ['general', 'computer', 'usage', 'vault', 'updates'] as const;
 export type SettingsTab = (typeof SETTINGS_TABS)[number];
 
 const TAB_LABEL = {
   general: 'common.jr.look.tabs.general',
   computer: 'common.jr.look.tabs.computer',
   usage: 'common.jr.look.tabs.usage',
+  vault: 'common.jr.look.tabs.vault',
   updates: 'common.jr.look.tabs.updates',
 } as const;
 
 const tabIcon = (id: SettingsTab) => {
   if (id === 'computer') return <Computer size={20} />;
   if (id === 'usage') return <ChartHistogram size={20} />;
+  if (id === 'vault') return <Lock size={20} />;
   if (id === 'updates') return <Download size={20} />;
   return <SettingTwo size={20} />;
 };
@@ -84,6 +87,7 @@ const JrSettingsModal: React.FC<{
           {tab === 'general' && <GeneralPanel />}
           {tab === 'computer' && <ComputerPanel />}
           {tab === 'usage' && <UsagePanel />}
+          {tab === 'vault' && <VaultPanel />}
           {tab === 'updates' && <UpdatesPanel />}
         </div>
       </div>

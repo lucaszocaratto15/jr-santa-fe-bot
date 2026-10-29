@@ -1539,6 +1539,20 @@ export const theme = {
 };
 
 // ---------------------------------------------------------------------------
+// Vault — local encrypted credentials. No channel ever returns a secret.
+// ---------------------------------------------------------------------------
+
+export type VaultItemPublic = import('@process/services/teach/vault').VaultItemPublic;
+export type VaultUpsert = import('@process/services/teach/vault').VaultUpsert;
+
+export const vault = {
+  available: bridge.buildProvider<boolean, void>('vault:available'),
+  list: bridge.buildProvider<VaultItemPublic[], void>('vault:list'),
+  upsert: bridge.buildProvider<VaultItemPublic, VaultUpsert>('vault:upsert'),
+  remove: bridge.buildProvider<void, { id: string }>('vault:remove'),
+};
+
+// ---------------------------------------------------------------------------
 // System Settings — routed to /api/settings/* unless they need Electron-native side effects.
 // ---------------------------------------------------------------------------
 

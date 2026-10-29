@@ -467,7 +467,8 @@
         "general": "General",
         "computer": "Computer",
         "usage": "Usage and billing",
-        "updates": "Updates"
+        "updates": "Updates",
+        "vault": "Vault"
       },
       "generalTitle": "General",
       "account": "Account",
@@ -568,6 +569,31 @@
       "dayTooltip": "{{date}}: {{tokens}} tokens, {{requests}} requests",
       "noLimitYet": "There is no usage limit yet. These numbers help set a fair limit later.",
       "adminHint": "Click the arrow on a row to see daily usage. Use the 5h peak column to choose the 5-hour limit."
+    },
+    "vault": {
+      "title": "Vault",
+      "subtitle": "Passwords stay on this computer, encrypted.",
+      "add": "Add",
+      "empty": "No saved logins yet.",
+      "passwordSaved": "password saved",
+      "edit": "Edit",
+      "delete": "Delete",
+      "deleteConfirm": "Delete this login?",
+      "confirmOk": "Delete",
+      "cancel": "Cancel",
+      "save": "Save",
+      "unavailable": "Vault unavailable: this computer does not offer secure encryption.",
+      "name": "Name",
+      "origins": "Site addresses",
+      "originsPlaceholder": "https://example.com (separate several with commas)",
+      "username": "Username",
+      "password": "Password",
+      "passwordKeep": "Leave blank to keep",
+      "hints": "Notes",
+      "formAdd": "Add login",
+      "formEdit": "Edit login",
+      "saveFailed": "Could not save. Check the site address.",
+      "deleteFailed": "Could not delete."
     }
   }
 }

@@ -32,6 +32,8 @@ import {
   JrAccessController,
   setJrAccessController,
 } from './process/services/jr/auth';
+import { createVaultStore } from './process/services/teach/vault';
+import { setTeachServices } from './process/services/teach/registry';
 import { startJrAuthProxy } from './process/services/jr/authProxy';
 import { appendJrOpenLog } from './process/services/jr/openLog';
 import { assertStartupArchitectureCompatible } from './process/startup/architectureCompatibility';
@@ -921,6 +923,7 @@ const handleAppReady = async (): Promise<void> => {
   } catch {
     console.warn('[JR] Invalid company access configuration.');
   }
+  setTeachServices({ vault: createVaultStore(app.getPath('userData'), safeStorage) });
   const controller = new JrAccessController({
     url: controlUrl,
     pilot: localPilot,
