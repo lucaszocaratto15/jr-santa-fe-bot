@@ -114,7 +114,16 @@ async function main() {
   server.tool(
     'handbook_show',
     'Mostra ao funcionário, acima do campo de mensagem, o cartão do Manual da função de uma atividade: o fluxograma e a repetição tela a tela dos passos. As telas não são enviadas a você. Use o id de atividade devolvido por handbook_lookup.',
-    { activityId: z.string().max(64).describe('Id da atividade, como aparece em handbook_lookup.') },
+    {
+      activityId: z.string().max(64).describe('Id da atividade, como aparece em handbook_lookup.'),
+      role: z
+        .string()
+        .max(80)
+        .optional()
+        .describe(
+          'Somente para administradores: o cargo da atividade, se não for o cargo cadastrado. Para funcionários é ignorado.'
+        ),
+    },
     async (args) => callControl('handbook_show', args)
   );
 

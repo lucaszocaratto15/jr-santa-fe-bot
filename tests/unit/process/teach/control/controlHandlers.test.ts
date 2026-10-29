@@ -167,13 +167,17 @@ describe('handbook tools', () => {
     flowcharts: {},
     ...overrides,
   });
-  const setup = (options: { admin?: boolean; payload?: Record<string, unknown>; unavailable?: boolean } = {}) => {
+  const setup = (
+    options: { admin?: boolean; payload?: Record<string, unknown>; unavailable?: boolean; adminItems?: unknown[] } = {}
+  ) => {
     const service = {
       mine: vi.fn(async () => {
         if (options.unavailable) throw new Error('unavailable');
         return view(options.payload);
       }),
-      adminRole: vi.fn(async () => view({ role: { key: 'financeiro', title: 'Financeiro' }, items: [] })),
+      adminRole: vi.fn(async () =>
+        view({ role: { key: 'financeiro', title: 'Financeiro' }, items: options.adminItems ?? [] })
+      ),
     };
     const showHandbook = vi.fn();
     const handlers = buildTeachHandlers({
@@ -262,12 +266,54 @@ describe('handbook tools', () => {
     expect(await handlers.handbook_show({ activityId: 'nope' })).toEqual({ ok: false, error: 'não encontrado' });
     expect(showHandbook).not.toHaveBeenCalled();
     expect(await handlers.handbook_show({ activityId: ITEM })).toEqual({ ok: true, result: 'mostrado' });
-    expect(showHandbook).toHaveBeenCalledWith(ITEM);
+    expect(showHandbook).toHaveBeenCalledWith({ activityId: ITEM });
+  });
+
+  const FIN_ITEM = '33333333-3333-4333-8333-333333333333';
+  const finActivity = () => activity(FIN_ITEM, 'Conciliar banco', 'Concilia o banco', ['Abrir o banco']);
+
+  it('an admin shows an activity of the role they looked up, read-only through that role', async () => {
+    const { handlers, service, showHandbook } = setup({ admin: true, adminItems: [finActivity()] });
+    await handlers.handbook_lookup({ role: 'Financeiro' });
+    expect(await handlers.handbook_show({ activityId: FIN_ITEM })).toEqual({ ok: true, result: 'mostrado' });
+    expect(showHandbook).toHaveBeenCalledWith({ activityId: FIN_ITEM, roleKey: 'financeiro' });
+    expect(service.adminRole).toHaveBeenLastCalledWith('financeiro');
+  });
+
+  it('an admin may name the role in handbook_show directly', async () => {
+    const { handlers, showHandbook } = setup({ admin: true, adminItems: [finActivity()] });
+    expect(await handlers.handbook_show({ activityId: FIN_ITEM, role: 'Financeiro' })).toEqual({
+      ok: true,
+      result: 'mostrado',
+    });
+    expect(showHandbook).toHaveBeenCalledWith({ activityId: FIN_ITEM, roleKey: 'financeiro' });
+  });
+
+  it('an admin showing an activity of their own role gets the plain card', async () => {
+    const { handlers, showHandbook } = setup({ admin: true, adminItems: [finActivity()] });
+    await handlers.handbook_lookup({ role: 'Financeiro' });
+    expect(await handlers.handbook_show({ activityId: ITEM })).toEqual({ ok: true, result: 'mostrado' });
+    expect(showHandbook).toHaveBeenCalledWith({ activityId: ITEM });
+  });
+
+  it('an employee cannot show another role, by role or after a lookup', async () => {
+    const { handlers, service, showHandbook } = setup({ adminItems: [finActivity()] });
+    await handlers.handbook_lookup({ role: 'Financeiro' });
+    expect(await handlers.handbook_show({ activityId: FIN_ITEM, role: 'Financeiro' })).toEqual({
+      ok: false,
+      error: 'não encontrado',
+    });
+    expect(service.adminRole).not.toHaveBeenCalled();
+    expect(showHandbook).not.toHaveBeenCalled();
   });
 
   it('rejects malformed arguments', async () => {
     const { handlers } = setup();
     expect(await handlers.handbook_lookup({ query: 3 })).toEqual({ ok: false, error: 'pedido inválido' });
     expect(await handlers.handbook_show({})).toEqual({ ok: false, error: 'pedido inválido' });
+    expect(await handlers.handbook_show({ activityId: ITEM, role: 3 })).toEqual({
+      ok: false,
+      error: 'pedido inválido',
+    });
   });
 });

@@ -114,7 +114,7 @@ export function createMainTeachDeps(): TeachHandlerDeps {
     broker,
     submitDraft: (markdown) => session.submitDraft(markdown),
     handbook: getHandbookService,
-    showHandbook: (activityId) => ipcBridge.teach.showHandbook.emit({ activityId }),
+    showHandbook: (request) => ipcBridge.teach.showHandbook.emit(request),
     isAdmin: () => {
       try {
         return isJrAdmin(getJrAccessController().state.user);

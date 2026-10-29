@@ -19,8 +19,11 @@ export type TeachHandlerDeps = {
   submitDraft(markdown: string): Promise<unknown>;
   /** "Manual da função"; null when there is no JR access controller (handbook unavailable). */
   handbook(): HandbookService | null;
-  /** Shows the handbook card of an activity above the send box (`teach.showHandbook`). */
-  showHandbook(activityId: string): void;
+  /**
+   * Shows the handbook card of an activity above the send box (`teach.showHandbook`).
+   * `roleKey` is set only for an admin viewing another role (read-only).
+   */
+  showHandbook(request: { activityId: string; roleKey?: string }): void;
   /** Whether the signed-in JR user is an administrator (only admins may ask for another role). */
   isAdmin(): boolean;
 };
@@ -53,6 +56,9 @@ export function buildTeachHandlers(deps: TeachHandlerDeps): TeachHandlers {
     const vault = deps.vault();
     return vault?.available() ? vault : null;
   };
+
+  /** Role key of an admin's last handbook_lookup of another role (handbook_show falls back to it). */
+  let adminLookedUpRole: string | null = null;
 
   return {
     vault_list: async () => {
@@ -125,7 +131,10 @@ export function buildTeachHandlers(deps: TeachHandlerDeps): TeachHandlers {
       const wanted = typeof role === 'string' ? role.trim().slice(0, MAX_ROLE) : '';
       if (wanted && deps.isAdmin()) {
         try {
-          return { ok: true, result: formatHandbookForBot(await service.adminRole(roleKey(wanted)), text) };
+          const key = roleKey(wanted);
+          const payload = await service.adminRole(key);
+          adminLookedUpRole = key;
+          return { ok: true, result: formatHandbookForBot(payload, text) };
         } catch {
           return { ok: true, result: handbookEmptyText(wanted) };
         }
@@ -139,17 +148,34 @@ export function buildTeachHandlers(deps: TeachHandlerDeps): TeachHandlers {
 
     handbook_show: async (body) => {
       const activityId = field(body, 'activityId');
-      if (typeof activityId !== 'string' || activityId === '') return INVALID;
+      const role = field(body, 'role');
+      if (typeof activityId !== 'string' || activityId === '' || (role !== undefined && typeof role !== 'string'))
+        return INVALID;
       const service = deps.handbook();
       if (!service) return { ok: false, error: HANDBOOK_UNAVAILABLE_TEXT };
+      const has = (payload: { items: Array<{ id: string }> }) => payload.items.some((item) => item.id === activityId);
+      // An admin may show, read-only, an activity of any role: the one named, else the last looked up.
+      const admin = deps.isAdmin();
+      const wanted = admin && typeof role === 'string' ? role.trim().slice(0, MAX_ROLE) : '';
       try {
-        const payload = await service.mine();
-        if (!payload.items.some((item) => item.id === activityId)) return { ok: false, error: 'não encontrado' };
+        if (wanted) {
+          const key = roleKey(wanted);
+          if (!has(await service.adminRole(key))) return { ok: false, error: 'não encontrado' };
+          deps.showHandbook({ activityId, roleKey: key });
+          return { ok: true, result: 'mostrado' };
+        }
+        if (has(await service.mine())) {
+          deps.showHandbook({ activityId });
+          return { ok: true, result: 'mostrado' };
+        }
+        if (admin && adminLookedUpRole && has(await service.adminRole(adminLookedUpRole))) {
+          deps.showHandbook({ activityId, roleKey: adminLookedUpRole });
+          return { ok: true, result: 'mostrado' };
+        }
       } catch {
         return { ok: false, error: HANDBOOK_UNAVAILABLE_TEXT };
       }
-      deps.showHandbook(activityId);
-      return { ok: true, result: 'mostrado' };
+      return { ok: false, error: 'não encontrado' };
     },
   };
 }

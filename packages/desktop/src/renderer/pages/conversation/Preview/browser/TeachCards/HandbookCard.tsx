@@ -13,17 +13,25 @@ import { ipcBridge } from '@/common';
 import HandbookViewer from '@renderer/components/media/HandbookViewer';
 import styles from './TeachCards.module.css';
 
-type HandbookCardProps = { activityId: string; onClose: () => void };
+type HandbookCardProps = {
+  activityId: string;
+  /** Set only for an admin viewing another role's activity (read-only). */
+  roleKey?: string;
+  onClose: () => void;
+};
 
 const loadMedia = (id: string) => ipcBridge.jr.handbook.media.invoke({ id });
 
 /**
  * "Manual da função" card above the send box (bot tool `handbook_show`): the activity's
  * flowchart and its step replay. The screens are shown to the person only, never to the model.
+ * With `roleKey` (admin only) it reads that role's handbook instead of the person's own.
  */
-const HandbookCard: React.FC<HandbookCardProps> = ({ activityId, onClose }) => {
+const HandbookCard: React.FC<HandbookCardProps> = ({ activityId, roleKey, onClose }) => {
   const { t } = useTranslation();
-  const mine = useSWR('jr.handbook.mine', () => ipcBridge.jr.handbook.mine.invoke());
+  const mine = useSWR(roleKey ? `jr.handbook.adminRole.${roleKey}` : 'jr.handbook.mine', () =>
+    roleKey ? ipcBridge.jr.handbook.adminRole.invoke({ key: roleKey }) : ipcBridge.jr.handbook.mine.invoke()
+  );
   const title = t('common.jr.handbook.card.title');
   return (
     <div className={`${styles.card} max-h-[60vh] overflow-auto`} role='dialog' aria-label={title}>

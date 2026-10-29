@@ -2635,7 +2635,8 @@ export const teach = {
   /** Rewrites a taught task's SKILL.md; rejects with a {@link TaughtTaskErrorCode}. */
   saveTask: bridge.buildProvider<void, TaughtTaskContent>('teach:save-task'),
   /** Main → renderer: show the "Manual da função" card of an activity (from `handbook_show`). */
-  showHandbook: bridge.buildEmitter<{ activityId: string }>('teach:show-handbook'),
+  /** `roleKey` only when an admin views another role's activity (read-only). */
+  showHandbook: bridge.buildEmitter<{ activityId: string; roleKey?: string }>('teach:show-handbook'),
 };
 
 // ---------------------------------------------------------------------------
