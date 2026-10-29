@@ -45,7 +45,11 @@ export function useTaughtRunWatcher(): void {
       const notice = t('common.jr.teach.tasks.runningScheduled', { name: job.name });
       Message.info(notice);
       void ipcBridge.notification.show
-        .invoke({ title: notice, body: t('common.jr.teach.tasks.runningScheduledBody'), conversation_id: conversationId })
+        .invoke({
+          title: notice,
+          body: t('common.jr.teach.tasks.runningScheduledBody'),
+          conversation_id: conversationId,
+        })
         .catch(() => {});
     };
     return ipcBridge.conversation.artifactStream.on((artifact: IConversationArtifact): void => {

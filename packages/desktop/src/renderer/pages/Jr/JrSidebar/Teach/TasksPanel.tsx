@@ -68,9 +68,9 @@ const TasksPanel: React.FC<TasksPanelProps> = ({ onClose }) => {
     setRemoving(true);
     try {
       // Jobs first: a job left behind would run a skill that no longer exists.
-      for (const job of jobsBySkill.get(name) ?? []) {
-        await ipcBridge.cron.removeJob.invoke({ job_id: job.id });
-      }
+      await Promise.all(
+        (jobsBySkill.get(name) ?? []).map((job) => ipcBridge.cron.removeJob.invoke({ job_id: job.id }))
+      );
       await ipcBridge.fs.deleteSkill.invoke({ skill_name: name });
       setDeleting(null);
       await Promise.all([skills.mutate(), refreshJobs()]);

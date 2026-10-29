@@ -570,8 +570,7 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
       const scheduleDesc = scheduleInfo.description;
       const schedule = createCronSchedule(scheduleExpr, scheduleDesc);
       const assistantValue = typeof values.assistant === 'string' ? values.assistant : selectedAssistantId;
-      const resolvedExecutionMode: ExecutionMode =
-        isTeamOwnedTask || isPrefillCreate ? 'existing' : execution_mode;
+      const resolvedExecutionMode: ExecutionMode = isTeamOwnedTask || isPrefillCreate ? 'existing' : execution_mode;
 
       let agent_config: ICreateCronJobParams['agent_config'] | ICronJobUpdateParams['metadata']['agent_config'];
       if (canEditAgentConfig) {

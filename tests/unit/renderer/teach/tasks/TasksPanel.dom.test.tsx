@@ -115,6 +115,14 @@ const renderPanel = (onClose = vi.fn(), path = '/conversation/x?bot=b2') =>
     </SWRConfig>
   );
 
+const taughtJob = (id: string, skillName: string) => ({
+  id,
+  name: 'NFs',
+  schedule: { kind: 'cron', expr: '0 9 * * MON-FRI', description: 'Dias úteis às 09:00' },
+  target: { execution_mode: 'existing', payload: { kind: 'message', text: `Execução agendada \`${skillName}\`` } },
+  metadata: { conversation_id: 'c1' },
+});
+
 describe('TasksPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -184,14 +192,6 @@ describe('TasksPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: /common.jr.teach.tasks.edit$/ }));
     expect(await screen.findByText('common.jr.teach.tasks.editTitle')).toBeInTheDocument();
     expect(readTask).toHaveBeenCalledWith({ name: 'jr-tarefa-nfs' });
-  });
-
-  const taughtJob = (id: string, skillName: string) => ({
-    id,
-    name: 'NFs',
-    schedule: { kind: 'cron', expr: '0 9 * * MON-FRI', description: 'Dias úteis às 09:00' },
-    target: { execution_mode: 'existing', payload: { kind: 'message', text: `Execução agendada \`${skillName}\`` } },
-    metadata: { conversation_id: 'c1' },
   });
 
   it('shows the schedule description of an existing job', async () => {
