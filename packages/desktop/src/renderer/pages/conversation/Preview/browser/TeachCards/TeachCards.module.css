@@ -1,10 +1,10 @@
 .card {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   margin-bottom: 12px;
   padding: 14px 16px;
-  border-radius: 12px;
+  border-radius: 16px;
   background: var(--jr-surface);
   border: 1px solid var(--jr-hairline);
   box-shadow: var(--jr-composer-shadow);
@@ -13,14 +13,31 @@
 .title {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  font-size: 14px;
   font-weight: 600;
+  letter-spacing: -0.01em;
   color: var(--color-text-1);
 }
 
 .icon {
-  display: inline-flex;
-  color: var(--jr-accent);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--bg-hover);
+  color: var(--color-text-1);
+}
+
+.title > :global(.arco-spin) {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--bg-hover);
 }
 
 .label {
@@ -45,15 +62,41 @@
   color: var(--color-text-2);
 }
 
+.code :global(.arco-input) {
+  font-family: var(--font-family-mono, ui-monospace, monospace);
+  font-size: 17px;
+  letter-spacing: 0.3em;
+  text-align: center;
+}
+
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .footnote {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   color: var(--color-text-3);
   font-size: 12px;
+  line-height: 18px;
 }
 
 .actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 6px;
+  margin: 2px -16px -14px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--jr-hairline);
+}
+
+.actions :global(.arco-btn) {
+  border-radius: 999px;
 }
 
 .meta {
@@ -75,9 +118,34 @@
 }
 
 .steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   margin: 0;
-  padding-inline-start: 20px;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
   color: var(--color-text-1);
   font-size: 13px;
-  line-height: 1.6;
+  line-height: 20px;
+}
+
+.steps > li {
+  display: flex;
+  gap: 10px;
+  counter-increment: step;
+}
+
+.steps > li::before {
+  content: counter(step);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--color-text-2);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }

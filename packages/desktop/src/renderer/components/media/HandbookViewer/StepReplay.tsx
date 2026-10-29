@@ -48,17 +48,21 @@ const StepReplay: React.FC<StepReplayProps> = ({ steps, loadMedia }) => {
       <div className='flex items-center gap-8px'>
         <Button
           size='small'
+          type='text'
+          shape='round'
           icon={<Left />}
           disabled={index === 0}
           onClick={() => setIndex((current) => Math.max(0, current - 1))}
         >
           {t('common.jr.handbook.replay.previous')}
         </Button>
-        <span className='text-13px text-t-secondary flex-1 text-center'>
+        <span className='text-12px text-t-tertiary flex-1 text-center tabular-nums'>
           {t('common.jr.handbook.replay.step', { current: index + 1, total: steps.length })}
         </span>
         <Button
           size='small'
+          type='text'
+          shape='round'
           disabled={index >= steps.length - 1}
           onClick={() => setIndex((current) => Math.min(steps.length - 1, current + 1))}
         >
@@ -66,7 +70,7 @@ const StepReplay: React.FC<StepReplayProps> = ({ steps, loadMedia }) => {
           <Right />
         </Button>
       </div>
-      <div className='min-h-120px flex items-center justify-center rd-8px bg-fill-2 overflow-hidden'>
+      <div className='min-h-140px flex items-center justify-center rd-12px bg-fill-2 overflow-hidden border border-solid border-[var(--jr-hairline)]'>
         {!mediaId ? (
           <p className='text-t-secondary text-13px p-16px'>{t('common.jr.handbook.replay.noShot')}</p>
         ) : shown ? (
@@ -75,7 +79,7 @@ const StepReplay: React.FC<StepReplayProps> = ({ steps, loadMedia }) => {
           <p className='text-t-secondary text-13px p-16px'>{t('common.jr.handbook.replay.loadingShot')}</p>
         )}
       </div>
-      <p className='text-14px'>{step.text}</p>
+      <p className='m-0 text-14px leading-22px'>{step.text}</p>
     </div>
   );
 };

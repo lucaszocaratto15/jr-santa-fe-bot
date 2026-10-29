@@ -392,20 +392,37 @@
   padding: 4px 0;
 }
 .characterPreview {
-  height: 96px;
+  width: 112px;
+  height: 112px;
   margin-bottom: 4px;
   display: grid;
   place-items: center;
+  border-radius: 50%;
+  background: var(--jr-modal-content);
 }
 .characterName:global(.arco-input),
 .characterName :global(.arco-input) {
-  padding: 8px 10px;
-  border: 0.5px solid var(--jr-border);
-  border-radius: 8px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 10px;
   background: transparent;
   color: var(--color-text-1);
-  font-size: 13px;
-  line-height: 18px;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 28px;
+  text-align: center;
+}
+.characterName:global(.arco-input):focus,
+.characterName :global(.arco-input):focus {
+  background: var(--bg-hover);
+}
+.pickerLabel {
+  align-self: stretch;
+  margin: 8px 0 0;
+  color: var(--color-text-2);
+  font-size: 12.5px;
+  font-weight: 500;
 }
 .botSettings {
   width: 100%;
@@ -414,43 +431,46 @@
   gap: 8px;
   text-align: start;
 }
+.botSettings {
+  margin-top: 8px;
+}
 .botSettings > label {
   color: var(--color-text-2);
-  font-size: 12px;
+  font-size: 12.5px;
+  font-weight: 500;
 }
 .botHint {
   margin: 0 0 4px;
   color: var(--color-text-3);
-  font-size: 11px;
-  line-height: 1.45;
+  font-size: 12px;
+  line-height: 18px;
 }
 .shapePicker {
-  width: min(100%, 272px);
-  display: flex;
-  justify-content: flex-start;
-  column-gap: clamp(0px, calc((100% - 240px) / 4), 8px);
-  row-gap: 4px;
-  padding: 6px 0;
-  flex-wrap: wrap;
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
 }
 .shapeChoice:global(.arco-btn) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 48px;
-  height: 48px;
-  min-width: 48px;
+  width: 100%;
+  height: auto;
+  min-width: 0;
+  aspect-ratio: 1;
   padding: 0;
   border: none;
-  border-radius: 50%;
+  border-radius: 12px;
   line-height: 0;
   background: transparent;
   overflow: visible;
 }
 .shapeChoice:global(.arco-btn):hover,
 .shapeChoice:global(.arco-btn):active {
-  background: transparent;
+  background: var(--bg-hover);
 }
+
 .shapeMark {
   width: 36px;
   height: 36px;
@@ -469,9 +489,9 @@
   box-shadow: 0 0 0 6px var(--color-fill-3);
 }
 .colorPicker {
-  width: min(100%, 232px);
+  width: 100%;
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 8px;
   padding: 8px 0;
   flex-wrap: wrap;
@@ -496,8 +516,8 @@
 }
 .colorSelected .colorSwatch {
   box-shadow:
-    0 0 0 3px var(--color-bg-2),
-    0 0 0 4px var(--color-text-3);
+    0 0 0 3px var(--jr-modal),
+    0 0 0 5px var(--color-text-1);
 }
 .shapeChoice:focus-visible,
 .colorChoice:focus-visible {
@@ -605,4 +625,53 @@
   border: 0.5px solid var(--jr-border);
   border-radius: 14px;
   overflow: hidden;
+}
+
+.fieldLabel {
+  color: var(--color-text-2);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.teamPicker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+}
+.teamChoice:global(.arco-btn) {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  height: auto;
+  padding: 12px 8px;
+  border: 1px solid var(--jr-hairline);
+  border-radius: 12px;
+  color: var(--color-text-1);
+}
+.teamChoice:global(.arco-btn):hover {
+  background: var(--bg-hover);
+}
+.teamChoiceOn:global(.arco-btn) {
+  border-color: var(--color-text-1);
+  background: var(--bg-hover);
+}
+.teamChoiceCheck {
+  position: absolute;
+  top: 8px;
+  inset-inline-end: 8px;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--jr-brand);
+  color: var(--jr-on-brand);
+}
+.teamChoiceName {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

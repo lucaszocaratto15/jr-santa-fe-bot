@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Alert, Button, Message, Modal, Popconfirm, Spin, Tag } from '@arco-design/web-react';
+import { Alert, Button, Message, Modal, Popconfirm, Spin } from '@arco-design/web-react';
+import { BookOpen, ChartHistogram, Check, FileText } from '@icon-park/react';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import useSWR from 'swr';
@@ -18,6 +19,7 @@ import type {
 import HandbookViewer from '@renderer/components/media/HandbookViewer';
 import styles from '../JrSidebar.module.css';
 import HandbookDraftEditor, { handbookErrorKey } from './HandbookDraftEditor';
+import { EmptyState, PageHeader, SectionLabel } from './PanelParts';
 
 const DRAFTS_KEY = 'jr.handbook.drafts';
 const MINE_KEY = 'jr.handbook.mine';
@@ -56,12 +58,18 @@ const HandbookPanel: React.FC = () => {
   };
 
   const header = (
-    <>
-      <h2 className={styles.pageTitle}>{t('common.jr.handbook.title')}</h2>
-      {drafts.data?.role && (
-        <p className={styles.muted}>{t('common.jr.handbook.roleLabel', { role: drafts.data.role.title })}</p>
-      )}
-    </>
+    <PageHeader
+      title={t('common.jr.handbook.title')}
+      subtitle={drafts.data?.role ? t('common.jr.handbook.visibleNotice') : undefined}
+      aside={
+        drafts.data?.role && (
+          <span className={styles.chip}>
+            <BookOpen theme='outline' size={11} />
+            {t('common.jr.handbook.roleLabel', { role: drafts.data.role.title })}
+          </span>
+        )
+      }
+    />
   );
   if (drafts.isLoading)
     return (
@@ -94,19 +102,29 @@ const HandbookPanel: React.FC = () => {
   return (
     <div>
       {header}
-      <p className={`${styles.muted} mb-16px`}>{t('common.jr.handbook.visibleNotice')}</p>
-      <h3 className={`${styles.cardTitle} mb-8px`}>{t('common.jr.handbook.draftsTitle')}</h3>
+      <SectionLabel>{t('common.jr.handbook.draftsTitle')}</SectionLabel>
       <div className={`${styles.card} ${styles.cardList}`}>
-        {drafts.data.drafts.length === 0 && <p className={styles.muted}>{t('common.jr.handbook.noDrafts')}</p>}
+        {drafts.data.drafts.length === 0 && (
+          <EmptyState icon={<Check theme='outline' size={18} />} title={t('common.jr.handbook.noDrafts')} />
+        )}
         {drafts.data.drafts.map((draft) => (
-          <div key={draft.key} className={`${styles.row} flex-wrap`} data-testid={`draft-${draft.key}`}>
+          <div key={draft.key} className={styles.row} data-testid={`draft-${draft.key}`}>
+            <span className={styles.rowIcon} aria-hidden='true'>
+              {draft.kind === 'activity' ? (
+                <FileText theme='outline' size={16} />
+              ) : (
+                <ChartHistogram theme='outline' size={16} />
+              )}
+            </span>
             <div className={styles.rowCopy}>
-              <p className={styles.rowTitle}>
+              <p className={`${styles.rowTitle} font-500`}>
                 {draftLabel(draft, t)}{' '}
-                {draft.status === 'changed' && <Tag size='small'>{t('common.jr.handbook.changed')}</Tag>}
+                {draft.status === 'changed' && (
+                  <span className={`${styles.chip} ${styles.chipWarning}`}>{t('common.jr.handbook.changed')}</span>
+                )}
               </p>
               {draft.kind === 'activity' && (
-                <p className={styles.muted}>
+                <p className={styles.rowMeta}>
                   {t('common.jr.handbook.stepsCount', {
                     steps: (draft.body as HandbookActivityBody).steps.length,
                     shots: draft.shots.length,
@@ -115,12 +133,13 @@ const HandbookPanel: React.FC = () => {
               )}
             </div>
             <div className={styles.rowActions}>
-              <Button className={styles.softButton} size='small' onClick={() => setEditing(draft)}>
+              <Button className={styles.softButton} shape='round' size='small' onClick={() => setEditing(draft)}>
                 {t('common.jr.handbook.review')}
               </Button>
               <Button
+                className={styles.ghostIcon}
+                shape='round'
                 size='small'
-                type='text'
                 loading={busy === draft.key}
                 onClick={() => void act(draft.key, () => ipcBridge.jr.handbook.dismiss.invoke({ key: draft.key }))}
               >
@@ -130,19 +149,28 @@ const HandbookPanel: React.FC = () => {
           </div>
         ))}
       </div>
-      <h3 className={`${styles.cardTitle} mt-20px mb-8px`}>{t('common.jr.handbook.publishedTitle')}</h3>
+      <SectionLabel>{t('common.jr.handbook.publishedTitle')}</SectionLabel>
       <div className={`${styles.card} ${styles.cardList}`}>
-        {published.length === 0 && <p className={styles.muted}>{t('common.jr.handbook.noPublished')}</p>}
+        {published.length === 0 && (
+          <EmptyState icon={<BookOpen theme='outline' size={18} />} title={t('common.jr.handbook.noPublished')} />
+        )}
         {published.map((entry) => (
           <div key={entry.key} className={styles.row} data-testid={`published-${entry.itemId}`}>
-            <p className={`${styles.rowTitle} flex-1`}>
+            <span className={styles.rowIcon} aria-hidden='true'>
+              {entry.kind === 'activity' ? (
+                <FileText theme='outline' size={16} />
+              ) : (
+                <ChartHistogram theme='outline' size={16} />
+              )}
+            </span>
+            <p className={`${styles.rowTitle} font-500 flex-1`}>
               {entry.kind === 'indicators'
                 ? t('common.jr.handbook.kindIndicators', { week: entry.title })
                 : entry.title}
             </p>
             <div className={styles.rowActions}>
               {entry.kind === 'activity' && (
-                <Button size='small' type='text' onClick={() => setViewing(entry)}>
+                <Button className={styles.ghostIcon} shape='round' size='small' onClick={() => setViewing(entry)}>
                   {t('common.jr.handbook.view')}
                 </Button>
               )}
@@ -156,7 +184,7 @@ const HandbookPanel: React.FC = () => {
                   )
                 }
               >
-                <Button size='small' type='text' status='danger' loading={busy === entry.itemId}>
+                <Button size='small' type='text' shape='round' status='danger' loading={busy === entry.itemId}>
                   {t('common.jr.handbook.withdraw')}
                 </Button>
               </Popconfirm>

@@ -104,7 +104,7 @@ const JrBotDialog: React.FC<{
       <div className={styles.characterEditor}>
         {error && <Alert type='error' content={error} />}
         <div className={styles.characterPreview}>
-          <JrCharacter appearance={appearance} size={96} />
+          <JrCharacter appearance={appearance} size={84} />
         </div>
         <label htmlFor='jr-bot-name' className={styles.srOnly}>
           {t('common.jr.botName')}
@@ -120,19 +120,7 @@ const JrBotDialog: React.FC<{
           autoFocus
           onPressEnter={() => void save()}
         />
-        <div className={styles.botSettings}>
-          <label htmlFor='jr-bot-learning'>{t('common.jr.learningTitle')}</label>
-          <Input.TextArea
-            id='jr-bot-learning'
-            value={learning}
-            onChange={setLearning}
-            maxLength={12000}
-            autoSize={{ minRows: 3, maxRows: 7 }}
-            disabled={saving}
-            placeholder={t('common.jr.learningPlaceholder')}
-          />
-          <p className={styles.botHint}>{t('common.jr.learningHint')}</p>
-        </div>
+        <p className={styles.pickerLabel}>{t('common.jr.characterShape')}</p>
         <div className={styles.shapePicker} role='group' aria-label={t('common.jr.characterShape')}>
           {CHARACTER_SHAPES.map((shape) => (
             <Button
@@ -150,6 +138,7 @@ const JrBotDialog: React.FC<{
             </Button>
           ))}
         </div>
+        <p className={styles.pickerLabel}>{t('common.jr.characterColor')}</p>
         <div className={styles.colorPicker} role='group' aria-label={t('common.jr.characterColor')}>
           {CHARACTER_COLORS.map((color) => (
             <Button
@@ -164,6 +153,19 @@ const JrBotDialog: React.FC<{
               <span className={styles.colorSwatch} style={{ backgroundColor: CHARACTER_PALETTE[color] }} />
             </Button>
           ))}
+        </div>
+        <div className={styles.botSettings}>
+          <label htmlFor='jr-bot-learning'>{t('common.jr.learningTitle')}</label>
+          <Input.TextArea
+            id='jr-bot-learning'
+            value={learning}
+            onChange={setLearning}
+            maxLength={12000}
+            autoSize={{ minRows: 3, maxRows: 7 }}
+            disabled={saving}
+            placeholder={t('common.jr.learningPlaceholder')}
+          />
+          <p className={styles.botHint}>{t('common.jr.learningHint')}</p>
         </div>
       </div>
     </Modal>

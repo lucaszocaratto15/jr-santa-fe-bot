@@ -1,10 +1,12 @@
 import { ipcBridge } from '@/common';
 import type { VaultItemPublic } from '@/common/adapter/ipcBridge';
-import { Alert, Button, Form, Input, Message, Popconfirm } from '@arco-design/web-react';
+import { Alert, Button, Form, Input, Message, Popconfirm, Tooltip } from '@arco-design/web-react';
+import { Delete, Earth, Edit, Key, Lock, Plus } from '@icon-park/react';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import useSWR from 'swr';
 import styles from '../JrSidebar.module.css';
+import { EmptyState, PageHeader } from './PanelParts';
 
 type Draft = { id?: string; name: string; origins: string; username: string; password: string; hints: string };
 
@@ -69,19 +71,30 @@ const VaultPanel: React.FC = () => {
 
   return (
     <div>
-      <h2 className={styles.pageTitle}>{t('common.jr.vault.title')}</h2>
-      <p className={styles.muted}>{t('common.jr.vault.subtitle')}</p>
+      <PageHeader
+        title={t('common.jr.vault.title')}
+        subtitle={
+          <>
+            <Lock theme='outline' size={12} />
+            <span>{t('common.jr.vault.subtitle')}</span>
+          </>
+        }
+        aside={
+          usable && (
+            <Button
+              type='primary'
+              shape='round'
+              icon={<Plus theme='outline' size={14} />}
+              onClick={() => setDraft({ ...emptyDraft })}
+            >
+              {t('common.jr.vault.add')}
+            </Button>
+          )
+        }
+      />
       {available.data === false && <Alert type='warning' content={t('common.jr.vault.unavailable')} />}
       {usable && (
         <>
-          <div className={styles.card}>
-            <div className={styles.cardRow}>
-              <p className={styles.cardTitle}>{t('common.jr.vault.title')}</p>
-              <Button className={styles.softButton} onClick={() => setDraft({ ...emptyDraft })}>
-                {t('common.jr.vault.add')}
-              </Button>
-            </div>
-          </div>
           {draft && (
             <div className={styles.card}>
               <p className={styles.cardTitle}>
@@ -124,34 +137,54 @@ const VaultPanel: React.FC = () => {
             </div>
           )}
           <div className={`${styles.card} ${styles.cardList}`}>
-            {(items.data ?? []).length === 0 && <p className={styles.muted}>{t('common.jr.vault.empty')}</p>}
+            {(items.data ?? []).length === 0 && (
+              <EmptyState
+                icon={<Key theme='outline' size={18} />}
+                title={t('common.jr.vault.empty')}
+                hint={t('common.jr.vault.emptyHint')}
+              />
+            )}
             {(items.data ?? []).map((item) => (
               <div key={item.id} className={styles.row}>
+                <span className={styles.rowIcon} aria-hidden='true'>
+                  <Earth theme='outline' size={16} />
+                </span>
                 <div className={styles.rowCopy}>
-                  <p className={styles.rowTitle}>{item.name}</p>
-                  <p className={styles.muted}>
+                  <p className={`${styles.rowTitle} font-500`}>{item.name}</p>
+                  <p className={styles.rowMeta}>
                     {[
                       item.origins.join(', '),
                       item.username,
-                      item.hasPassword ? t('common.jr.vault.passwordSaved') + ' ✓' : '',
+                      item.hasPassword ? t('common.jr.vault.passwordSaved') : '',
                     ]
                       .filter(Boolean)
                       .join(' · ')}
                   </p>
                 </div>
                 <div className={styles.rowActions}>
-                  <Button className={styles.softButton} size='small' onClick={() => startEdit(item)}>
-                    {t('common.jr.vault.edit')}
-                  </Button>
+                  <Tooltip content={t('common.jr.vault.edit')}>
+                    <Button
+                      className={styles.ghostIcon}
+                      shape='circle'
+                      size='small'
+                      aria-label={t('common.jr.vault.edit')}
+                      icon={<Edit theme='outline' size={15} />}
+                      onClick={() => startEdit(item)}
+                    />
+                  </Tooltip>
                   <Popconfirm
                     title={t('common.jr.vault.deleteConfirm')}
                     okText={t('common.jr.vault.confirmOk')}
                     cancelText={t('common.jr.vault.cancel')}
                     onOk={() => remove(item.id)}
                   >
-                    <Button className={styles.softButton} size='small' status='danger'>
-                      {t('common.jr.vault.delete')}
-                    </Button>
+                    <Button
+                      className={styles.ghostIcon}
+                      shape='circle'
+                      size='small'
+                      aria-label={t('common.jr.vault.delete')}
+                      icon={<Delete theme='outline' size={15} />}
+                    />
                   </Popconfirm>
                 </div>
               </div>

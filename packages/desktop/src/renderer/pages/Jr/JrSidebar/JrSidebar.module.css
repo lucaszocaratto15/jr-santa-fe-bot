@@ -231,10 +231,43 @@
 .teamLabel {
   display: flex;
   align-items: center;
-  height: 36px;
-  padding: 0 8px;
+  height: 32px;
+  margin-top: 8px;
+  padding: 8px 8px 0;
+  border-top: 1px solid var(--jr-hairline);
+  color: var(--color-text-3);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.avatarStack {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.avatarStackItem {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--jr-sidebar);
+}
+
+.avatarStackItem + .avatarStackItem {
+  margin-inline-start: -8px;
+}
+
+.newTeamMark {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border: 1px dashed var(--color-text-3);
+  border-radius: 999px;
   color: var(--color-text-2);
-  font-size: 14px;
 }
 
 .bottom {
@@ -663,6 +696,220 @@
   font-size: 14px;
   line-height: 20px;
   color: var(--color-text-2);
+}
+
+/* Page header, section labels, row icons, chips and empty states of the teach/learn/handbook tabs. */
+.pageHead {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.pageHead .pageTitle {
+  margin: 0;
+}
+
+.pageHeadCopy {
+  min-width: 0;
+  flex: 1;
+}
+
+.pageHeadAside {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-inline-end: 40px;
+}
+
+.subtitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--color-text-3);
+}
+
+.sectionLabel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 28px 0 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-2);
+}
+
+.sectionLabel:first-child {
+  margin-top: 0;
+}
+
+.rowIcon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: var(--bg-hover);
+  color: var(--color-text-2);
+}
+
+.rowMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--color-text-3);
+}
+
+.mono {
+  font-family: var(--font-family-mono, ui-monospace, monospace);
+  font-size: 11.5px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--color-text-2);
+  font-size: 11.5px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.chipSuccess {
+  background: rgba(var(--success-6), 0.12);
+  color: rgb(var(--success-6));
+}
+
+.chipWarning {
+  background: rgba(var(--warning-6), 0.14);
+  color: rgb(var(--warning-6));
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.ghostIcon:global(.arco-btn) {
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-2);
+}
+
+.ghostIcon:global(.arco-btn):hover {
+  background: var(--bg-hover);
+  color: var(--color-text-1);
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 24px;
+  text-align: center;
+}
+
+.emptyIcon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 12px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--color-text-2);
+}
+
+.emptyTitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text-1);
+}
+
+.emptyHint {
+  max-width: 340px;
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--color-text-3);
+}
+
+.emptyAction {
+  margin-top: 16px;
+}
+
+.appBar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12.5px;
+}
+
+.appBarName {
+  width: 72px;
+  flex-shrink: 0;
+  overflow: hidden;
+  color: var(--color-text-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.appBarTrack {
+  flex: 1;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--bg-hover);
+}
+
+.appBarFill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--color-text-2);
+}
+
+.appBarValue {
+  width: 52px;
+  flex-shrink: 0;
+  color: var(--color-text-3);
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.pillTag:global(.arco-tag) {
+  height: 28px;
+  padding: 0 6px 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--color-text-1);
+  font-size: 12.5px;
+}
+
+.skeletonRow {
+  padding: 14px 0;
+}
+
+.skeletonRow + .skeletonRow {
+  border-top: 1px solid var(--jr-hairline);
 }
 
 @media (max-width: 760px) {

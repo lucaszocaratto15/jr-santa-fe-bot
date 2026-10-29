@@ -5,7 +5,7 @@
  */
 
 import { Button, Empty, Tag } from '@arco-design/web-react';
-import { Left } from '@icon-park/react';
+import { FileText, Left, Right } from '@icon-park/react';
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { HandbookView } from '@/common/types/agent/handbookTypes';
@@ -39,16 +39,17 @@ const HandbookViewer: React.FC<HandbookViewerProps> = ({ payload, activityId, lo
           <Button
             size='small'
             type='text'
+            shape='round'
             icon={<Left />}
-            className='self-start'
+            className='self-start !text-t-secondary'
             onClick={() => setSelected(undefined)}
           >
             {t('common.jr.handbook.viewer.back')}
           </Button>
         )}
         <div>
-          <h3 className='text-15px font-600 m-0'>{item.body.title}</h3>
-          {item.body.description && <p className='text-t-secondary text-13px'>{item.body.description}</p>}
+          <h3 className='text-15px font-600 m-0 tracking-[-0.01em]'>{item.body.title}</h3>
+          {item.body.description && <p className='text-t-secondary text-13px mt-2px mb-8px'>{item.body.description}</p>}
           <Tag size='small'>{t(`common.jr.handbook.frequency.${item.body.frequency}`)}</Tag>
         </div>
         {flowchart && <MermaidBlock code={flowchart} showOpenInPanelButton={false} />}
@@ -79,11 +80,23 @@ const HandbookViewer: React.FC<HandbookViewerProps> = ({ payload, activityId, lo
   return (
     <div className='flex flex-col gap-12px' data-testid='handbook-role'>
       <MermaidBlock code={payload.roleFlowchart} showOpenInPanelButton={false} />
-      <h3 className='text-14px font-600 m-0'>{t('common.jr.handbook.viewer.activities')}</h3>
-      <div className='flex flex-col gap-4px'>
+      <h3 className='text-12px font-500 text-t-tertiary m-0'>{t('common.jr.handbook.viewer.activities')}</h3>
+      <div className='flex flex-col'>
         {payload.items.map((entry) => (
-          <Button key={entry.id} long className='!text-left' onClick={() => setSelected(entry.id)}>
-            {entry.body.title} · {t(`common.jr.handbook.frequency.${entry.body.frequency}`)}
+          <Button
+            key={entry.id}
+            type='text'
+            long
+            className='!h-auto !py-10px !px-10px !rd-12px !text-left !text-t-primary'
+            onClick={() => setSelected(entry.id)}
+          >
+            <span className='flex items-center gap-10px'>
+              <FileText theme='outline' size={15} className='text-t-tertiary shrink-0' />
+              <span className='flex-1 min-w-0 truncate text-13px'>
+                {entry.body.title} · {t(`common.jr.handbook.frequency.${entry.body.frequency}`)}
+              </span>
+              <Right theme='outline' size={14} className='text-t-tertiary shrink-0' />
+            </span>
           </Button>
         ))}
       </div>

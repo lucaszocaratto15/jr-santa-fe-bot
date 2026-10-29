@@ -22,6 +22,7 @@ import styles from './TeachControls.module.css';
 
 /** Hard limit shown next to the timer; main enforces it (recorder RECORDING_LIMIT_MS). */
 const LIMIT_LABEL = '10:00';
+const LIMIT_MS = 10 * 60 * 1000;
 
 export const formatElapsed = (ms: number): string => {
   const total = Math.max(0, Math.floor(ms / 1000));
@@ -97,7 +98,9 @@ export const TeachRecordingBar: React.FC<{ inChat?: boolean }> = ({ inChat = fal
     <div className={inChat ? `${styles.bar} ${styles.barChat}` : styles.bar} role='status'>
       <span className={paused ? `${styles.dot} ${styles.dotPaused}` : styles.dot} aria-hidden='true' />
       <span className={styles.timer}>
-        {paused ? t('common.jr.teach.controls.paused') : t('common.jr.teach.controls.recording')}{' '}
+        <span className={styles.timerLabel}>
+          {paused ? t('common.jr.teach.controls.paused') : t('common.jr.teach.controls.recording')}
+        </span>{' '}
         {formatElapsed(teach.elapsedMs)} / {LIMIT_LABEL}
       </span>
       <div className={styles.barActions}>
@@ -123,6 +126,7 @@ export const TeachRecordingBar: React.FC<{ inChat?: boolean }> = ({ inChat = fal
         <Button
           size='small'
           type='primary'
+          shape='round'
           disabled={busy}
           loading={teach.phase === 'stopping'}
           onClick={() => void run(finishRecording, 'common.jr.teach.controls.stopFailed')}
@@ -130,6 +134,11 @@ export const TeachRecordingBar: React.FC<{ inChat?: boolean }> = ({ inChat = fal
           {t('common.jr.teach.controls.finish')}
         </Button>
       </div>
+      <span
+        className={styles.progress}
+        style={{ width: `${Math.min(100, (teach.elapsedMs / LIMIT_MS) * 100)}%` }}
+        aria-hidden='true'
+      />
     </div>
   );
 };

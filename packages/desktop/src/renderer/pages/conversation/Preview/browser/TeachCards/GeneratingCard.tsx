@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Button, Message, Spin } from '@arco-design/web-react';
+import { Button, Message, Skeleton, Spin } from '@arco-design/web-react';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { discardRecording, knownTeachError, sendToTeachConversation, useTeachUi } from './teachStore';
@@ -43,10 +43,12 @@ const GeneratingCard: React.FC = () => {
         <Spin size={14} />
         <span>{title}</span>
       </div>
-      {problem && (
+      {problem ? (
         <div className={styles.label} role='alert'>
           {problem}
         </div>
+      ) : (
+        <Skeleton animation text={{ rows: 2, width: ['65%', '45%'] }} />
       )}
       <div className={styles.actions}>
         <Button onClick={() => void discard()} loading={discarding}>

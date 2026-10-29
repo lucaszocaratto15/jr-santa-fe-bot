@@ -1,7 +1,7 @@
 import { ipcBridge } from '@/common';
 import type { ICronJob } from '@/common/adapter/ipcBridge';
-import { Button, Dropdown, Menu, Message, Modal } from '@arco-design/web-react';
-import { AlarmClock, Edit, More, PlayOne } from '@icon-park/react';
+import { Button, Dropdown, Menu, Message, Modal, Tooltip } from '@arco-design/web-react';
+import { AlarmClock, Edit, MagicWand, More, PlayOne } from '@icon-park/react';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -10,6 +10,7 @@ import { listJrBots, providersForNewConversation, selectJrModel, startJrConversa
 import CreateTaskDialog, { type CronTaskPrefill } from '@renderer/pages/cron/ScheduledTasksPage/CreateTaskDialog';
 import styles from '../JrSidebar.module.css';
 import EditTaskModal from './EditTaskModal';
+import { EmptyState, PageHeader, SkeletonRows } from './PanelParts';
 import {
   buildRunPrompt,
   pickRunBot,
@@ -161,30 +162,40 @@ const TasksPanel: React.FC<TasksPanelProps> = ({ onClose }) => {
 
   return (
     <div>
-      <h2 className={styles.pageTitle}>{t('common.jr.teach.tasks.title')}</h2>
-      <p className={styles.muted}>{t('common.jr.teach.tasks.subtitle')}</p>
+      <PageHeader title={t('common.jr.teach.tasks.title')} subtitle={t('common.jr.teach.tasks.subtitle')} />
       <div className={`${styles.card} ${styles.cardList}`}>
+        {!skills.data && !skills.error && <SkeletonRows />}
         {skills.error && <p className={styles.muted}>{t('common.jr.teach.tasks.loadFailed')}</p>}
         {!skills.error && skills.data && tasks.length === 0 && (
-          <p className={styles.muted}>{t('common.jr.teach.tasks.empty')}</p>
+          <EmptyState
+            icon={<MagicWand theme='outline' size={18} />}
+            title={t('common.jr.teach.tasks.emptyTitle')}
+            hint={t('common.jr.teach.tasks.emptyHint')}
+          />
         )}
         {tasks.map((task) => {
           const job = jobsBySkill.get(task.name)?.[0];
           return (
-            <div key={task.name} className={`${styles.row} flex-wrap`}>
+            <div key={task.name} className={styles.row}>
+              <span className={styles.rowIcon} aria-hidden='true'>
+                <MagicWand theme='outline' size={16} />
+              </span>
               <div className={styles.rowCopy}>
-                <p className={styles.rowTitle}>{task.name}</p>
-                <p className={styles.muted}>{task.description}</p>
-                {job && (
-                  <p className={`${styles.muted} flex items-center gap-4px`}>
-                    <AlarmClock theme='outline' size={12} />
-                    <span>{job.schedule.description}</span>
-                  </p>
-                )}
+                <p className={`${styles.rowTitle} font-500`}>{task.description || task.name}</p>
+                <p className={styles.rowMeta}>
+                  <span className={styles.mono}>{task.name}</span>
+                  {job && (
+                    <span className={styles.chip}>
+                      <AlarmClock theme='outline' size={11} />
+                      <span>{job.schedule.description}</span>
+                    </span>
+                  )}
+                </p>
               </div>
               <div className={styles.rowActions}>
                 <Button
                   className={styles.softButton}
+                  shape='round'
                   size='small'
                   icon={<PlayOne theme='outline' size={14} />}
                   loading={running === task.name}
@@ -192,23 +203,27 @@ const TasksPanel: React.FC<TasksPanelProps> = ({ onClose }) => {
                 >
                   {t('common.jr.teach.tasks.run')}
                 </Button>
-                <Button
-                  className={styles.softButton}
-                  size='small'
-                  icon={<Edit theme='outline' size={14} />}
-                  onClick={() => setEditing(task.name)}
-                >
-                  {t('common.jr.teach.tasks.edit')}
-                </Button>
-                <Button
-                  className={styles.softButton}
-                  size='small'
-                  icon={<AlarmClock theme='outline' size={14} />}
-                  loading={preparing === task.name}
-                  onClick={() => void schedule(task)}
-                >
-                  {t('common.jr.teach.tasks.schedule')}
-                </Button>
+                <Tooltip content={t('common.jr.teach.tasks.edit')}>
+                  <Button
+                    className={styles.ghostIcon}
+                    shape='circle'
+                    size='small'
+                    aria-label={t('common.jr.teach.tasks.edit')}
+                    icon={<Edit theme='outline' size={15} />}
+                    onClick={() => setEditing(task.name)}
+                  />
+                </Tooltip>
+                <Tooltip content={t('common.jr.teach.tasks.schedule')}>
+                  <Button
+                    className={styles.ghostIcon}
+                    shape='circle'
+                    size='small'
+                    aria-label={t('common.jr.teach.tasks.schedule')}
+                    icon={<AlarmClock theme='outline' size={15} />}
+                    loading={preparing === task.name}
+                    onClick={() => void schedule(task)}
+                  />
+                </Tooltip>
                 <Dropdown
                   trigger='click'
                   position='br'
@@ -225,10 +240,11 @@ const TasksPanel: React.FC<TasksPanelProps> = ({ onClose }) => {
                   }
                 >
                   <Button
-                    className={styles.softButton}
+                    className={styles.ghostIcon}
+                    shape='circle'
                     size='small'
                     aria-label={t('common.jr.teach.tasks.more')}
-                    icon={<More theme='outline' size={14} />}
+                    icon={<More theme='outline' size={15} />}
                   />
                 </Dropdown>
               </div>

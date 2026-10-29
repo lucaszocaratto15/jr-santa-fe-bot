@@ -51,8 +51,8 @@ const DraftShot: React.FC<{ draftKey: string; shot: number; onRemove: () => void
   }, [draftKey, shot]);
   return (
     <div className='flex items-start gap-8px'>
-      {url && <Image src={url} width={160} alt='' />}
-      <Button size='mini' icon={<Delete />} onClick={onRemove} data-testid={`remove-shot-${shot}`}>
+      {url && <Image src={url} width={160} alt='' className='rd-8px overflow-hidden' />}
+      <Button size='mini' type='text' icon={<Delete />} onClick={onRemove} data-testid={`remove-shot-${shot}`}>
         {t('common.jr.handbook.editor.removeShot')}
       </Button>
     </div>
@@ -149,6 +149,7 @@ const HandbookDraftEditor: React.FC<HandbookDraftEditorProps> = ({ draft, onDone
       footer={
         <Button
           type='primary'
+          shape='round'
           loading={publishing}
           disabled={edited !== null && !edited.title.trim()}
           onClick={() => setConfirming(true)}
@@ -161,12 +162,26 @@ const HandbookDraftEditor: React.FC<HandbookDraftEditorProps> = ({ draft, onDone
         {error && <Alert type='error' content={error} />}
         {edited && body && (
           <>
-            <label className='flex flex-col gap-4px'>
-              <span>{t('common.jr.handbook.editor.fieldTitle')}</span>
-              <Input value={body.title} maxLength={120} onChange={(title) => setBody({ ...body, title })} />
-            </label>
-            <label className='flex flex-col gap-4px'>
-              <span>{t('common.jr.handbook.editor.fieldDescription')}</span>
+            <div className='grid grid-cols-1 sm:grid-cols-[1fr_180px] gap-12px'>
+              <label className='flex flex-col gap-6px'>
+                <span className='text-12px font-500 text-t-secondary'>{t('common.jr.handbook.editor.fieldTitle')}</span>
+                <Input value={body.title} maxLength={120} onChange={(title) => setBody({ ...body, title })} />
+              </label>
+              <label className='flex flex-col gap-6px'>
+                <span className='text-12px font-500 text-t-secondary'>
+                  {t('common.jr.handbook.editor.fieldFrequency')}
+                </span>
+                <Select
+                  value={body.frequency}
+                  onChange={(frequency: HandbookActivityBody['frequency']) => setBody({ ...body, frequency })}
+                  options={FREQUENCIES.map((value) => ({ value, label: t(`common.jr.handbook.frequency.${value}`) }))}
+                />
+              </label>
+            </div>
+            <label className='flex flex-col gap-6px'>
+              <span className='text-12px font-500 text-t-secondary'>
+                {t('common.jr.handbook.editor.fieldDescription')}
+              </span>
               <Input.TextArea
                 value={body.description}
                 maxLength={2000}
@@ -174,18 +189,17 @@ const HandbookDraftEditor: React.FC<HandbookDraftEditorProps> = ({ draft, onDone
                 onChange={(description) => setBody({ ...body, description })}
               />
             </label>
-            <label className='flex flex-col gap-4px'>
-              <span>{t('common.jr.handbook.editor.fieldFrequency')}</span>
-              <Select
-                value={body.frequency}
-                onChange={(frequency: HandbookActivityBody['frequency']) => setBody({ ...body, frequency })}
-                options={FREQUENCIES.map((value) => ({ value, label: t(`common.jr.handbook.frequency.${value}`) }))}
-              />
-            </label>
-            <h4 className='m-0 text-14px font-600'>{t('common.jr.handbook.editor.steps')}</h4>
+            <h4 className='m-0 text-12px font-500 text-t-secondary'>{t('common.jr.handbook.editor.steps')}</h4>
             {body.steps.map((step, index) => (
-              <div key={`${index}:${step.shot ?? ''}`} className='flex flex-col gap-6px' data-testid={`step-${index}`}>
+              <div
+                key={`${index}:${step.shot ?? ''}`}
+                className='flex flex-col gap-8px rd-12px border border-solid border-[var(--jr-hairline)] p-8px'
+                data-testid={`step-${index}`}
+              >
                 <div className='flex items-start gap-8px'>
+                  <span className='mt-5px grid place-items-center shrink-0 w-20px h-20px rd-full bg-fill-2 text-11px text-t-secondary tabular-nums'>
+                    {index + 1}
+                  </span>
                   <Input.TextArea
                     aria-label={t('common.jr.handbook.editor.stepLabel', { index: index + 1 })}
                     value={step.text}
@@ -195,6 +209,8 @@ const HandbookDraftEditor: React.FC<HandbookDraftEditorProps> = ({ draft, onDone
                   />
                   <Button
                     size='small'
+                    type='text'
+                    shape='circle'
                     icon={<Delete />}
                     aria-label={t('common.jr.handbook.editor.removeStep')}
                     onClick={() => updateStep(index, null)}
@@ -209,11 +225,13 @@ const HandbookDraftEditor: React.FC<HandbookDraftEditorProps> = ({ draft, onDone
                 )}
               </div>
             ))}
-            <label className='flex flex-col gap-4px'>
-              <span>{t('common.jr.handbook.editor.confirmBefore')}</span>
+            <label className='flex flex-col gap-6px'>
+              <span className='text-12px font-500 text-t-secondary'>
+                {t('common.jr.handbook.editor.confirmBefore')}
+              </span>
               <Input.TextArea value={confirmText} autoSize={{ minRows: 2, maxRows: 6 }} onChange={setConfirmText} />
             </label>
-            <h4 className='m-0 text-14px font-600'>{t('common.jr.handbook.editor.preview')}</h4>
+            <h4 className='m-0 text-12px font-500 text-t-secondary'>{t('common.jr.handbook.editor.preview')}</h4>
             {preview && <MermaidBlock code={preview} showOpenInPanelButton={false} />}
           </>
         )}
@@ -244,10 +262,10 @@ const HandbookDraftEditor: React.FC<HandbookDraftEditorProps> = ({ draft, onDone
         title={t('common.jr.handbook.editor.confirmTitle')}
         onCancel={() => setConfirming(false)}
         footer={[
-          <Button key='cancel' disabled={publishing} onClick={() => setConfirming(false)}>
+          <Button key='cancel' shape='round' disabled={publishing} onClick={() => setConfirming(false)}>
             {t('common.cancel')}
           </Button>,
-          <Button key='publish' type='primary' loading={publishing} onClick={() => void publish()}>
+          <Button key='publish' type='primary' shape='round' loading={publishing} onClick={() => void publish()}>
             {t('common.jr.handbook.editor.publish')}
           </Button>,
         ]}

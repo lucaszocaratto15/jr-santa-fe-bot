@@ -5,7 +5,7 @@
  */
 
 import { Alert, Button, Spin } from '@arco-design/web-react';
-import { BookOpen, Left } from '@icon-park/react';
+import { BookOpen, Left, Right } from '@icon-park/react';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import useSWR from 'swr';
@@ -55,17 +55,30 @@ const HandbookAdmin: React.FC = () => {
       ) : !roles.data?.length ? (
         <p className={styles.hint}>{t('common.jr.handbook.admin.empty')}</p>
       ) : (
-        <div className='flex flex-col gap-4px'>
-          {roles.data.map((entry) => (
-            <Button key={entry.key} long className='!text-left !h-auto py-8px' onClick={() => setOpen(entry.key)}>
-              <span className='font-600'>{entry.title}</span>
-              <span className='text-t-secondary'>
-                {' · '}
-                {t('common.jr.handbook.admin.activities', { count: entry.activities })}
-                {entry.updatedAt > 0 &&
-                  ` · ${t('common.jr.handbook.admin.updated', {
-                    date: new Date(entry.updatedAt).toLocaleDateString(i18n.language),
-                  })}`}
+        <div className='flex flex-col rd-16px bg-[var(--jr-card)] px-16px'>
+          {roles.data.map((entry, index) => (
+            <Button
+              key={entry.key}
+              type='text'
+              long
+              className={`!h-auto !py-12px !px-0 !rd-0 !text-left !text-t-primary ${index > 0 ? 'border-t border-t-solid border-[var(--jr-hairline)]' : ''}`}
+              onClick={() => setOpen(entry.key)}
+            >
+              <span className='flex items-center gap-12px'>
+                <span className='grid place-items-center shrink-0 w-36px h-36px rd-12px bg-fill-2 text-t-secondary'>
+                  <BookOpen theme='outline' size={16} />
+                </span>
+                <span className='flex flex-col min-w-0 flex-1'>
+                  <span className='text-14px font-500'>{entry.title}</span>
+                  <span className='text-12px text-t-tertiary'>
+                    {t('common.jr.handbook.admin.activities', { count: entry.activities })}
+                    {entry.updatedAt > 0 &&
+                      ` · ${t('common.jr.handbook.admin.updated', {
+                        date: new Date(entry.updatedAt).toLocaleDateString(i18n.language),
+                      })}`}
+                  </span>
+                </span>
+                <Right theme='outline' size={14} className='text-t-tertiary shrink-0' />
               </span>
             </Button>
           ))}

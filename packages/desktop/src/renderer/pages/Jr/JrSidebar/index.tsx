@@ -362,7 +362,9 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
               <section aria-label={t('common.jr.teamChats')}>
                 <span className={styles.teamLabel}>{t('common.jr.teamChats')}</span>
                 <Button type='text' long className={styles.botRow} onClick={() => setTeamDialogOpen(true)}>
-                  <Peoples size={18} />
+                  <span className={styles.newTeamMark} aria-hidden='true'>
+                    <Peoples size={13} />
+                  </span>
                   <span className={styles.botName}>{t('common.jr.teamChat')}</span>
                 </Button>
                 {jrTeams.map((team) => (
@@ -374,7 +376,16 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
                     onClick={() => open(`/team/${team.id}`)}
                     title={team.name}
                   >
-                    <Peoples size={18} />
+                    <span className={styles.avatarStack} aria-hidden='true'>
+                      {team.assistants.slice(0, 3).map((assistant) => {
+                        const member = botList.find((bot) => bot.id === assistant.assistant_id);
+                        return (
+                          <span key={assistant.assistant_id} className={styles.avatarStackItem}>
+                            <JrCharacter appearance={member?.appearance} size={20} still />
+                          </span>
+                        );
+                      })}
+                    </span>
                     <span className={styles.botName}>{team.name}</span>
                   </Button>
                 ))}

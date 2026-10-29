@@ -7,7 +7,7 @@
 import { ipcBridge } from '@/common';
 import type { SecureRequest } from '@/common/adapter/ipcBridge';
 import { Button, Checkbox, Input, Message } from '@arco-design/web-react';
-import { Lock } from '@icon-park/react';
+import { Lock, Protect } from '@icon-park/react';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import styles from './TeachCards.module.css';
@@ -86,7 +86,7 @@ const SecureCard: React.FC<SecureCardProps> = ({ request, onDone }) => {
           onChange={setValue}
           onPressEnter={submit}
           disabled={busy}
-          className={styles.input}
+          className={`${styles.input} ${styles.code}`}
         />
         <Button type='primary' onClick={submit} disabled={!value} loading={busy}>
           {saveOnly ? t('common.jr.teach.secure.saveOnlySubmit') : t('common.jr.teach.secure.send')}
@@ -95,12 +95,19 @@ const SecureCard: React.FC<SecureCardProps> = ({ request, onDone }) => {
           {t('common.jr.teach.secure.cancel')}
         </Button>
       </div>
-      {request.allowSave && !saveOnly && (
-        <Checkbox checked={save} onChange={setSave} className={styles.save}>
-          {t('common.jr.teach.secure.saveToVault')}
-        </Checkbox>
-      )}
-      <div className={styles.footnote}>{t('common.jr.teach.secure.footnote')}</div>
+      <div className={styles.footer}>
+        {request.allowSave && !saveOnly ? (
+          <Checkbox checked={save} onChange={setSave} className={styles.save}>
+            {t('common.jr.teach.secure.saveToVault')}
+          </Checkbox>
+        ) : (
+          <span />
+        )}
+        <span className={styles.footnote}>
+          <Protect theme='outline' size={12} />
+          {t('common.jr.teach.secure.footnote')}
+        </span>
+      </div>
     </div>
   );
 };
