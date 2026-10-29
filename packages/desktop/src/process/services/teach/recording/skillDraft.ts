@@ -89,7 +89,8 @@ const unquote = (raw: string): string => {
   return raw;
 };
 
-const parseFrontmatter = (block: string): Record<string, string> => {
+/** Frontmatter `key: value` lines (keys lowercased, values unquoted). */
+export const parseFrontmatter = (block: string): Record<string, string> => {
   const out: Record<string, string> = {};
   for (const line of block.split('\n')) {
     const match = /^([A-Za-z_-]+):\s*(.*?)\s*$/.exec(line);

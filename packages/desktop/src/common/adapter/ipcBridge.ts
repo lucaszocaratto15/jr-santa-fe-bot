@@ -2566,6 +2566,8 @@ export type TeachStopResult = import('@/common/types/agent/teachTypes').TeachSto
 export type TeachDraftEvent = import('@/common/types/agent/teachTypes').TeachDraftEvent;
 export type TeachSaveDraftInput = import('@/common/types/agent/teachTypes').TeachSaveDraftInput;
 export type TeachDraftRejectedEvent = import('@/common/types/agent/teachTypes').TeachDraftRejectedEvent;
+export type TaughtTaskContent = import('@/common/types/agent/teachTypes').TaughtTaskContent;
+export type TaughtTaskErrorCode = import('@/common/types/agent/teachTypes').TaughtTaskErrorCode;
 
 export const teach = {
   openTab: bridge.buildEmitter<{ url: string; openerWebContentsId: number }>('teach:open-tab'),
@@ -2599,4 +2601,8 @@ export const teach = {
   takeOver: bridge.buildProvider<void, { on: boolean }>('teach:take-over'),
   /** Current take-over state, read by the toolbar on mount. */
   takeOverState: bridge.buildProvider<{ on: boolean }, void>('teach:take-over-state'),
+  /** "Minhas tarefas" → Editar: a taught task's description and SKILL.md body (no secrets). */
+  readTask: bridge.buildProvider<TaughtTaskContent, { name: string }>('teach:read-task'),
+  /** Rewrites a taught task's SKILL.md; rejects with a {@link TaughtTaskErrorCode}. */
+  saveTask: bridge.buildProvider<void, TaughtTaskContent>('teach:save-task'),
 };

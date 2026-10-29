@@ -30,11 +30,25 @@ vi.mock('@/common', () => ({
       saveDraft: channel('saveDraft'),
       takeOver: channel('takeOver'),
       takeOverState: channel('takeOverState'),
+      readTask: channel('readTask'),
+      saveTask: channel('saveTask'),
+    },
+    fs: {
+      getSkillPaths: { invoke: vi.fn() },
     },
   },
 }));
 
+vi.mock('@process/utils/initStorage', () => ({ getSkillsDir: () => '/local/skills' }));
+
+vi.mock('@process/services/teach/recording/taskSkillFile', () => ({
+  readTaughtTask: vi.fn(async () => ({ name: 'jr-tarefa-nfs', description: 'd', body: 'b' })),
+  writeTaughtTask: vi.fn(async () => {}),
+}));
+
+import { ipcBridge } from '@/common';
 import { initSecureInputBridge, initTeachBridge, initVaultBridge } from '@process/services/teach/control/teachIpc';
+import { readTaughtTask, writeTaughtTask } from '@process/services/teach/recording/taskSkillFile';
 import { setSecureInputBroker, setTeachServices, setTeachSession } from '@process/services/teach/registry';
 import type { TeachSession } from '@process/services/teach/recording/teachSession';
 import type { SecureInputBroker } from '@process/services/teach/control/secureInput';
@@ -130,5 +144,45 @@ describe('teachIpc', () => {
     expect(session.resume).toHaveBeenCalled();
     expect(session.discard).toHaveBeenCalled();
     setTeachSession(null);
+  });
+
+  describe('taught task files', () => {
+    const task = { name: 'jr-tarefa-nfs', description: 'Nova', body: '\n## Passos\n1. x\n' };
+    beforeEach(() => {
+      vi.mocked(writeTaughtTask).mockClear();
+      vi.mocked(readTaughtTask).mockClear();
+      initTeachBridge();
+    });
+
+    it('saveTask forwards to writeTaughtTask with the backend user skills dir', async () => {
+      vi.mocked(ipcBridge.fs.getSkillPaths.invoke).mockResolvedValue({
+        user_skills_dir: '/backend/skills',
+        builtin_skills_dir: '/b',
+      });
+      await handlers.saveTask(task);
+      expect(writeTaughtTask).toHaveBeenCalledWith('/backend/skills', task);
+    });
+
+    it('saveTask falls back to getSkillsDir() when the backend paths are unavailable', async () => {
+      vi.mocked(ipcBridge.fs.getSkillPaths.invoke).mockRejectedValue(new Error('offline'));
+      await handlers.saveTask(task);
+      expect(writeTaughtTask).toHaveBeenCalledWith('/local/skills', task);
+    });
+
+    it('readTask forwards the name and returns the content', async () => {
+      vi.mocked(ipcBridge.fs.getSkillPaths.invoke).mockResolvedValue({ user_skills_dir: '', builtin_skills_dir: '' });
+      expect(await handlers.readTask({ name: 'jr-tarefa-nfs' })).toEqual({
+        name: 'jr-tarefa-nfs',
+        description: 'd',
+        body: 'b',
+      });
+      expect(readTaughtTask).toHaveBeenCalledWith('/local/skills', 'jr-tarefa-nfs');
+    });
+
+    it('saveTask surfaces the write error code', async () => {
+      vi.mocked(ipcBridge.fs.getSkillPaths.invoke).mockRejectedValue(new Error('offline'));
+      vi.mocked(writeTaughtTask).mockRejectedValueOnce(new Error('no_steps'));
+      await expect(handlers.saveTask(task)).rejects.toThrow('no_steps');
+    });
   });
 });

@@ -90,3 +90,13 @@ export type TeachDraftEvent = { markdown: string; recordingId: string; draft: Te
 export type TeachDraftRejectedEvent = { recordingId: string; error: DraftErrorCode };
 
 export type TeachSaveDraftInput = { markdown: string; recordingId: string; name?: string; description?: string };
+
+// ---------------------------------------------------------------------------
+// Taught tasks ("Minhas tarefas": Editar)
+// ---------------------------------------------------------------------------
+
+/** A taught task's editable content. `body` is everything after the closing `---` line. */
+export type TaughtTaskContent = { name: string; description: string; body: string };
+
+/** Value-free reason a taught task could not be read or saved; the renderer maps it to i18n. */
+export type TaughtTaskErrorCode = 'bad_name' | 'not_found' | 'outside_dir' | DraftErrorCode;

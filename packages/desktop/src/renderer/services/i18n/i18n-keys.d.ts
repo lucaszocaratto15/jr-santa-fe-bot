@@ -652,6 +652,8 @@ export type I18nKey =
   | 'common.jr.teach.review.vault'
   | 'common.jr.teach.secure.cancel'
   | 'common.jr.teach.secure.footnote'
+  | 'common.jr.teach.secure.notifyBody'
+  | 'common.jr.teach.secure.notifyTitle'
   | 'common.jr.teach.secure.saveFailed'
   | 'common.jr.teach.secure.saveOnlyFailed'
   | 'common.jr.teach.secure.saveOnlySubmit'

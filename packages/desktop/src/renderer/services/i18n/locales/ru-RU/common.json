@@ -609,7 +609,9 @@
         "saveOnlySubmit": "Save",
         "sendFailed": "Couldn't send. Try again.",
         "saveFailed": "Password sent, but I couldn't save it to the vault.",
-        "saveOnlyFailed": "Couldn't save to the vault. Try again."
+        "saveOnlyFailed": "Couldn't save to the vault. Try again.",
+        "notifyTitle": "Verification code requested",
+        "notifyBody": "{{origin}} asked for a code. Open JR Bot to continue."
       },
       "describe": {
         "title": "What does this task do?",

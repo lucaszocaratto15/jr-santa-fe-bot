@@ -607,7 +607,9 @@
         "saveOnlySubmit": "Salvar",
         "sendFailed": "Não foi possível enviar. Tente de novo.",
         "saveFailed": "Senha enviada, mas não consegui salvar no cofre.",
-        "saveOnlyFailed": "Não consegui salvar no cofre. Tente de novo."
+        "saveOnlyFailed": "Não consegui salvar no cofre. Tente de novo.",
+        "notifyTitle": "Código de verificação pedido",
+        "notifyBody": "{{origin}} pediu um código. Abra o JR Bot para continuar."
       },
       "describe": {
         "title": "O que essa tarefa faz?",

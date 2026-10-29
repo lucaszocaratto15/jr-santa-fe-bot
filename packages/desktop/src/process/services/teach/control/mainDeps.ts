@@ -7,6 +7,9 @@
 import path from 'node:path';
 import { app, webContents } from 'electron';
 import { ipcBridge } from '@/common';
+import type { SecureRequest } from '@/common/types/agent/teachTypes';
+import { showNotification } from '@process/bridge/notificationBridge';
+import i18n from '@process/services/i18n';
 import { getCdpBridgeHandle } from '@process/utils/cdpBridgeRegistry';
 import { getTeachServices, setSecureInputBroker, setTeachSession } from '../registry';
 import { createTeachSession, TAUGHT_TASKS_DIRNAME } from '../recording/teachSession';
@@ -36,11 +39,49 @@ async function fillAttached(value: string, opts: FillOptions): Promise<FillResul
   );
 }
 
+const hostOf = (origin: string): string => {
+  try {
+    return new URL(origin).host || origin;
+  } catch {
+    return origin;
+  }
+};
+
+type SecureEmitDeps = {
+  emit: (request: SecureRequest) => void;
+  notify: (options: { title: string; body: string }) => Promise<void>;
+  t: (key: string, options?: Record<string, unknown>) => string;
+};
+
+/**
+ * The broker's `emit`: shows the card first, then raises a desktop notification (2FA in a
+ * scheduled run). Only the page's host goes in it, never a value. `showNotification` itself
+ * skips while the window is focused or notifications are off. Save-only offers ask no code.
+ */
+export const notifyingSecureEmit =
+  ({ emit, notify, t }: SecureEmitDeps) =>
+  (request: SecureRequest): void => {
+    emit(request);
+    if (request.purpose !== 'fill') return;
+    try {
+      void notify({
+        title: t('common.jr.teach.secure.notifyTitle'),
+        body: t('common.jr.teach.secure.notifyBody', { origin: hostOf(request.origin) }),
+      }).catch(() => {});
+    } catch {
+      // A notification failure must never block the secure card.
+    }
+  };
+
 /** Wires the control handlers to the real CDP bridge, vault, recorder and teach IPC. */
 export function createMainTeachDeps(): TeachHandlerDeps {
   const vault = () => getTeachServices()?.vault ?? null;
   const broker = createSecureInputBroker({
-    emit: (request) => ipcBridge.teach.secureRequest.emit(request),
+    emit: notifyingSecureEmit({
+      emit: (request) => ipcBridge.teach.secureRequest.emit(request),
+      notify: showNotification,
+      t: (key, options) => i18n.t(key, options),
+    }),
     expired: (id) => ipcBridge.teach.secureExpired.emit({ id }),
     currentOrigin: attachedUrl,
     fill: fillAttached,
