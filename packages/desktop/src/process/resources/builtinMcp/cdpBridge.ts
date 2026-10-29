@@ -32,6 +32,7 @@ import {
   tokensMatch,
   type CdpRequest,
 } from './cdpTargetProtocol';
+import { isInternalBindingEvent, redactSecrets, shouldClearSecretsOn } from './secretRedact';
 
 const HOST = '127.0.0.1';
 const WS_PATH = '/aionui-cdp';
@@ -44,6 +45,20 @@ export type CdpBridgeHandle = {
   attach: (webContentsId: number) => { ok: true } | { ok: false; reason: string };
   detach: () => void;
   close: () => Promise<void>;
+  /**
+   * Main-process-only API. None of these are reachable over the WebSocket protocol.
+   * 仅主进程内部使用，不经 WebSocket 暴露给客户端。
+   */
+  /** Send a CDP command to the attached webContents (rejects when nothing is attached). */
+  sendCommand: (method: string, params?: Record<string, unknown>) => Promise<unknown>;
+  /** Subscribe to every (unredacted) debugger event of the attached webContents. */
+  onEvent: (listener: (method: string, params: unknown) => void) => () => void;
+  /** Called after a webContents is newly attached. */
+  onAttach: (listener: (webContentsId: number) => void) => () => void;
+  /** Register a live secret to be redacted from all client-bound traffic until navigation/destroy/detach. */
+  addSecret: (webContentsId: number, value: string) => void;
+  /** While locked, bridge clients get a CDP error for every command and nothing is forwarded. */
+  setClientsLocked: (locked: boolean, reason?: string) => void;
 };
 
 type AttachedState = {
@@ -55,6 +70,27 @@ type AttachedState = {
 
 let attached: AttachedState | null = null;
 let sockets = new Set<WebSocket>();
+const eventListeners = new Set<(method: string, params: unknown) => void>();
+const attachListeners = new Set<(webContentsId: number) => void>();
+/** Live secrets per webContents id, redacted from everything sent to clients. */
+const secretsByContents = new Map<number, Set<string>>();
+let clientsLocked: { reason?: string } | null = null;
+
+const currentSecrets = (): string[] => {
+  if (!attached) return [];
+  return [...(secretsByContents.get(attached.contents.id) ?? [])];
+};
+
+/** Serialize and redact; every client-bound frame goes through here. */
+const serializeForClient = (payload: unknown): string => {
+  const text = JSON.stringify(payload);
+  const secrets = currentSecrets();
+  return secrets.length > 0 ? redactSecrets(text, secrets) : text;
+};
+
+const sendToClient = (ws: WebSocket, payload: unknown) => {
+  ws.send(serializeForClient(payload));
+};
 
 const currentTargetInfo = () => {
   if (!attached || attached.contents.isDestroyed()) return buildTargetInfo('', 'about:blank');
@@ -62,7 +98,7 @@ const currentTargetInfo = () => {
 };
 
 const broadcast = (payload: Record<string, unknown>) => {
-  const text = JSON.stringify(payload);
+  const text = serializeForClient(payload);
   for (const ws of sockets) {
     if (ws.readyState === ws.OPEN) ws.send(text);
   }
@@ -71,6 +107,7 @@ const broadcast = (payload: Record<string, unknown>) => {
 const detachInternal = () => {
   if (!attached) return;
   const { contents, dbg, onMessage, onDestroyed } = attached;
+  secretsByContents.delete(contents.id);
   attached = null;
   try {
     dbg.removeListener('message', onMessage);
@@ -132,10 +169,22 @@ const attachInternal = (webContentsId: number): { ok: true } | { ok: false; reas
      * routes events to the page session by sessionId; without it these would look
      * browser-level and Page/Runtime events would be dropped.
      */
-    broadcast({ method, params: params ?? {}, sessionId: SINGLE_SESSION_ID });
+    for (const listener of [...eventListeners]) {
+      try {
+        listener(method, params);
+      } catch {
+        // A faulty internal listener must never break relaying.
+      }
+    }
+    if (!isInternalBindingEvent(method, params)) {
+      broadcast({ method, params: params ?? {}, sessionId: SINGLE_SESSION_ID });
+    }
+    // Navigating the main frame discards page-held secrets; clear after this event is relayed.
+    if (shouldClearSecretsOn(method, params)) secretsByContents.delete(contents.id);
   };
 
   const onDestroyed = () => {
+    secretsByContents.delete(contents.id);
     detachInternal();
     broadcast({ method: 'Target.targetDestroyed', params: { targetId: currentTargetInfo().targetId } });
   };
@@ -143,6 +192,15 @@ const attachInternal = (webContentsId: number): { ok: true } | { ok: false; reas
   dbg.on('message', onMessage);
   contents.once('destroyed', onDestroyed);
   attached = { contents, dbg, onMessage, onDestroyed };
+  // Needed so Page.frameNavigated reaches us even if no client enabled Page (secret clearing).
+  void dbg.sendCommand('Page.enable').catch((): void => undefined);
+  for (const listener of [...attachListeners]) {
+    try {
+      listener(webContentsId);
+    } catch {
+      // ignore faulty internal listener
+    }
+  }
   return { ok: true };
 };
 
@@ -171,7 +229,7 @@ const attachInternal = (webContentsId: number): { ok: true } | { ok: false; reas
  * real cause (e.g. the browser panel was never opened).
  */
 const sendError = (ws: WebSocket, id: number | undefined, message: string, sessionId?: string) => {
-  ws.send(JSON.stringify({ id: id ?? 0, error: { code: -32601, message }, sessionId }));
+  sendToClient(ws, { id: id ?? 0, error: { code: -32601, message }, sessionId });
 };
 
 /**
@@ -195,6 +253,15 @@ const handleSocketMessage = async (ws: WebSocket, raw: string, announcedSessions
   const { id, method, params, sessionId } = req;
   if (!method) return;
 
+  if (clientsLocked) {
+    sendToClient(ws, {
+      id: id ?? 0,
+      error: { code: -32000, message: `browser locked: ${clientsLocked.reason ?? 'recording in progress'}` },
+      sessionId,
+    });
+    return;
+  }
+
   if (!isAcceptableSessionId(sessionId)) {
     sendError(ws, id, `Unknown sessionId: ${sessionId}`, sessionId);
     return;
@@ -208,7 +275,7 @@ const handleSocketMessage = async (ws: WebSocket, raw: string, announcedSessions
   }
 
   if (decision.kind === 'reply' || decision.kind === 'reply-and-emit') {
-    ws.send(JSON.stringify({ id, result: decision.payload, sessionId }));
+    sendToClient(ws, { id, result: decision.payload, sessionId });
     if (decision.kind === 'reply-and-emit') {
       for (const evt of decision.emit) {
         /**
@@ -252,7 +319,7 @@ const handleSocketMessage = async (ws: WebSocket, raw: string, announcedSessions
             announcedSessions.add(announcedId);
           }
         }
-        ws.send(JSON.stringify({ method: evt.method, params: evt.params }));
+        sendToClient(ws, { method: evt.method, params: evt.params });
       }
     }
     return;
@@ -281,10 +348,10 @@ const handleSocketMessage = async (ws: WebSocket, raw: string, announcedSessions
 
   try {
     const result = await attached.dbg.sendCommand(method, params ?? {});
-    ws.send(JSON.stringify({ id, result: result ?? {}, sessionId }));
+    sendToClient(ws, { id, result: result ?? {}, sessionId });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    ws.send(JSON.stringify({ id, error: { code: -32000, message }, sessionId }));
+    sendToClient(ws, { id, error: { code: -32000, message }, sessionId });
   }
 };
 
@@ -391,8 +458,34 @@ export const startCdpBridge = async (): Promise<CdpBridgeHandle> => {
     attachedWebContentsId: () => (attached && !attached.contents.isDestroyed() ? attached.contents.id : null),
     attach: attachInternal,
     detach: detachInternal,
+    sendCommand: async (method, params) => {
+      if (!attached || attached.contents.isDestroyed())
+        throw new Error('The in-app browser is not currently attached.');
+      return attached.dbg.sendCommand(method, params ?? {});
+    },
+    onEvent: (listener) => {
+      eventListeners.add(listener);
+      return () => void eventListeners.delete(listener);
+    },
+    onAttach: (listener) => {
+      attachListeners.add(listener);
+      return () => void attachListeners.delete(listener);
+    },
+    addSecret: (webContentsId, value) => {
+      if (!value) return;
+      const set = secretsByContents.get(webContentsId) ?? new Set<string>();
+      set.add(value);
+      secretsByContents.set(webContentsId, set);
+    },
+    setClientsLocked: (locked, reason) => {
+      clientsLocked = locked ? { reason } : null;
+    },
     close: async () => {
       detachInternal();
+      eventListeners.clear();
+      attachListeners.clear();
+      secretsByContents.clear();
+      clientsLocked = null;
       for (const ws of sockets) ws.close();
       sockets = new Set();
       await new Promise<void>((resolve) => {
