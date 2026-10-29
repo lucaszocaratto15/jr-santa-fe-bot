@@ -76,7 +76,7 @@ async function main() {
     'Pede ao funcionário um dado sensível (código OTP, senha ou texto) por um campo seguro na interface do app e preenche no campo focado do navegador. Clique no campo antes de chamar. O valor nunca é devolvido. Aguarda até 50 s; se ainda estiver aguardando, use secure_input_status com o id retornado.',
     {
       kind: z.enum(['otp', 'password', 'text']).describe('Tipo do dado pedido.'),
-      label: z.string().describe('Texto mostrado ao funcionário explicando o que digitar.'),
+      label: z.string().max(200).describe('Texto mostrado ao funcionário explicando o que digitar.'),
     },
     async (args) => callControl('secure_input', args, SECURE_INPUT_TIMEOUT_MS)
   );
@@ -91,7 +91,7 @@ async function main() {
   server.tool(
     'teach_submit_draft',
     'Envia o rascunho (markdown) da skill aprendida para o cartão de revisão exibido ao funcionário. Nunca inclua senhas, códigos ou valores secretos no texto.',
-    { markdown: z.string().describe('Conteúdo markdown do rascunho da tarefa ensinada.') },
+    { markdown: z.string().max(65_536).describe('Conteúdo markdown do rascunho da tarefa ensinada.') },
     async (args) => callControl('teach_submit_draft', args)
   );
 

@@ -24,7 +24,7 @@ export type TeachToolName = (typeof TEACH_TOOL_NAMES)[number];
 export type TeachHandlers = Record<TeachToolName, (body: unknown) => Promise<unknown>>;
 
 export type TeachControlServer = {
-  host: '127.0.0.1';
+  host: string;
   port: number;
   token: string;
   close(): Promise<void>;
@@ -41,22 +41,21 @@ const sendJson = (res: http.ServerResponse, status: number, payload: unknown): v
   res.end(text);
 };
 
-/** Reads the body, resolving null when it exceeds the size limit. */
+/** Reads the body, resolving null as soon as it exceeds the size limit. */
 const readBody = (req: http.IncomingMessage): Promise<string | null> =>
   new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let size = 0;
-    let tooBig = false;
     req.on('data', (chunk: Buffer) => {
       size += chunk.length;
       if (size > MAX_BODY_BYTES) {
-        tooBig = true;
         chunks.length = 0;
+        resolve(null);
         return;
       }
-      if (!tooBig) chunks.push(chunk);
+      chunks.push(chunk);
     });
-    req.on('end', () => resolve(tooBig ? null : Buffer.concat(chunks).toString('utf8')));
+    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
     req.on('error', reject);
   });
 
@@ -87,6 +86,7 @@ export async function createTeachControlServer(handlers: TeachHandlers): Promise
         if (raw === null) throw new Error('too large');
         body = raw.length > 0 ? JSON.parse(raw) : {};
       } catch {
+        res.once('finish', () => req.destroy());
         sendJson(res, 400, { ok: false, error: 'bad request' });
         return;
       }
@@ -100,13 +100,16 @@ export async function createTeachControlServer(handlers: TeachHandlers): Promise
     });
   });
 
+  // secure_input waits up to 50 s for the employee.
+  server.requestTimeout = 70_000;
+
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
     server.listen(0, '127.0.0.1', () => resolve());
   });
 
   return {
-    host: '127.0.0.1',
+    host: (server.address() as AddressInfo).address,
     port: (server.address() as AddressInfo).port,
     token,
     close: () =>
