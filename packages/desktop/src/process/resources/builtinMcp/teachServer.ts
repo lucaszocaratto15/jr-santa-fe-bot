@@ -63,20 +63,22 @@ async function main() {
 
   server.tool(
     'vault_fill',
-    'Preenche no navegador do app o usuário ou a senha de um item do cofre. Clique no campo antes de chamar. O preenchimento só funciona se o site atual for uma origem do item; a senha só é preenchida em campo de senha. O valor nunca é devolvido.',
+    'Preenche no navegador do app o usuário ou a senha de um item do cofre. Clique no campo antes de chamar. O preenchimento só funciona se o site atual for uma origem do item; a senha só é preenchida em campo de senha. O valor nunca é devolvido. Para enviar o formulário depois de preencher a senha, use submit: true — scripts na página ficam bloqueados enquanto houver segredo num campo.',
     {
       item: z.string().describe('Nome do item do cofre (como listado por vault_list).'),
       field: z.enum(['username', 'password']).describe('Qual campo preencher: usuário ou senha.'),
+      submit: z.boolean().optional().describe('Se true, pressiona Enter depois de preencher (envia o formulário).'),
     },
     async (args) => callControl('vault_fill', args)
   );
 
   server.tool(
     'secure_input',
-    'Pede ao funcionário um dado sensível (código OTP, senha ou texto) por um campo seguro na interface do app e preenche no campo focado do navegador. Clique no campo antes de chamar. O valor nunca é devolvido. Aguarda até 50 s; se ainda estiver aguardando, use secure_input_status com o id retornado.',
+    'Pede ao funcionário um dado sensível (código OTP, senha ou texto) por um campo seguro na interface do app e preenche no campo focado do navegador. Clique no campo antes de chamar. O valor nunca é devolvido. Aguarda até 50 s; se ainda estiver aguardando, use secure_input_status com o id retornado. Para enviar o formulário depois de preencher a senha, use submit: true — scripts na página ficam bloqueados enquanto houver segredo num campo.',
     {
       kind: z.enum(['otp', 'password', 'text']).describe('Tipo do dado pedido.'),
       label: z.string().max(200).describe('Texto mostrado ao funcionário explicando o que digitar.'),
+      submit: z.boolean().optional().describe('Se true, pressiona Enter depois de preencher (envia o formulário).'),
     },
     async (args) => callControl('secure_input', args, SECURE_INPUT_TIMEOUT_MS)
   );

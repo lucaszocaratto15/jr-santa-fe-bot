@@ -61,7 +61,12 @@ export function buildTeachHandlers(deps: TeachHandlerDeps): TeachHandlers {
       if (!item) return { ok: false, error: 'item do cofre não encontrado' };
       const secret = await vault.readSecret(item.id, which);
       if (!secret) return { ok: false, error: 'este item do cofre não tem esse dado salvo' };
-      const filled = await deps.fill(secret, { requirePassword: which === 'password', allowedOrigins: item.origins });
+      const submit = field(body, 'submit') === true;
+      const filled = await deps.fill(secret, {
+        requirePassword: which === 'password',
+        allowedOrigins: item.origins,
+        ...(submit ? { submit } : {}),
+      });
       return filled.ok === false ? { ok: false, error: filled.error } : { ok: true, result: 'preenchido' };
     },
 
@@ -69,7 +74,9 @@ export function buildTeachHandlers(deps: TeachHandlerDeps): TeachHandlers {
       const kind = field(body, 'kind');
       const label = field(body, 'label');
       if (!SECURE_KINDS.has(kind) || typeof label !== 'string') return INVALID;
-      return deps.broker.request(kind as SecureKind, label);
+      return field(body, 'submit') === true
+        ? deps.broker.request(kind as SecureKind, label, { submit: true })
+        : deps.broker.request(kind as SecureKind, label);
     },
 
     secure_input_status: async (body) => {

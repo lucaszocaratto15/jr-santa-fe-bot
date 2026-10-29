@@ -5,29 +5,13 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import type { SecureKind, SecureRequest, SecureRespondResult, SecureResponse } from '@/common/types/agent/teachTypes';
 import type { VaultStore } from '../vault/vault';
 import { normalizeOrigin } from '../vault/originMatch';
 import { FILL_ERRORS } from './secretFill';
 import type { FillOptions, FillResult } from './secretFill';
 
-export type SecureKind = 'otp' | 'password' | 'text';
-
-/** Main → renderer: show a secure card. Never carries a value. */
-export type SecureRequest = {
-  id: string;
-  origin: string;
-  kind: SecureKind;
-  label: string;
-  allowSave: boolean;
-  /** 'save-only' just stores the typed password in the vault for `origin`; nothing is filled. */
-  purpose: 'fill' | 'save-only';
-};
-
-/** Renderer → main: the employee's answer. */
-export type SecureResponse = { id: string; value?: string; cancelled?: boolean; save?: boolean };
-
-/** Main → renderer after an answer: `saved` is set only when a vault save was attempted. */
-export type SecureRespondResult = { saved?: boolean };
+export type { SecureKind, SecureRequest, SecureRespondResult, SecureResponse };
 
 /** What the agent sees. The value is never part of it. */
 export type SecureResult =
@@ -35,7 +19,8 @@ export type SecureResult =
   | { ok: false; error: string };
 
 export type SecureInputBroker = {
-  request(kind: SecureKind, label: string): Promise<SecureResult>;
+  /** `submit` presses Enter after the fill (R13); it stays in main and never reaches the renderer. */
+  request(kind: SecureKind, label: string, opts?: { submit?: boolean }): Promise<SecureResult>;
   status(id: string): Promise<SecureResult>;
   respond(response: SecureResponse): Promise<SecureRespondResult>;
   /** Offer to store a password for `origin` (R3). Returns the request id, or null for a bad origin. */
@@ -79,6 +64,11 @@ type Entry = {
   settle(outcome: Outcome): void;
   outcome?: Outcome;
   timer: ReturnType<typeof setTimeout>;
+  submit?: boolean;
+  /** A save-only vault write is in flight: duplicate responses are ignored. */
+  saving?: boolean;
+  /** The TTL fired during a save; expire once the save fails (a success settles it anyway). */
+  expireAfterSave?: boolean;
 };
 
 const deferred = <T>(): { promise: Promise<T>; resolve: (value: T) => void } => {
@@ -135,6 +125,10 @@ export function createSecureInputBroker(deps: SecureInputDeps): SecureInputBroke
   };
 
   const expire = (entry: Entry) => {
+    if (entry.saving) {
+      entry.expireAfterSave = true;
+      return;
+    }
     remove(entry);
     if (entry.outcome) return;
     entry.settle({ result: 'cancelado' });
@@ -172,7 +166,7 @@ export function createSecureInputBroker(deps: SecureInputDeps): SecureInputBroke
   };
 
   return {
-    async request(kind, label) {
+    async request(kind, label, opts) {
       const origin = normalizeOrigin(deps.currentOrigin() ?? '');
       if (!origin) return { ok: false, error: SECURE_ERRORS.noPage };
       const waiting = pending().filter((entry) => entry.request.purpose === 'fill').length;
@@ -185,6 +179,7 @@ export function createSecureInputBroker(deps: SecureInputDeps): SecureInputBroke
         allowSave: kind === 'password',
         purpose: 'fill',
       });
+      if (opts?.submit) entry.submit = true;
       return wait(entry);
     },
 
@@ -207,7 +202,7 @@ export function createSecureInputBroker(deps: SecureInputDeps): SecureInputBroke
 
     async respond({ id, value, cancelled, save }) {
       const entry = entries.get(id);
-      if (!entry || entry.outcome) return {};
+      if (!entry || entry.outcome || entry.saving) return {};
       const { request } = entry;
       if (cancelled || !value) {
         entry.settle({ result: 'cancelado' });
@@ -215,8 +210,15 @@ export function createSecureInputBroker(deps: SecureInputDeps): SecureInputBroke
         return {};
       }
       if (request.purpose === 'save-only') {
-        // Keep the entry on failure so the employee can retry from the same card.
-        if (!(await savePassword(deps.vault(), request.origin, value))) return { saved: false };
+        // Guard before awaiting so a duplicate response or the TTL cannot double-upsert/settle.
+        entry.saving = true;
+        const saved = await savePassword(deps.vault(), request.origin, value);
+        entry.saving = false;
+        if (!saved) {
+          // Keep the entry on failure so the employee can retry from the same card.
+          if (entry.expireAfterSave) expire(entry);
+          return { saved: false };
+        }
         entry.settle({ result: 'enviado' });
         remove(entry);
         return { saved: true };
@@ -224,7 +226,11 @@ export function createSecureInputBroker(deps: SecureInputDeps): SecureInputBroke
       // Mark settled before awaiting so a duplicate response cannot fill twice.
       entry.outcome = { result: 'enviado' };
       const filled = await deps
-        .fill(value, { requirePassword: request.kind === 'password', allowedOrigins: [request.origin] })
+        .fill(value, {
+          requirePassword: request.kind === 'password',
+          allowedOrigins: [request.origin],
+          ...(entry.submit ? { submit: true } : {}),
+        })
         .catch((): FillResult => ({ ok: false, error: SECURE_ERRORS.fillFailed }));
       if (filled.ok === false) {
         // The request is not a vault item, so the origin error gets its own wording.

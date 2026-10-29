@@ -8,9 +8,14 @@ import type { CdpBridgeHandle } from '@process/resources/builtinMcp/cdpBridge';
 import { originAllowed } from '../vault/originMatch';
 
 export type FillResult = { ok: true } | { ok: false; error: string };
-export type FillOptions = { requirePassword: boolean; allowedOrigins?: string[] };
+export type FillOptions = {
+  requirePassword: boolean;
+  allowedOrigins?: string[];
+  /** Press Enter after filling, so the agent never needs page JS while the secret is in a field (R13). */
+  submit?: boolean;
+};
 export type FillDeps = {
-  bridge: Pick<CdpBridgeHandle, 'sendCommand' | 'addSecret'>;
+  bridge: Pick<CdpBridgeHandle, 'sendCommand' | 'addSecret' | 'isClientsLocked'>;
   currentUrl(): string;
   webContentsId(): number;
 };
@@ -20,7 +25,10 @@ export const FILL_ERRORS = {
   focus: 'clique no campo antes de preencher',
   password: 'o campo focado não é de senha',
   browser: 'navegador do app não está pronto',
+  locked: 'navegador bloqueado: gravação ou funcionário no controle',
 } as const;
+
+const ENTER_KEY = { key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 } as const;
 
 const NON_TEXT_INPUT_TYPES = [
   'button',
@@ -62,9 +70,12 @@ const readFocus = (response: unknown): Focus => {
 
 /**
  * Types `value` into the focused field of the attached in-app browser page. The value is
- * registered for redaction before it is inserted and is never part of the result.
+ * registered for redaction before it is inserted and is never part of the result. With
+ * `submit`, Enter is pressed from main afterwards.
  */
 export async function fillFocused(deps: FillDeps, value: string, opts: FillOptions): Promise<FillResult> {
+  // R15: never type while a recording or an employee take-over holds the browser.
+  if (deps.bridge.isClientsLocked()) return { ok: false, error: FILL_ERRORS.locked };
   const originOk = () => !opts.allowedOrigins || originAllowed(deps.currentUrl(), opts.allowedOrigins);
   if (!originOk()) return { ok: false, error: FILL_ERRORS.origin };
   try {
@@ -78,6 +89,10 @@ export async function fillFocused(deps: FillDeps, value: string, opts: FillOptio
     // Register first so no event caused by the insert can reach clients unredacted.
     deps.bridge.addSecret(deps.webContentsId(), value);
     await deps.bridge.sendCommand('Input.insertText', { text: value });
+    if (opts.submit) {
+      await deps.bridge.sendCommand('Input.dispatchKeyEvent', { type: 'keyDown', ...ENTER_KEY, text: '\r' });
+      await deps.bridge.sendCommand('Input.dispatchKeyEvent', { type: 'keyUp', ...ENTER_KEY });
+    }
     return { ok: true };
   } catch {
     return { ok: false, error: FILL_ERRORS.browser };

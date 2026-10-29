@@ -7,6 +7,9 @@ class FakeContents extends EventEmitter {
   destroyed = false;
   sent: Array<{ method: string; params: unknown }> = [];
   commandResult: unknown = {};
+  /** Value the internal secret-in-field probe returns (R13). */
+  probeValue: unknown = false;
+  probes: string[] = [];
   dbgEmitter = new EventEmitter();
   attachedFlag = false;
   debugger = {
@@ -20,6 +23,11 @@ class FakeContents extends EventEmitter {
     on: (e: string, l: (...a: unknown[]) => void) => this.dbgEmitter.on(e, l),
     removeListener: (e: string, l: (...a: unknown[]) => void) => this.dbgEmitter.removeListener(e, l),
     sendCommand: async (method: string, params: unknown) => {
+      const expression = (params as { expression?: string } | undefined)?.expression;
+      if (method === 'Runtime.evaluate' && expression?.includes("querySelectorAll('input, textarea')")) {
+        this.probes.push(expression);
+        return { result: { type: 'boolean', value: this.probeValue } };
+      }
       this.sent.push({ method, params });
       return this.commandResult;
     },
@@ -191,6 +199,83 @@ describe('cdpBridge redaction + internal api', () => {
     contents.emitDbg('Runtime.consoleAPICalled', { m: SECRET, n: 2 });
     await waitFor(() => frames.some((f) => f.params?.n === 2));
     expect(frames.find((f) => f.params?.n === 2)!.params.m).toBe('«segredo»');
+  });
+
+  it('keeps numeric secrets from corrupting JSON numbers and arrays (R14)', async () => {
+    const otp = '483917';
+    handle.addSecret(contents.id, otp);
+    contents.emitDbg('Network.responseReceived', {
+      timestamp: 1730212483917.25,
+      digits: [4, 8, 3, 9, 1, 7],
+      text: `codigo ${otp}`,
+      n: 4,
+    });
+    await waitFor(() => frames.some((f) => f.method === 'Network.responseReceived'));
+    const f = frames.find((x) => x.method === 'Network.responseReceived')!;
+    expect(f.params.timestamp).toBe(1730212483917.25);
+    expect(f.params.digits).toEqual([4, 8, 3, 9, 1, 7]);
+    expect(f.params.text).toBe('codigo «segredo»');
+  });
+
+  it('redacts secrets in object keys', async () => {
+    handle.addSecret(contents.id, SECRET);
+    contents.emitDbg('Runtime.consoleAPICalled', { [SECRET]: 1, n: 5 });
+    await waitFor(() => frames.some((f) => f.params?.n === 5));
+    expect(Object.keys(frames.find((f) => f.params?.n === 5)!.params)).toEqual(['«segredo»', 'n']);
+  });
+
+  it('refuses page JS while a live secret sits in a field (R13)', async () => {
+    handle.addSecret(contents.id, SECRET);
+    contents.probeValue = true;
+    for (const method of [
+      'Runtime.evaluate',
+      'Runtime.callFunctionOn',
+      'Runtime.compileScript',
+      'Debugger.evaluateOnCallFrame',
+    ]) {
+      const r = await call(method, { expression: 'document.body.innerHTML' });
+      expect(r.error).toEqual({ code: -32000, message: 'bloqueado: campo com segredo preenchido na página' });
+    }
+    expect(contents.sent).toEqual([]);
+    expect(contents.probes.length).toBe(4);
+    expect(contents.probes[0]).toContain(JSON.stringify(SECRET));
+    expect(JSON.stringify(frames)).not.toContain(SECRET);
+  });
+
+  it('forwards page JS when the probe finds no secret in a field', async () => {
+    handle.addSecret(contents.id, SECRET);
+    contents.probeValue = false;
+    const r = await call('Runtime.callFunctionOn', { functionDeclaration: 'function(){}' });
+    expect(r.error).toBeUndefined();
+    expect(contents.sent).toEqual([
+      { method: 'Runtime.callFunctionOn', params: { functionDeclaration: 'function(){}' } },
+    ]);
+    expect(contents.probes.length).toBe(1);
+  });
+
+  it('fails closed when the probe does not return false', async () => {
+    handle.addSecret(contents.id, SECRET);
+    contents.probeValue = undefined;
+    const r = await call('Runtime.evaluate', { expression: '1' });
+    expect(r.error?.message).toBe('bloqueado: campo com segredo preenchido na página');
+    expect(contents.sent).toEqual([]);
+  });
+
+  it('does not probe without a live secret or for non-JS methods', async () => {
+    await call('Runtime.evaluate', { expression: '1' });
+    handle.addSecret(contents.id, SECRET);
+    contents.probeValue = true;
+    await call('Page.navigate', { url: 'https://x.test/' });
+    expect(contents.probes).toEqual([]);
+    expect(contents.sent.map((c) => c.method)).toEqual(['Runtime.evaluate', 'Page.navigate']);
+  });
+
+  it('reports the lock state', () => {
+    expect(handle.isClientsLocked()).toBe(false);
+    handle.setClientsLocked(true, 'gravando');
+    expect(handle.isClientsLocked()).toBe(true);
+    handle.setClientsLocked(false);
+    expect(handle.isClientsLocked()).toBe(false);
   });
 
   it('clears secrets when the webContents is destroyed', async () => {

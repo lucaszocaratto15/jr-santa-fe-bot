@@ -32,7 +32,7 @@ import {
   tokensMatch,
   type CdpRequest,
 } from './cdpTargetProtocol';
-import { isInternalBindingEvent, redactSecrets, stripPostData } from './secretRedact';
+import { isInternalBindingEvent, redactValue, stripPostData } from './secretRedact';
 
 const HOST = '127.0.0.1';
 const WS_PATH = '/aionui-cdp';
@@ -63,6 +63,8 @@ export type CdpBridgeHandle = {
    * stay hidden from `Network.getRequestPostData` after unlock.
    */
   setClientsLocked: (locked: boolean, reason?: string) => void;
+  /** True while client commands are refused (recording or employee take-over). */
+  isClientsLocked: () => boolean;
 };
 
 type AttachedState = {
@@ -98,11 +100,67 @@ const rememberLockedRequest = (method: string, params: unknown) => {
 /** All live secrets (any contents): fail closed across detach/re-attach. */
 const currentSecrets = (): string[] => [...secretsByContents.values()].flatMap((set) => [...set]);
 
-/** Serialize and redact; every client-bound frame goes through here. */
+/**
+ * Serialize and redact; every client-bound frame goes through here. Redaction walks the
+ * parsed message (string values and keys only, R14) so numbers and arrays stay intact.
+ */
 const serializeForClient = (payload: unknown): string => {
   const text = JSON.stringify(payload);
   const secrets = currentSecrets();
-  return secrets.length > 0 ? redactSecrets(text, secrets) : text;
+  if (secrets.length === 0) return text;
+  return JSON.stringify(redactValue(JSON.parse(text), secrets));
+};
+
+/** Client commands that run page JS; refused while a live secret sits in a field (R13). */
+const PAGE_JS_METHODS: ReadonlySet<string> = new Set([
+  'Runtime.evaluate',
+  'Runtime.callFunctionOn',
+  'Runtime.compileScript',
+  'Debugger.evaluateOnCallFrame',
+]);
+
+export const SECRET_IN_FIELD_ERROR = 'bloqueado: campo com segredo preenchido na página';
+
+/**
+ * Value-free probe: evaluates to a boolean only (whether any input/textarea in the document,
+ * its open shadow roots or same-origin iframes holds one of the secrets). The secrets are
+ * embedded in the internal expression, which is never relayed to clients.
+ */
+export const buildSecretFieldProbe = (secrets: readonly string[]): string => `(() => {
+  const secrets = new Set(${JSON.stringify(secrets)});
+  const check = (root) => {
+    for (const el of root.querySelectorAll('input, textarea')) {
+      if (secrets.has(el.value)) return true;
+    }
+    for (const el of root.querySelectorAll('*')) {
+      if (el.shadowRoot && check(el.shadowRoot)) return true;
+      if (el.tagName === 'IFRAME' || el.tagName === 'FRAME') {
+        try {
+          const doc = el.contentDocument;
+          if (doc && check(doc)) return true;
+        } catch (_) {}
+      }
+    }
+    return false;
+  };
+  return check(document);
+})()`;
+
+/**
+ * True when the page currently holds a live secret in a field, or when the probe cannot tell
+ * (fail closed). Nothing is cached across commands.
+ */
+const secretSitsInField = async (dbg: Debugger, secrets: readonly string[]): Promise<boolean> => {
+  try {
+    const response = (await dbg.sendCommand('Runtime.evaluate', {
+      expression: buildSecretFieldProbe(secrets),
+      returnByValue: true,
+      silent: true,
+    })) as { result?: { value?: unknown } } | undefined;
+    return response?.result?.value !== false;
+  } catch {
+    return true;
+  }
 };
 
 const sendToClient = (ws: WebSocket, payload: unknown) => {
@@ -384,6 +442,26 @@ const handleSocketMessage = async (ws: WebSocket, raw: string, announcedSessions
     return;
   }
 
+  const secrets = currentSecrets();
+  if (PAGE_JS_METHODS.has(method) && secrets.length > 0 && (await secretSitsInField(attached.dbg, secrets))) {
+    sendToClient(ws, { id: id ?? 0, error: { code: -32000, message: SECRET_IN_FIELD_ERROR }, sessionId });
+    return;
+  }
+
+  // The probe awaited: the page may have been detached or locked meanwhile.
+  if (clientsLocked) {
+    sendToClient(ws, {
+      id: id ?? 0,
+      error: { code: -32000, message: `browser locked: ${clientsLocked.reason ?? 'recording in progress'}` },
+      sessionId,
+    });
+    return;
+  }
+  if (!attached || attached.contents.isDestroyed()) {
+    sendError(ws, id, 'The in-app browser is not currently attached.', sessionId);
+    return;
+  }
+
   try {
     const result = await attached.dbg.sendCommand(method, params ?? {});
     sendToClient(ws, { id, result: result ?? {}, sessionId });
@@ -522,6 +600,7 @@ export const startCdpBridge = async (): Promise<CdpBridgeHandle> => {
     setClientsLocked: (locked, reason) => {
       clientsLocked = locked ? { reason } : null;
     },
+    isClientsLocked: () => clientsLocked !== null,
     close: async () => {
       detachInternal();
       eventListeners.clear();

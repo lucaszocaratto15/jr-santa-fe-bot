@@ -257,6 +257,64 @@ describe('secure input broker', () => {
     warn.mockRestore();
   });
 
+  it('ignores a duplicate save-only response while the save is in flight', async () => {
+    const vault = makeVault();
+    const { broker } = setup({ vault });
+    const id = broker.offerSave(ORIGIN) as string;
+    let finish!: () => void;
+    vault.upsert.mockImplementationOnce(() => new Promise((resolve) => (finish = () => resolve(undefined))));
+    const first = broker.respond({ id, value: PASSWORD });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await broker.respond({ id, value: PASSWORD })).toEqual({});
+    expect(await broker.respond({ id, cancelled: true })).toEqual({});
+    finish();
+    expect(await first).toEqual({ saved: true });
+    expect(vault.upsert).toHaveBeenCalledTimes(1);
+    expect(broker.listPending()).toEqual([]);
+  });
+
+  it('does not double-settle when the TTL fires during a save-only write', async () => {
+    const vault = makeVault();
+    const { broker, expired } = setup({ vault });
+    const id = broker.offerSave(ORIGIN) as string;
+    let finish!: () => void;
+    vault.upsert.mockImplementationOnce(() => new Promise((resolve) => (finish = () => resolve(undefined))));
+    const first = broker.respond({ id, value: PASSWORD });
+    await vi.advanceTimersByTimeAsync(SECURE_REQUEST_TTL_MS);
+    expect(expired).toEqual([]);
+    finish();
+    expect(await first).toEqual({ saved: true });
+    expect(expired).toEqual([]);
+    expect(vault.upsert).toHaveBeenCalledTimes(1);
+    expect(broker.listPending()).toEqual([]);
+  });
+
+  it('expires after a failed save when the TTL fired during it', async () => {
+    const vault = makeVault();
+    const { broker, expired } = setup({ vault });
+    const id = broker.offerSave(ORIGIN) as string;
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    let fail!: () => void;
+    vault.upsert.mockImplementationOnce(
+      () => new Promise((_resolve, reject) => (fail = () => reject(new Error('disk'))))
+    );
+    const first = broker.respond({ id, value: PASSWORD });
+    await vi.advanceTimersByTimeAsync(SECURE_REQUEST_TTL_MS);
+    fail();
+    expect(await first).toEqual({ saved: false });
+    expect(expired).toEqual([id]);
+    expect(broker.listPending()).toEqual([]);
+    warn.mockRestore();
+  });
+
+  it('passes submit to the fill only when the agent asked for it', async () => {
+    const { broker, fill, emitted } = setup();
+    void broker.request('password', 'Senha', { submit: true });
+    expect(emitted[0]).not.toHaveProperty('submit');
+    await broker.respond({ id: 'req-1', value: PASSWORD });
+    expect(fill).toHaveBeenCalledWith(PASSWORD, { requirePassword: true, allowedOrigins: [ORIGIN], submit: true });
+  });
+
   it('reports saved false for save-only when the vault is unavailable', async () => {
     const { broker } = setup({ vault: null });
     const id = broker.offerSave(ORIGIN) as string;

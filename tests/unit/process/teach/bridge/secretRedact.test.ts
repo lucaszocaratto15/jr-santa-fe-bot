@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { isInternalBindingEvent, redactSecrets, stripPostData } from '@process/resources/builtinMcp/secretRedact';
+import {
+  isInternalBindingEvent,
+  redactSecrets,
+  redactValue,
+  stripPostData,
+} from '@process/resources/builtinMcp/secretRedact';
 
 const s = 'S3nh@Forte9';
 
@@ -63,5 +68,26 @@ describe('isInternalBindingEvent', () => {
     expect(isInternalBindingEvent('Runtime.bindingCalled', { name: '__jrTeachEvent' })).toBe(true);
     expect(isInternalBindingEvent('Runtime.bindingCalled', { name: 'other' })).toBe(false);
     expect(isInternalBindingEvent('Runtime.consoleAPICalled', { name: '__jrTeachEvent' })).toBe(false);
+  });
+});
+
+describe('redactValue', () => {
+  it('redacts string values and keys only, leaving numbers and arrays intact', () => {
+    const otp = '483917';
+    const msg = { ts: 1730212483917.25, arr: [4, 8, 3, 9, 1, 7], s: `x${otp}y`, [otp]: true, nested: [{ v: otp }] };
+    expect(redactValue(msg, [otp])).toEqual({
+      ts: 1730212483917.25,
+      arr: [4, 8, 3, 9, 1, 7],
+      s: 'x«segredo»y',
+      '«segredo»': true,
+      nested: [{ v: '«segredo»' }],
+    });
+  });
+  it('matches secrets containing characters JSON escapes', () => {
+    const q = 'a"b\\c9';
+    expect(redactValue({ v: `pw ${q}` }, [q])).toEqual({ v: 'pw «segredo»' });
+  });
+  it('returns unchanged strings untouched', () => {
+    expect(redactValue('nada "aqui"\n', [s])).toBe('nada "aqui"\n');
   });
 });

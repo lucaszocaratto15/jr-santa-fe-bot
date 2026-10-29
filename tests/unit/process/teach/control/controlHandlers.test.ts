@@ -87,6 +87,18 @@ describe('teach control handlers', () => {
     expect(fill).not.toHaveBeenCalled();
   });
 
+  it('vault_fill and secure_input forward submit: true', async () => {
+    const { handlers, fill, broker } = makeDeps();
+    await handlers.vault_fill({ item: 'Portal Gov', field: 'password', submit: true });
+    expect(fill).toHaveBeenCalledWith(SECRET, {
+      requirePassword: true,
+      allowedOrigins: ['https://portal.gov.br'],
+      submit: true,
+    });
+    await handlers.secure_input({ kind: 'otp', label: 'Código', submit: true });
+    expect(broker.request).toHaveBeenCalledWith('otp', 'Código', { submit: true });
+  });
+
   it('secure_input and secure_input_status delegate to the broker', async () => {
     const { handlers, broker } = makeDeps();
     expect(await handlers.secure_input({ kind: 'otp', label: 'Código SMS' })).toEqual({

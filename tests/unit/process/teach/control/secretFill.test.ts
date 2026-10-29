@@ -5,7 +5,7 @@ const SECRET = 'S3nh@-Sup3r-Secreta';
 
 type Focus = { editable: boolean; isPassword: boolean };
 
-const makeDeps = (focus: Focus, url = 'https://portal.gov.br/login') => {
+const makeDeps = (focus: Focus, url = 'https://portal.gov.br/login', locked = false) => {
   const calls: string[] = [];
   const bridge = {
     sendCommand: vi.fn(async (method: string, _params?: Record<string, unknown>) => {
@@ -16,6 +16,7 @@ const makeDeps = (focus: Focus, url = 'https://portal.gov.br/login') => {
     addSecret: vi.fn((_id: number, _value: string) => {
       calls.push('addSecret');
     }),
+    isClientsLocked: vi.fn(() => locked),
   };
   return { deps: { bridge, currentUrl: () => url, webContentsId: () => 7 }, bridge, calls };
 };
@@ -98,6 +99,41 @@ describe('fillFocused', () => {
     deps.bridge.sendCommand.mockRejectedValueOnce(new Error(`boom ${SECRET}`));
     const result = await fillFocused(deps, SECRET, { requirePassword: true });
     expect(result).toEqual({ ok: false, error: 'navegador do app não está pronto' });
+  });
+
+  it('refuses while bridge clients are locked (recording or take-over), touching nothing', async () => {
+    const { deps, bridge } = makeDeps({ editable: true, isPassword: true }, 'https://portal.gov.br/login', true);
+    const result = await fillFocused(deps, SECRET, {
+      requirePassword: true,
+      allowedOrigins: ['https://portal.gov.br'],
+    });
+    expect(result).toEqual({ ok: false, error: 'navegador bloqueado: gravação ou funcionário no controle' });
+    expect(bridge.sendCommand).not.toHaveBeenCalled();
+    expect(bridge.addSecret).not.toHaveBeenCalled();
+  });
+
+  it('presses Enter after inserting the text when submit is set', async () => {
+    const { deps, bridge } = makeDeps({ editable: true, isPassword: true });
+    const result = await fillFocused(deps, SECRET, { requirePassword: true, submit: true });
+    expect(result).toEqual({ ok: true });
+    const methods = bridge.sendCommand.mock.calls.map(([method, params]) =>
+      method === 'Input.dispatchKeyEvent' ? `${method}:${(params as { type: string }).type}` : method
+    );
+    expect(methods).toEqual([
+      'Runtime.evaluate',
+      'Input.insertText',
+      'Input.dispatchKeyEvent:keyDown',
+      'Input.dispatchKeyEvent:keyUp',
+    ]);
+    const keyDown = bridge.sendCommand.mock.calls[2][1];
+    expect(keyDown).toMatchObject({ key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
+    expect(JSON.stringify(bridge.sendCommand.mock.calls.slice(2))).not.toContain(SECRET);
+  });
+
+  it('does not press Enter without submit', async () => {
+    const { deps, bridge } = makeDeps({ editable: true, isPassword: true });
+    await fillFocused(deps, SECRET, { requirePassword: true });
+    expect(bridge.sendCommand).not.toHaveBeenCalledWith('Input.dispatchKeyEvent', expect.anything());
   });
 
   it('treats a malformed evaluate result as not editable', async () => {

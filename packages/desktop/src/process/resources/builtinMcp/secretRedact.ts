@@ -27,7 +27,14 @@ const SEPARATOR = '(?:\\\\u[0-9a-fA-F]{4}|\\\\.|[^A-Za-z0-9])';
  *
  * Ceiling: base64 bodies at arbitrary byte offsets (e.g. Network.getResponseBody) are NOT matched.
  *
- * ponytail: exact + simple transforms only; a determined in-page encoding (e.g. charCode math) can still leak — upgrade path: block Runtime.evaluate from clients while a secret is live.
+ * Exact + simple transforms only; this is defence in depth. The real barrier (R13) lives in
+ * cdpBridge: while a live secret sits in an input/textarea of the page, client
+ * Runtime.evaluate / callFunctionOn / compileScript / Debugger.evaluateOnCallFrame are refused
+ * (a value-free boolean probe decides), and vault_fill / secure_input submit the form via
+ * `submit: true` so the agent never needs page JS while the secret is in a field.
+ * Remaining ceiling: page listeners installed BEFORE the fill (e.g. by a pre-planned prompt
+ * injection) can copy an encoded form of the value elsewhere in the page and read it after
+ * the field is cleared or submitted.
  */
 export const redactSecrets = (text: string, secrets: readonly string[]): string => {
   let out = text;
@@ -55,6 +62,37 @@ export const redactSecrets = (text: string, secrets: readonly string[]): string 
     }
   }
   return out;
+};
+
+/** Redact one string value (matched in its JSON-escaped form, like the raw-text variant). */
+const redactString = (value: string, secrets: readonly string[]): string => {
+  const inner = jsonInner(value);
+  const out = redactSecrets(inner, secrets);
+  if (out === inner) return value;
+  try {
+    return JSON.parse(`"${out}"`) as string;
+  } catch {
+    // A match split an escape sequence: fail closed.
+    return REDACTED;
+  }
+};
+
+/**
+ * Walk a parsed CDP message and redact only string values and object keys (R14). Numbers,
+ * booleans and array structure are never touched, so a numeric secret (OTP) cannot corrupt
+ * the JSON of a relayed frame.
+ */
+export const redactValue = (value: unknown, secrets: readonly string[]): unknown => {
+  if (typeof value === 'string') return redactString(value, secrets);
+  if (Array.isArray(value)) return value.map((item) => redactValue(item, secrets));
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+      out[redactString(key, secrets)] = redactValue(item, secrets);
+    }
+    return out;
+  }
+  return value;
 };
 
 /**
