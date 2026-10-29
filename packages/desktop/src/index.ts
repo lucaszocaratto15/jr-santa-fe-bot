@@ -39,6 +39,7 @@ import { createRecorder, sweepTaughtTasks } from './process/services/teach/recor
 import { TAUGHT_TASKS_DIRNAME } from './process/services/teach/recording/teachSession';
 import { getCdpBridgeHandle } from './process/utils/cdpBridgeRegistry';
 import { startJrAuthProxy } from './process/services/jr/authProxy';
+import { setJrModelConnection } from './process/services/jr/modelConnection';
 import { appendJrOpenLog } from './process/services/jr/openLog';
 import { assertStartupArchitectureCompatible } from './process/startup/architectureCompatibility';
 import { classifyBackendStartupFailure } from './process/startup/backendStartupFailure';
@@ -931,6 +932,7 @@ const handleAppReady = async (): Promise<void> => {
   };
   stopJrRuntime = () =>
     serializeRuntime(async () => {
+      setJrModelConnection(null);
       await proxy?.close();
       proxy = null;
       await backendManager.stop();
@@ -996,12 +998,15 @@ const handleAppReady = async (): Promise<void> => {
           reloadRendererIfPortStale();
           return;
         }
+        setJrModelConnection(null);
         await proxy?.close();
         proxy = await startJrAuthProxy(connection, (notice) => {
           applyJrProxyDenial(controller, connection.token, notice, () =>
             console.warn('[JR] Access could not be cleared.')
           );
         });
+        // Main-process features (Aprender insights) reach the model through the same proxy.
+        setJrModelConnection(proxy.connection);
         try {
           const result = await startJrCore();
           if (!result.ok) throw new Error('JR_ACCESS_CORE_UNAVAILABLE');
@@ -1012,6 +1017,7 @@ const handleAppReady = async (): Promise<void> => {
           // exists, so reload only when the renderer is still on another port.
           reloadRendererIfPortStale();
         } catch (error) {
+          setJrModelConnection(null);
           await proxy.close();
           proxy = null;
           await backendManager.stop();
