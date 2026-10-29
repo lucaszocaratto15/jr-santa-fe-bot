@@ -2560,6 +2560,11 @@ export const sidebar = {
 export type SecureRequest = import('@process/services/teach/control/secureInput').SecureRequest;
 export type SecureResponse = import('@process/services/teach/control/secureInput').SecureResponse;
 export type SecureRespondResult = import('@process/services/teach/control/secureInput').SecureRespondResult;
+export type TeachDraft = import('@process/services/teach/recording/skillDraft').TeachDraft;
+export type TeachStateEvent = import('@process/services/teach/recording/teachSession').TeachStateEvent;
+export type TeachStopResult = import('@process/services/teach/recording/teachSession').TeachStopResult;
+export type TeachDraftEvent = import('@process/services/teach/recording/teachSession').TeachDraftEvent;
+export type TeachSaveDraftInput = import('@process/services/teach/recording/teachSession').TeachSaveDraftInput;
 
 export const teach = {
   openTab: bridge.buildEmitter<{ url: string; openerWebContentsId: number }>('teach:open-tab'),
@@ -2572,4 +2577,21 @@ export const teach = {
   secureRespond: bridge.buildProvider<SecureRespondResult, SecureResponse>('teach:secure-respond'),
   /** Renderer → main: pending requests (no values) so a freshly mounted host can resync. */
   secureListPending: bridge.buildProvider<SecureRequest[], void>('teach:secure-list-pending'),
+  /** False when the CDP bridge is off: the Ensinar button is hidden. */
+  available: bridge.buildProvider<boolean, void>('teach:available'),
+  start: bridge.buildProvider<{ id: string }, { description: string }>('teach:start'),
+  pause: bridge.buildProvider<void, void>('teach:pause'),
+  resume: bridge.buildProvider<void, void>('teach:resume'),
+  /** Stops recording; the result carries the draft prompt the renderer sends to the bot. */
+  stop: bridge.buildProvider<TeachStopResult, void>('teach:stop'),
+  /** Drops the active or awaiting recording and its raw dir (also used after a save). */
+  discard: bridge.buildProvider<void, void>('teach:discard'),
+  /** Main → renderer: recorder state, ticking every second while recording. */
+  state: bridge.buildEmitter<TeachStateEvent>('teach:state'),
+  /** Main → renderer: a validated draft from `teach_submit_draft`, for the review card. */
+  draft: bridge.buildEmitter<TeachDraftEvent>('teach:draft'),
+  /** Writes the reviewed SKILL.md; `skillPath` is the skill directory for `fs.importSkill`. */
+  saveDraft: bridge.buildProvider<{ skillPath: string }, TeachSaveDraftInput>('teach:save-draft'),
+  /** "Assumir" / "Devolver ao bot": locks the agent out of the in-app browser. */
+  takeOver: bridge.buildProvider<void, { on: boolean }>('teach:take-over'),
 };

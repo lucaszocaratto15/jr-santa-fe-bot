@@ -1,10 +1,14 @@
 import type { SecureInputBroker } from './control/secureInput';
+import type { Recorder } from './recording/recorder';
+import type { TeachSession } from './recording/teachSession';
 import type { VaultStore } from './vault/vault';
 
-export type TeachServices = { vault: VaultStore };
+/** `recorder` is null when the CDP bridge is off: teach recording is then unavailable. */
+export type TeachServices = { vault: VaultStore; recorder: Recorder | null };
 
 let services: TeachServices | null = null;
 let secureInput: SecureInputBroker | null = null;
+let session: TeachSession | null = null;
 
 export const setTeachServices = (next: TeachServices | null): void => {
   services = next;
@@ -18,3 +22,10 @@ export const setSecureInputBroker = (next: SecureInputBroker | null): void => {
 };
 
 export const getSecureInputBroker = (): SecureInputBroker | null => secureInput;
+
+/** Set with the control channel deps; the teach IPC and the draft tool go through it. */
+export const setTeachSession = (next: TeachSession | null): void => {
+  session = next;
+};
+
+export const getTeachSession = (): TeachSession | null => session;

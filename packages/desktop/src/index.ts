@@ -34,7 +34,10 @@ import {
   setJrAccessController,
 } from './process/services/jr/auth';
 import { createVaultStore } from './process/services/teach/vault/vault';
-import { setTeachServices } from './process/services/teach/registry';
+import { getTeachServices, getTeachSession, setTeachServices } from './process/services/teach/registry';
+import { createRecorder } from './process/services/teach/recording/recorder';
+import { TAUGHT_TASKS_DIRNAME } from './process/services/teach/recording/teachSession';
+import { getCdpBridgeHandle } from './process/utils/cdpBridgeRegistry';
 import { startJrAuthProxy } from './process/services/jr/authProxy';
 import { appendJrOpenLog } from './process/services/jr/openLog';
 import { assertStartupArchitectureCompatible } from './process/startup/architectureCompatibility';
@@ -944,7 +947,18 @@ const handleAppReady = async (): Promise<void> => {
   } catch {
     console.warn('[JR] Invalid company access configuration.');
   }
-  setTeachServices({ vault: createVaultStore(app.getPath('userData'), safeStorage) });
+  const teachBridge = getCdpBridgeHandle();
+  setTeachServices({
+    vault: createVaultStore(app.getPath('userData'), safeStorage),
+    // Teach recording needs the CDP bridge; without it the Ensinar button stays hidden.
+    recorder: teachBridge
+      ? createRecorder({
+          bridge: teachBridge,
+          dir: path.join(app.getPath('userData'), TAUGHT_TASKS_DIRNAME),
+          onAutoStop: () => void getTeachSession()?.handleAutoStop(),
+        })
+      : null,
+  });
   const controller = new JrAccessController({
     url: controlUrl,
     pilot: localPilot,
@@ -1224,7 +1238,10 @@ if (process.defaultApp) {
 registerBrowserWindowHandlers({
   emitOpenTab: (url, openerWebContentsId) => ipcBridge.teach.openTab.emit({ url, openerWebContentsId }),
   downloadsDir: path.join(app.getPath('downloads'), 'JR Bot'),
-  onDownload: (info) => ipcBridge.teach.downloaded.emit(info),
+  onDownload: (info) => {
+    ipcBridge.teach.downloaded.emit(info);
+    getTeachServices()?.recorder?.recordDownload({ fileName: info.fileName, origin: info.origin });
+  },
 });
 
 // macOS: handle aionui:// URLs via the open-url event

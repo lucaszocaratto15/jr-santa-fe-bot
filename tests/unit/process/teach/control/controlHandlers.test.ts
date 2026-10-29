@@ -23,8 +23,9 @@ const makeDeps = () => {
     offerSave: vi.fn(),
     listPending: vi.fn(() => []),
   };
-  const handlers = buildTeachHandlers({ vault: () => vault, fill, broker });
-  return { handlers, vault, fill, broker };
+  const submitDraft = vi.fn(async (_markdown: string) => ({ ok: true, result: 'cartão de revisão exibido' }) as const);
+  const handlers = buildTeachHandlers({ vault: () => vault, fill, broker, submitDraft });
+  return { handlers, vault, fill, broker, submitDraft };
 };
 
 describe('teach control handlers', () => {
@@ -40,7 +41,7 @@ describe('teach control handlers', () => {
   });
 
   it('vault_list reports an unavailable vault', async () => {
-    const handlers = buildTeachHandlers({ vault: () => null, fill: vi.fn(), broker: makeDeps().broker });
+    const handlers = buildTeachHandlers({ ...makeDeps(), vault: () => null, fill: vi.fn() });
     expect(await handlers.vault_list({})).toEqual({ ok: false, error: 'cofre indisponível neste computador' });
   });
 
@@ -97,5 +98,20 @@ describe('teach control handlers', () => {
     expect(await handlers.secure_input_status({ id: 'r1' })).toEqual({ ok: true, id: 'r1', result: 'aguardando' });
     expect(await handlers.secure_input({ kind: 'pin', label: 'x' })).toEqual({ ok: false, error: 'pedido inválido' });
     expect(await handlers.secure_input_status({})).toEqual({ ok: false, error: 'pedido inválido' });
+  });
+
+  it('teach_submit_draft hands the markdown to the session and returns its answer', async () => {
+    const { handlers, submitDraft } = makeDeps();
+    expect(await handlers.teach_submit_draft({ markdown: '# x' })).toEqual({
+      ok: true,
+      result: 'cartão de revisão exibido',
+    });
+    expect(submitDraft).toHaveBeenCalledWith('# x');
+    submitDraft.mockResolvedValueOnce({ ok: false, error: 'nenhuma gravação aguardando revisão' } as never);
+    expect(await handlers.teach_submit_draft({ markdown: '# y' })).toEqual({
+      ok: false,
+      error: 'nenhuma gravação aguardando revisão',
+    });
+    expect(await handlers.teach_submit_draft({})).toEqual({ ok: false, error: 'pedido inválido' });
   });
 });

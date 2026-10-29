@@ -1,5 +1,6 @@
 import { ipcBridge } from '@/common';
-import { getSecureInputBroker, getTeachServices } from '@process/services/teach/registry';
+import { getSecureInputBroker, getTeachServices, getTeachSession } from '@process/services/teach/registry';
+import { TEACH_ERRORS } from '@process/services/teach/recording/teachSession';
 
 const requireVault = () => {
   const services = getTeachServices();
@@ -19,4 +20,22 @@ export function initVaultBridge(): void {
 export function initSecureInputBridge(): void {
   ipcBridge.teach.secureRespond.provider(async (response) => (await getSecureInputBroker()?.respond(response)) ?? {});
   ipcBridge.teach.secureListPending.provider(async () => getSecureInputBroker()?.listPending() ?? []);
+}
+
+const requireSession = () => {
+  const session = getTeachSession();
+  if (!session) throw new Error(TEACH_ERRORS.unavailable);
+  return session;
+};
+
+/** "Ensinar tarefa" IPC: recording controls, draft save and the browser take-over. */
+export function initTeachBridge(): void {
+  ipcBridge.teach.available.provider(async () => getTeachSession()?.available() ?? false);
+  ipcBridge.teach.start.provider(async ({ description }) => requireSession().start(description));
+  ipcBridge.teach.pause.provider(async () => requireSession().pause());
+  ipcBridge.teach.resume.provider(async () => requireSession().resume());
+  ipcBridge.teach.stop.provider(async () => requireSession().stop());
+  ipcBridge.teach.discard.provider(async () => requireSession().discard());
+  ipcBridge.teach.saveDraft.provider(async (input) => requireSession().saveDraft(input));
+  ipcBridge.teach.takeOver.provider(async ({ on }) => requireSession().takeOver(on));
 }

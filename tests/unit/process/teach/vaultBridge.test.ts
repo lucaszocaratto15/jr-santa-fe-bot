@@ -18,12 +18,24 @@ vi.mock('@/common', () => ({
       upsert: channel('upsert'),
       remove: channel('remove'),
     },
-    teach: { secureRespond: channel('secureRespond'), secureListPending: channel('secureListPending') },
+    teach: {
+      secureRespond: channel('secureRespond'),
+      secureListPending: channel('secureListPending'),
+      available: channel('teachAvailable'),
+      start: channel('start'),
+      pause: channel('pause'),
+      resume: channel('resume'),
+      stop: channel('stop'),
+      discard: channel('discard'),
+      saveDraft: channel('saveDraft'),
+      takeOver: channel('takeOver'),
+    },
   },
 }));
 
-import { initSecureInputBridge, initVaultBridge } from '@process/bridge/vaultBridge';
-import { setSecureInputBroker, setTeachServices } from '@process/services/teach/registry';
+import { initSecureInputBridge, initTeachBridge, initVaultBridge } from '@process/bridge/vaultBridge';
+import { setSecureInputBroker, setTeachServices, setTeachSession } from '@process/services/teach/registry';
+import type { TeachSession } from '@process/services/teach/recording/teachSession';
 import type { SecureInputBroker } from '@process/services/teach/control/secureInput';
 import type { VaultStore } from '@process/services/teach/vault/vault';
 
@@ -42,7 +54,7 @@ describe('vaultBridge', () => {
   let store: ReturnType<typeof makeStore>;
   beforeEach(() => {
     store = makeStore();
-    setTeachServices({ vault: store });
+    setTeachServices({ vault: store, recorder: null });
     initVaultBridge();
   });
 
@@ -80,5 +92,39 @@ describe('vaultBridge', () => {
     setSecureInputBroker(null);
     expect(await handlers.secureRespond(response)).toEqual({});
     expect(await handlers.secureListPending()).toEqual([]);
+  });
+
+  it('routes teach calls to the session and rejects them when teach is off', async () => {
+    initTeachBridge();
+    setTeachSession(null);
+    expect(await handlers.teachAvailable()).toBe(false);
+    await expect(handlers.start({ description: 'x' })).rejects.toThrow(/indisponível/);
+    const session = {
+      available: vi.fn(() => true),
+      start: vi.fn(async () => ({ id: 'rec' })),
+      pause: vi.fn(),
+      resume: vi.fn(),
+      stop: vi.fn(async () => ({ id: 'rec' })),
+      discard: vi.fn(async () => {}),
+      saveDraft: vi.fn(async () => ({ skillPath: '/s' })),
+      takeOver: vi.fn(),
+    };
+    setTeachSession(session as unknown as TeachSession);
+    expect(await handlers.teachAvailable()).toBe(true);
+    expect(await handlers.start({ description: 'Baixar NFs' })).toEqual({ id: 'rec' });
+    expect(session.start).toHaveBeenCalledWith('Baixar NFs');
+    await handlers.pause();
+    await handlers.resume();
+    expect(await handlers.stop()).toEqual({ id: 'rec' });
+    await handlers.discard();
+    const save = { markdown: '# x', recordingId: 'rec' };
+    expect(await handlers.saveDraft(save)).toEqual({ skillPath: '/s' });
+    expect(session.saveDraft).toHaveBeenCalledWith(save);
+    await handlers.takeOver({ on: true });
+    expect(session.takeOver).toHaveBeenCalledWith(true);
+    expect(session.pause).toHaveBeenCalled();
+    expect(session.resume).toHaveBeenCalled();
+    expect(session.discard).toHaveBeenCalled();
+    setTeachSession(null);
   });
 });

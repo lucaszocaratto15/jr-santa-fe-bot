@@ -4,10 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { webContents } from 'electron';
+import path from 'node:path';
+import { app, webContents } from 'electron';
 import { ipcBridge } from '@/common';
 import { getCdpBridgeHandle } from '@process/utils/cdpBridgeRegistry';
-import { getTeachServices, setSecureInputBroker } from '../registry';
+import { getTeachServices, setSecureInputBroker, setTeachSession } from '../registry';
+import { createTeachSession, TAUGHT_TASKS_DIRNAME } from '../recording/teachSession';
 import type { TeachHandlerDeps } from './controlHandlers';
 import { FILL_ERRORS, fillFocused } from './secretFill';
 import type { FillOptions, FillResult } from './secretFill';
@@ -34,7 +36,7 @@ async function fillAttached(value: string, opts: FillOptions): Promise<FillResul
   );
 }
 
-/** Wires the control handlers to the real CDP bridge, vault and secure card IPC. */
+/** Wires the control handlers to the real CDP bridge, vault, recorder and teach IPC. */
 export function createMainTeachDeps(): TeachHandlerDeps {
   const vault = () => getTeachServices()?.vault ?? null;
   const broker = createSecureInputBroker({
@@ -45,5 +47,17 @@ export function createMainTeachDeps(): TeachHandlerDeps {
     vault,
   });
   setSecureInputBroker(broker);
-  return { vault, fill: fillAttached, broker };
+  const session = createTeachSession({
+    recorder: () => getTeachServices()?.recorder ?? null,
+    bridge: getCdpBridgeHandle,
+    // R2: the employee retypes the password on a save-only card; skip it without a vault.
+    offerSave: (origin) => {
+      if (vault()?.available()) broker.offerSave(origin);
+    },
+    emitState: (event) => ipcBridge.teach.state.emit(event),
+    emitDraft: (event) => ipcBridge.teach.draft.emit(event),
+    dir: path.join(app.getPath('userData'), TAUGHT_TASKS_DIRNAME),
+  });
+  setTeachSession(session);
+  return { vault, fill: fillAttached, broker, submitDraft: (markdown) => session.submitDraft(markdown) };
 }

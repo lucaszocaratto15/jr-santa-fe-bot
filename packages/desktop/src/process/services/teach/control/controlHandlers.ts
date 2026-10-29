@@ -13,6 +13,8 @@ export type TeachHandlerDeps = {
   vault(): VaultStore | null;
   fill(value: string, opts: FillOptions): Promise<FillResult>;
   broker: SecureInputBroker;
+  /** Validates a taught-task draft and shows the review card (see teachSession.ts). */
+  submitDraft(markdown: string): Promise<unknown>;
 };
 
 const INVALID = { ok: false, error: 'pedido inválido' } as const;
@@ -22,11 +24,9 @@ const SECURE_KINDS: ReadonlySet<unknown> = new Set<SecureKind>(['otp', 'password
 const field = (body: unknown, key: string): unknown =>
   typeof body === 'object' && body !== null ? (body as Record<string, unknown>)[key] : undefined;
 
-const notReady = async (): Promise<unknown> => ({ ok: false, error: 'not ready' });
-
 /**
  * Single registration point for control handlers. Every response is `{ ok, ... }` and never
- * contains a secret or typed value. Task 9 replaces `teach_submit_draft`.
+ * contains a secret or typed value.
  */
 export function buildTeachHandlers(deps: TeachHandlerDeps): TeachHandlers {
   const usableVault = () => {
@@ -78,6 +78,10 @@ export function buildTeachHandlers(deps: TeachHandlerDeps): TeachHandlers {
       return deps.broker.status(id);
     },
 
-    teach_submit_draft: notReady,
+    teach_submit_draft: async (body) => {
+      const markdown = field(body, 'markdown');
+      if (typeof markdown !== 'string') return INVALID;
+      return deps.submitDraft(markdown);
+    },
   };
 }

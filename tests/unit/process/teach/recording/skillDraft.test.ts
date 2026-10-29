@@ -1,0 +1,138 @@
+import { describe, expect, it } from 'vitest';
+import { buildDraftPrompt, parseDraft, withDraftName } from '@process/services/teach/recording/skillDraft';
+
+const VALID = `---
+name: jr-tarefa-relatorio-nfs
+description: Baixa o relatório de NFs do mês no portal da prefeitura.
+source: taught
+created: 2026-10-29
+---
+
+## Entradas
+- Mês de referência
+
+## Logins
+- \`cofre:Portal Prefeitura\`
+
+## Passos
+1. Abrir https://portal.exemplo.gov.br
+2. Clicar no campo "Usuário" e chamar \`vault_fill\`
+3. Relatórios → Notas fiscais
+4. Escolher o mês e clicar em "Gerar"
+
+## Confirmar antes de
+- Clicar em "Emitir"
+
+## Como saber que deu certo
+- O PDF aparece em Downloads.
+
+## Se algo estiver diferente
+- Pare e peça ajuda; não tente adivinhar.
+`;
+
+describe('parseDraft', () => {
+  it('accepts a valid draft and extracts its lists', () => {
+    expect(parseDraft(VALID)).toEqual({
+      ok: true,
+      name: 'jr-tarefa-relatorio-nfs',
+      description: 'Baixa o relatório de NFs do mês no portal da prefeitura.',
+      inputs: ['Mês de referência'],
+      logins: ['Portal Prefeitura'],
+      steps: [
+        'Abrir https://portal.exemplo.gov.br',
+        'Clicar no campo "Usuário" e chamar `vault_fill`',
+        'Relatórios → Notas fiscais',
+        'Escolher o mês e clicar em "Gerar"',
+      ],
+      confirmBefore: ['Clicar em "Emitir"'],
+    });
+  });
+
+  it('accepts CRLF line endings and starred bullets', () => {
+    const draft = VALID.replace('- Mês de referência', '* Mês de referência').replace(/\n/g, '\r\n');
+    const parsed = parseDraft(draft);
+    expect(parsed.ok && parsed.inputs).toEqual(['Mês de referência']);
+  });
+
+  it.each([
+    ['without the prefix', 'relatorio-nfs'],
+    ['with uppercase letters', 'jr-tarefa-Relatorio'],
+    ['too short', 'jr-tarefa-ab'],
+    ['with a path', 'jr-tarefa-../../etc'],
+    ['too long', `jr-tarefa-${'a'.repeat(49)}`],
+  ])('rejects a name %s', (_label, name) => {
+    const parsed = parseDraft(VALID.replace('jr-tarefa-relatorio-nfs', name));
+    expect(parsed.ok).toBe(false);
+  });
+
+  it('rejects a draft without frontmatter', () => {
+    expect(parseDraft('## Passos\n1. Abrir o site\n')).toEqual({ ok: false, error: expect.any(String) });
+  });
+
+  it('rejects a missing description', () => {
+    expect(parseDraft(VALID.replace(/^description:.*$/m, '')).ok).toBe(false);
+  });
+
+  it('rejects a draft without a ## Passos section', () => {
+    const parsed = parseDraft(VALID.replace('## Passos', '## Etapas'));
+    expect(parsed).toEqual({ ok: false, error: expect.stringContaining('Passos') });
+  });
+
+  it('rejects an empty ## Passos section', () => {
+    const parsed = parseDraft(VALID.replace(/## Passos[\s\S]*?## Confirmar/, '## Passos\n\n## Confirmar'));
+    expect(parsed.ok).toBe(false);
+  });
+
+  it('rejects drafts larger than 64 KB', () => {
+    const parsed = parseDraft(`${VALID}\n${'x'.repeat(64 * 1024)}`);
+    expect(parsed).toEqual({ ok: false, error: expect.stringContaining('64 KB') });
+  });
+
+  it('keeps login items that do not use the cofre: prefix', () => {
+    const parsed = parseDraft(VALID.replace('- `cofre:Portal Prefeitura`', '- Nenhum'));
+    expect(parsed.ok && parsed.logins).toEqual(['Nenhum']);
+  });
+});
+
+describe('withDraftName', () => {
+  it('replaces only the frontmatter name', () => {
+    const renamed = withDraftName(VALID, 'jr-tarefa-nfs-prefeitura');
+    const parsed = parseDraft(renamed);
+    expect(parsed.ok && parsed.name).toBe('jr-tarefa-nfs-prefeitura');
+    expect(renamed.replace('jr-tarefa-nfs-prefeitura', 'jr-tarefa-relatorio-nfs')).toBe(VALID);
+  });
+});
+
+describe('buildDraftPrompt', () => {
+  const timeline = '1. Abriu https://portal.exemplo.gov.br\n2. Clicou no botão "Entrar"';
+  const prompt = buildDraftPrompt('Baixar o relatório de NFs', timeline);
+
+  it('includes the timeline verbatim, the description and the submit tool', () => {
+    expect(prompt).toContain(timeline);
+    expect(prompt).toContain('Baixar o relatório de NFs');
+    expect(prompt).toContain('teach_submit_draft');
+    expect(prompt.startsWith('📋 Gerando tarefa a partir da gravação…')).toBe(true);
+  });
+
+  it('asks for the required frontmatter and sections', () => {
+    for (const piece of [
+      'name: jr-tarefa-',
+      'description:',
+      'source: taught',
+      'created: ',
+      '## Entradas',
+      '## Logins',
+      'cofre:',
+      '## Passos',
+      'vault_fill',
+      'secure_input',
+      '## Confirmar antes de',
+      '## Como saber que deu certo',
+      '## Se algo estiver diferente',
+      'não tente adivinhar',
+      'nunca coordenadas',
+    ]) {
+      expect(prompt).toContain(piece);
+    }
+  });
+});
