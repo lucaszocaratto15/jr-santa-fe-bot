@@ -465,7 +465,8 @@
         "computer": "Computador",
         "usage": "Uso e cobrança",
         "updates": "Atualizações",
-        "vault": "Cofre"
+        "vault": "Cofre",
+        "tasks": "Minhas tarefas"
       },
       "generalTitle": "Geral",
       "account": "Conta",
@@ -602,11 +603,61 @@
         "cancel": "Cancelar",
         "saveToVault": "Salvar no cofre deste site",
         "footnote": "O bot não vê o que você digita.",
-        "saveOnlyTitle": "Salvar a senha de {{origin}} no cofre?",
+        "saveOnlyTitle": "Salvar a senha usada em {{origin}} no cofre?",
         "saveOnlySubmit": "Salvar",
         "sendFailed": "Não foi possível enviar. Tente de novo.",
         "saveFailed": "Senha enviada, mas não consegui salvar no cofre.",
         "saveOnlyFailed": "Não consegui salvar no cofre. Tente de novo."
+      },
+      "describe": {
+        "title": "O que essa tarefa faz?",
+        "placeholder": "Ex.: Baixar o relatório de NFs do mês no portal da prefeitura",
+        "hint": "Depois faça a tarefa no navegador normalmente. A gravação para em 10 minutos.",
+        "start": "Começar",
+        "cancel": "Cancelar",
+        "startFailed": "Não foi possível começar a gravação. Tente de novo."
+      },
+      "controls": {
+        "teach": "Ensinar",
+        "takeOver": "Assumir",
+        "giveBack": "Devolver ao bot",
+        "takeOverFailed": "Não foi possível trocar quem controla o navegador.",
+        "recording": "Gravando",
+        "paused": "Pausado",
+        "pause": "Pausar",
+        "resume": "Retomar",
+        "discard": "Descartar",
+        "discardConfirm": "Descartar esta gravação?",
+        "finish": "Concluir",
+        "actionFailed": "Algo deu errado. Tente de novo.",
+        "stopFailed": "Não foi possível concluir a gravação."
+      },
+      "review": {
+        "title": "Revise a nova tarefa",
+        "name": "Nome",
+        "inputs": "Vou perguntar",
+        "logins": "Login",
+        "vault": "cofre",
+        "confirmBefore": "Confirmo antes",
+        "discard": "Descartar",
+        "discardConfirm": "Descartar esta tarefa?",
+        "discardFailed": "Não foi possível descartar. Tente de novo.",
+        "test": "Testar agora",
+        "testPrompt": "Execute a tarefa `{{name}}` agora usando o rascunho acima, sem salvar.",
+        "save": "Salvar",
+        "saved": "Tarefa salva. Disponível numa nova conversa.",
+        "saveFailed": "Não foi possível salvar a tarefa.",
+        "error": "Não foi possível salvar: {{error}}",
+        "askAgain": "Pedir de novo"
+      },
+      "tasks": {
+        "title": "Minhas tarefas",
+        "subtitle": "Tarefas que você ensinou ao bot. Peça no chat ou escolha com /.",
+        "empty": "Nenhuma tarefa ainda. Abra o navegador do bot e clique em Ensinar.",
+        "delete": "Excluir",
+        "deleteConfirm": "Excluir esta tarefa?",
+        "deleteFailed": "Não foi possível excluir a tarefa.",
+        "loadFailed": "Não foi possível carregar as tarefas."
       }
     }
   }

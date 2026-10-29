@@ -460,6 +460,20 @@ Please check your local CLI tool authentication status`,
     await executeCommand({ input: message, files: allFiles, sessions });
   };
 
+  // Programmatic sends (teach cards) take the same path as Enter; queued while busy.
+  useAddEventListener(
+    'sendbox.send',
+    (text: string, targetConversationId: string) => {
+      if (targetConversationId !== conversation_id) return;
+      if (isBusy) {
+        enqueue({ input: text, files: [] });
+        return;
+      }
+      void executeCommand({ input: text, files: [] }).catch(() => {});
+    },
+    [conversation_id, isBusy, enqueue, executeCommand]
+  );
+
   const [interrupting, setInterrupting] = useState(false);
   const handleInterruptSend = async () => {
     if (!teamRuntime?.onInterruptSend || !content.trim() || interrupting) return;

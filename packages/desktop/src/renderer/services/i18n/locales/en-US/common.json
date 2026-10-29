@@ -465,7 +465,8 @@
         "computer": "Computer",
         "usage": "Usage and billing",
         "updates": "Updates",
-        "vault": "Vault"
+        "vault": "Vault",
+        "tasks": "My tasks"
       },
       "generalTitle": "General",
       "account": "Account",
@@ -602,11 +603,61 @@
         "cancel": "Cancel",
         "saveToVault": "Save to this site's vault",
         "footnote": "The bot can't see what you type.",
-        "saveOnlyTitle": "Save the password for {{origin}} to the vault?",
+        "saveOnlyTitle": "Save the password used on {{origin}} to the vault?",
         "saveOnlySubmit": "Save",
         "sendFailed": "Couldn't send. Try again.",
         "saveFailed": "Password sent, but I couldn't save it to the vault.",
         "saveOnlyFailed": "Couldn't save to the vault. Try again."
+      },
+      "describe": {
+        "title": "What does this task do?",
+        "placeholder": "e.g. Download this month's invoice report from the city hall portal",
+        "hint": "Then do the task in the browser as usual. The recording stops at 10 minutes.",
+        "start": "Start",
+        "cancel": "Cancel",
+        "startFailed": "Couldn't start recording. Try again."
+      },
+      "controls": {
+        "teach": "Teach",
+        "takeOver": "Take over",
+        "giveBack": "Give back to the bot",
+        "takeOverFailed": "Couldn't change who controls the browser.",
+        "recording": "Recording",
+        "paused": "Paused",
+        "pause": "Pause",
+        "resume": "Resume",
+        "discard": "Discard",
+        "discardConfirm": "Discard this recording?",
+        "finish": "Done",
+        "actionFailed": "Something went wrong. Try again.",
+        "stopFailed": "Couldn't finish the recording."
+      },
+      "review": {
+        "title": "Review the new task",
+        "name": "Name",
+        "inputs": "I'll ask",
+        "logins": "Login",
+        "vault": "vault",
+        "confirmBefore": "I confirm before",
+        "discard": "Discard",
+        "discardConfirm": "Discard this task?",
+        "discardFailed": "Couldn't discard. Try again.",
+        "test": "Test now",
+        "testPrompt": "Run the task `{{name}}` now using the draft above, without saving.",
+        "save": "Save",
+        "saved": "Task saved. Available in a new conversation.",
+        "saveFailed": "Couldn't save the task.",
+        "error": "Couldn't save: {{error}}",
+        "askAgain": "Ask again"
+      },
+      "tasks": {
+        "title": "My tasks",
+        "subtitle": "Tasks you taught the bot. Ask for them in the chat or pick them with /.",
+        "empty": "No tasks yet. Open the bot's browser and click Teach.",
+        "delete": "Delete",
+        "deleteConfirm": "Delete this task?",
+        "deleteFailed": "Couldn't delete the task.",
+        "loadFailed": "Couldn't load the tasks."
       }
     }
   }

@@ -367,6 +367,20 @@ const AionrsSendBox: React.FC<{
     await executeCommand({ input: message, files: filesToSend, sessions });
   };
 
+  // Programmatic sends (teach cards) take the same path as Enter; queued while busy.
+  useAddEventListener(
+    'sendbox.send',
+    (text: string, targetConversationId: string) => {
+      if (targetConversationId !== conversation_id) return;
+      if (isBusy) {
+        enqueue({ input: text, files: [] });
+        return;
+      }
+      void executeCommand({ input: text, files: [] }).catch(() => {});
+    },
+    [conversation_id, isBusy, enqueue, executeCommand]
+  );
+
   const [interrupting, setInterrupting] = useState(false);
   const hasComposerDraft = content.trim().length > 0 || uploadFile.length > 0 || atPath.length > 0;
 

@@ -42,6 +42,12 @@ interface EventTypes {
   ];
   // 填充输入框事件 / Fill sendbox input event
   'sendbox.fill': [string]; // prompt text to fill
+  /**
+   * Send text as a normal user message from the send box of the target conversation
+   * (2nd arg), through the same path as pressing Enter; queued while the agent is busy.
+   * Used by the teach cards for the draft prompt and "Testar agora".
+   */
+  'sendbox.send': [string, string];
   'sendbox.reply': [ReplyQuote]; // reply/quote a message
   'sendbox.reply.clear': void; // clear reply quote
   /**
