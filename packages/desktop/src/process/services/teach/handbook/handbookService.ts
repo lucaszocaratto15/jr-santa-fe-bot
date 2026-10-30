@@ -29,6 +29,7 @@ import type {
   HandbookSource,
   HandbookView,
 } from '@/common/types/agent/handbookTypes';
+import type { Lesson } from '@/common/types/agent/lessonTypes';
 import { LEARN_TERM_VERSION, type LearnInsightBatch } from '@/common/types/agent/learnTypes';
 import type { HandbookClient } from '@process/services/jr/handbookClient';
 import type { LearnService } from '../learn/learnService';
@@ -77,6 +78,8 @@ export type HandbookServiceDeps = {
   /** Candidate dirs holding a skill's screenshots, in order of preference. */
   shotsDirs: (skill: string, skillsDir: string) => string[];
   learn: () => Pick<LearnService, 'state' | 'listInsights'> | null;
+  /** Active lessons of a taught task, in store order. */
+  lessonsFor?: (skill: string) => Promise<Lesson[]>;
   stateFile: string;
   readFile?: (file: string) => Promise<Buffer>;
   now?: () => number;
@@ -153,6 +156,7 @@ function sanitizeActivity(edited: unknown, source: HandbookActivityBody): Handbo
       .map((item) => clip(item, 300))
       .filter(Boolean),
     ...(source.skillName ? { skillName: source.skillName } : {}),
+    ...(source.lessons?.length ? { lessons: source.lessons } : {}),
   };
 }
 
@@ -241,6 +245,8 @@ export function createHandbookService(deps: HandbookServiceDeps): HandbookServic
           const task = await readTaughtTask(skillsDir, name);
           const { dir, shots } = await listShots(deps.shotsDirs(name, skillsDir));
           const { shots: used, ...body } = activityFromSkill(task, shots);
+          const lessons = ((await deps.lessonsFor?.(name)) ?? []).map((lesson) => lesson.text);
+          if (lessons.length > 0) body.lessons = lessons;
           return { key: `taught:${name}`, kind: 'activity', source: 'taught', body, shots: used, shotsDir: dir };
         } catch {
           return null;

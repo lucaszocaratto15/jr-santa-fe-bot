@@ -23,6 +23,8 @@ export type HandbookActivityBody = {
   steps: HandbookStep[];
   confirmBefore: string[];
   skillName?: string;
+  /** Active lessons of the task (texts), omitted when there are none. */
+  lessons?: string[];
 };
 
 export type HandbookIndicatorActivity = { title: string; timesPerWeek: number; minutesPerRun: number };

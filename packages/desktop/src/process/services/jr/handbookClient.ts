@@ -93,6 +93,9 @@ function parseActivity(value: unknown): HandbookActivityBody {
     steps: value.steps.map(parseStep),
     confirmBefore: value.confirmBefore as string[],
     ...(text(value.skillName, 80) ? { skillName: value.skillName } : {}),
+    ...(Array.isArray(value.lessons) && value.lessons.length > 0 && value.lessons.every((l) => text(l, 400))
+      ? { lessons: value.lessons as string[] }
+      : {}),
   };
 }
 

@@ -64,6 +64,16 @@ const HandbookViewer: React.FC<HandbookViewerProps> = ({ payload, activityId, lo
             </ul>
           </div>
         )}
+        {item.body.lessons && item.body.lessons.length > 0 && (
+          <div data-testid='handbook-lessons'>
+            <h4 className='text-13px font-600 m-0'>{t('common.jr.handbook.viewer.lessons')}</h4>
+            <ul className='m-0 pl-18px text-13px'>
+              {item.body.lessons.map((entry) => (
+                <li key={entry}>{entry}</li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     );
   }

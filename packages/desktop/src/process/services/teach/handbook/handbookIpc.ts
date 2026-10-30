@@ -10,6 +10,7 @@ import type { JrAccessState } from '@/common/config/clientSettings';
 import { createHandbookClient, type HandbookCall } from '@process/services/jr/handbookClient';
 import { userSkillsDir } from '../control/teachIpc';
 import { getHandbookService, getLearnService, setHandbookService } from '../registry';
+import { activeLessonsFor } from '../lessons/lessonRuntime';
 import { SKILL_SHOTS_DIRNAME, TAUGHT_SHOTS_DIRNAME } from '../recording/teachSession';
 import { createHandbookService, HANDBOOK_DIRNAME, type HandbookService } from './handbookService';
 
@@ -46,6 +47,7 @@ export function startHandbookService(userDataDir: string, call: HandbookCall): H
       path.join(userDataDir, TAUGHT_SHOTS_DIRNAME, skill),
     ],
     learn: getLearnService,
+    lessonsFor: activeLessonsFor,
     stateFile: path.join(userDataDir, HANDBOOK_DIRNAME, 'state.json'),
   });
   setHandbookService(service);

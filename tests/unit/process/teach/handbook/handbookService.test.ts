@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { HandbookActivityBody, HandbookPayload } from '@/common/types/agent/handbookTypes';
 import { LEARN_TERM_VERSION, type LearnInsightBatch, type LearnState } from '@/common/types/agent/learnTypes';
+import type { Lesson } from '@/common/types/agent/lessonTypes';
 import type { HandbookClient, HandbookPublishInput } from '@process/services/jr/handbookClient';
 import { MAX_PUBLISH_MEDIA_BYTES, createHandbookService } from '@process/services/teach/handbook/handbookService';
 
@@ -69,7 +70,12 @@ const learnWith = (acceptedVersion: string | null) => ({
 });
 
 async function setup(
-  options: { client?: Partial<HandbookClient>; accepted?: string | null; maxPublishMediaBytes?: number } = {}
+  options: {
+    client?: Partial<HandbookClient>;
+    accepted?: string | null;
+    maxPublishMediaBytes?: number;
+    lessons?: Lesson[];
+  } = {}
 ) {
   const root = await mkdtemp(join(tmpdir(), 'jr-handbook-'));
   roots.push(root);
@@ -86,6 +92,7 @@ async function setup(
     skillsDir: async () => skillsDir,
     shotsDirs: (skill, dir) => [join(dir, skill, 'telas')],
     learn: () => learn,
+    ...(options.lessons ? { lessonsFor: async () => options.lessons ?? [] } : {}),
     stateFile,
     now: () => NOW,
     ...(options.maxPublishMediaBytes === undefined ? {} : { maxPublishMediaBytes: options.maxPublishMediaBytes }),
@@ -148,6 +155,39 @@ describe('handbook service drafts', () => {
     expect((await service.drafts()).drafts).toEqual([]);
     await writeFile(join(skillsDir, SKILL, 'SKILL.md'), SKILL_MD.replace('1. Abrir o portal', '1. Abrir o site'));
     expect((await service.drafts()).drafts.map((draft) => draft.key)).toEqual([taughtKey]);
+  });
+});
+
+const lesson = (text: string): Lesson =>
+  ({
+    id: text,
+    text,
+    scope: { kind: 'task', skill: SKILL },
+    active: true,
+    versions: [],
+    createdAt: 1,
+  }) as unknown as Lesson;
+
+describe('handbook service task lessons', () => {
+  it('adds the active lesson texts to the draft body and omits the field when there are none', async () => {
+    const withLessons = await setup({ lessons: [lesson('Usar o CNPJ da matriz'), lesson('Conferir o valor')] });
+    const { drafts } = await withLessons.service.drafts();
+    expect((drafts[0].body as HandbookActivityBody).lessons).toEqual(['Usar o CNPJ da matriz', 'Conferir o valor']);
+    const none = await setup({ lessons: [] });
+    expect('lessons' in (await none.service.drafts()).drafts[0].body).toBe(false);
+  });
+
+  it('changing the lessons changes the draft hash and publishes them in the body', async () => {
+    const plain = await setup();
+    const hashPlain = (await plain.service.drafts()).drafts[0].hash;
+    const one = await setup({ lessons: [lesson('A')] });
+    const two = await setup({ lessons: [] });
+    expect((await two.service.drafts()).drafts[0].hash).toBe(hashPlain);
+    const hashOne = (await one.service.drafts()).drafts[0].hash;
+    expect(hashOne).not.toBe(hashPlain);
+    const draft = (await one.service.drafts()).drafts[0];
+    await one.service.publish(draft.key, { ...(draft.body as HandbookActivityBody), lessons: ['forged'] }, []);
+    expect((one.published[0].body as HandbookActivityBody).lessons).toEqual(['A']);
   });
 });
 

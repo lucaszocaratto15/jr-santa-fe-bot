@@ -475,6 +475,7 @@ export type I18nKey =
   | 'common.jr.handbook.viewer.activities'
   | 'common.jr.handbook.viewer.back'
   | 'common.jr.handbook.viewer.confirmBefore'
+  | 'common.jr.handbook.viewer.lessons'
   | 'common.jr.handbook.viewer.noHandbook'
   | 'common.jr.handbook.viewer.roleFlowchart'
   | 'common.jr.handbook.visibleNotice'

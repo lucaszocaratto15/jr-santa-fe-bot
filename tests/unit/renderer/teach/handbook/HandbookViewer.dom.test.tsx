@@ -78,6 +78,22 @@ describe('HandbookViewer', () => {
     expect(screen.queryByText('common.jr.handbook.viewer.back')).not.toBeInTheDocument();
   });
 
+  it('lists the task lessons under a heading and hides it without lessons', () => {
+    const withLessons = {
+      ...view,
+      items: [
+        { ...view.items[0], body: { ...view.items[0].body, lessons: ['Usar o CNPJ da matriz', 'Conferir o valor'] } },
+      ],
+    };
+    const { unmount } = render(<HandbookViewer payload={withLessons} activityId={ITEM_ID} loadMedia={loadMedia} />);
+    expect(screen.getByText('common.jr.handbook.viewer.lessons')).toBeInTheDocument();
+    expect(screen.getByText('Usar o CNPJ da matriz')).toBeInTheDocument();
+    expect(screen.getByText('Conferir o valor')).toBeInTheDocument();
+    unmount();
+    render(<HandbookViewer payload={view} activityId={ITEM_ID} loadMedia={loadMedia} />);
+    expect(screen.queryByText('common.jr.handbook.viewer.lessons')).not.toBeInTheDocument();
+  });
+
   it('says plainly when the role has no handbook', () => {
     render(<HandbookViewer payload={{ ...view, items: [], indicators: null }} loadMedia={loadMedia} />);
     expect(screen.getByText('common.jr.handbook.viewer.noHandbook')).toBeInTheDocument();
