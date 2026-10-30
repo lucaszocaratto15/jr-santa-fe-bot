@@ -22,6 +22,7 @@ import {
   type DraftErrorCode,
   type TeachDraft,
 } from './skillDraft';
+import { withTaskLessons } from '../lessons/lessonInjection';
 import { extractShotRefs } from './stepShots';
 import { summarizeEvents } from './timeline';
 import type {
@@ -31,6 +32,7 @@ import type {
   TeachStateEvent,
   TeachStopResult,
 } from '@/common/types/agent/teachTypes';
+import type { Lesson } from '@/common/types/agent/lessonTypes';
 
 export type { TeachDraftEvent, TeachDraftRejectedEvent, TeachSaveDraftInput, TeachStateEvent, TeachStopResult };
 
@@ -57,6 +59,8 @@ export type TeachSessionDeps = {
   shotsDir?: string;
   /** Total byte limit of an imported skill folder; null when unknown. */
   maxSkillBytes?: () => Promise<number | null>;
+  /** Active lessons of a task, so re-teaching it keeps its `## Lições` section. */
+  taskLessons?: (skill: string) => Promise<Lesson[]>;
   now?: () => number;
   tickMs?: number;
 };
@@ -262,7 +266,8 @@ export function createTeachSession(deps: TeachSessionDeps): TeachSession {
       // recordingId came from the recorder (a UUID) and the name passed TAUGHT_SKILL_NAME_RE.
       const skillPath = path.join(deps.dir, recordingId, 'skill', parsed.name);
       await mkdir(skillPath, { recursive: true });
-      await writeFile(path.join(skillPath, 'SKILL.md'), text, 'utf8');
+      const lessons = deps.taskLessons ? await deps.taskLessons(parsed.name).catch((): Lesson[] => []) : [];
+      await writeFile(path.join(skillPath, 'SKILL.md'), withTaskLessons(text, lessons), 'utf8');
       const limit = deps.maxSkillBytes ? await deps.maxSkillBytes().catch((): null => null) : null;
       await copyCitedShots({
         text,

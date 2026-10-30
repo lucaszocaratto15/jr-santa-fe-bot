@@ -162,6 +162,35 @@ describe('teach session', () => {
     expect(saved).toContain('description: "Baixa as NFs do mês"\nsource: taught');
   });
 
+  it('re-teaching a task that has active lessons keeps its lessons section', async () => {
+    const taskLessons = vi.fn(async (skill: string) => [
+      {
+        id: 'l1',
+        scope: { kind: 'task' as const, skill },
+        text: 'Conferir o total',
+        active: true,
+        createdAt: 1,
+        sourceQuote: 'q',
+        versions: [],
+      },
+    ]);
+    const { session } = await setup(fakeRecorder(), { taskLessons });
+    await session.start('Baixar NFs');
+    await session.stop();
+    const { skillPath } = await session.saveDraft({ markdown: DRAFT, recordingId: ID });
+    expect(taskLessons).toHaveBeenCalledWith('jr-tarefa-relatorio-nfs');
+    expect(await readFile(join(skillPath, 'SKILL.md'), 'utf8')).toContain('## Lições\n- Conferir o total');
+  });
+
+  it('saves the draft without lessons when the lesson store cannot be read', async () => {
+    const taskLessons = vi.fn(async () => Promise.reject(new Error('EACCES')));
+    const { session } = await setup(fakeRecorder(), { taskLessons });
+    await session.start('Baixar NFs');
+    await session.stop();
+    const { skillPath } = await session.saveDraft({ markdown: DRAFT, recordingId: ID });
+    expect(await readFile(join(skillPath, 'SKILL.md'), 'utf8')).not.toContain('## Lições');
+  });
+
   it('refuses to save for another recording or an invalid name', async () => {
     const { session } = await setup();
     await session.start('Baixar NFs');
