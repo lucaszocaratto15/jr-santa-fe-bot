@@ -1003,7 +1003,7 @@ const handleAppReady = async (): Promise<void> => {
     onChange: (state) => {
       ipcBridge.jr.accessChanged.emit(state);
       onHandbookAccessChanged(state.status);
-      onBrainAccessChanged(state.status);
+      onBrainAccessChanged(state.status, state.user?.id);
     },
     onDiagnostic: (cause) => {
       console.warn(`[JR] ${cause}`);

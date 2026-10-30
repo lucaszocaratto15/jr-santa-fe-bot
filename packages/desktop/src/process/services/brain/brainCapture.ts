@@ -22,10 +22,22 @@ export const BRAIN_DIRNAME = 'jr-brain';
 export const MAX_QUEUE_ITEMS = 200;
 const MAX_MESSAGES = 60;
 const MAX_MESSAGE_CHARS = 4000;
+const MAX_TOOL_CHARS = 500;
+/** Serialized payload cap; the oldest messages of a stretch go first. */
+export const MAX_PAYLOAD_BYTES = 200_000;
+const PERMANENT_STATUSES = new Set([400, 403, 404, 413, 422]);
+const PERMANENT_CODES = new Set(['JR_ACCESS_FORBIDDEN', 'JR_HANDBOOK_TOO_LARGE']);
 const MAX_TRACKED_CONVERSATIONS = 500;
 const BACKOFF_BASE_MS = 30_000;
 const BACKOFF_MAX_MS = 30 * 60_000;
 const DEFAULT_BOT = 'bot';
+
+/** Permanent failures (the server will never accept this payload) are dropped; the rest are retried. */
+export function isPermanentFailure(error: unknown): boolean {
+  const status = (error as { status?: unknown } | null)?.status;
+  if (typeof status === 'number') return PERMANENT_STATUSES.has(status);
+  return error instanceof Error && PERMANENT_CODES.has(error.message);
+}
 
 type QueueItem = { id: string; payload: BrainCapturePayload; attempts: number };
 
@@ -46,6 +58,11 @@ export type BrainCapture = {
   /** Sends what is due now; resolves when the pass is over. */
   flush(): Promise<void>;
   pending(): Promise<number>;
+  /**
+   * The queue belongs to one logged-in profile: another user id empties it (and the markers), so
+   * one employee's stretches are never sent under another's identity.
+   */
+  bindProfile(userId: string): Promise<void>;
 };
 
 const conversationRef = (conversationId: string): string =>
@@ -70,6 +87,7 @@ export function createBrainCapture(deps: BrainCaptureDeps): BrainCapture {
   const now = deps.now ?? Date.now;
   const queueFile = join(deps.dir, 'queue.json');
   const markersFile = join(deps.dir, 'captured.json');
+  const profileFile = join(deps.dir, 'profile.json');
   let queue: QueueItem[] | null = null;
   let markers: Record<string, string> | null = null;
   let retryAt = 0;
@@ -141,13 +159,20 @@ export function createBrainCapture(deps: BrainCaptureDeps): BrainCapture {
 
   const redactMessages = async (input: BrainCaptureInput): Promise<BrainCapturePayload['messages']> => {
     const secrets = await deps.secrets().catch((): string[] => []);
-    return input.messages
+    // Redact the whole text first, then clip: a cut can never leave a prefix of a secret.
+    const messages = input.messages
       .slice(-MAX_MESSAGES)
       .map((message) => ({
         role: message.role,
-        text: redactSecrets(message.text.slice(0, MAX_MESSAGE_CHARS), secrets),
+        text: redactSecrets(message.text, secrets).slice(
+          0,
+          message.role === 'tool' ? MAX_TOOL_CHARS : MAX_MESSAGE_CHARS
+        ),
       }))
       .filter((message) => message.text.trim().length > 0);
+    // Drop the oldest messages until the serialized payload fits.
+    while (messages.length > 1 && JSON.stringify(messages).length > MAX_PAYLOAD_BYTES) messages.shift();
+    return messages;
   };
 
   const runFlush = async (): Promise<void> => {
@@ -160,8 +185,18 @@ export function createBrainCapture(deps: BrainCaptureDeps): BrainCapture {
       if (!head) return;
       try {
         await deps.send(head.payload);
-      } catch {
-        // Offline, 503 or any failure: the item stays; back off and try again later.
+      } catch (error) {
+        if (isPermanentFailure(error)) {
+          // The server will never take this one: drop it and go on with the next.
+          await serialize(async () => {
+            const items = await loadQueue();
+            const index = items.findIndex((item) => item.id === head.id);
+            if (index !== -1) items.splice(index, 1);
+            await saveQueue(items).catch(() => {});
+          });
+          continue;
+        }
+        // Offline, 401, 408, 429, 5xx: the item stays; back off and try again later.
         const attempts = head.attempts + 1;
         const wait = Math.min(BACKOFF_BASE_MS * 2 ** (attempts - 1), BACKOFF_MAX_MS);
         retryAt = now() + wait;
@@ -231,6 +266,23 @@ export function createBrainCapture(deps: BrainCaptureDeps): BrainCapture {
           flushing = null;
         });
       return flushing;
+    },
+
+    async bindProfile(userId) {
+      try {
+        await serialize(async () => {
+          const stored = (await readJson(profileFile)) as { userId?: unknown } | null;
+          if (typeof stored?.userId === 'string' && stored.userId !== userId) {
+            queue = [];
+            markers = {};
+            await saveQueue(queue);
+            await writeAtomic(markersFile, markers);
+          }
+          if (stored?.userId !== userId) await writeAtomic(profileFile, { userId });
+        });
+      } catch {
+        // Best effort.
+      }
     },
 
     async pending() {

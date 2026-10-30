@@ -31,6 +31,8 @@ export type BrainService = {
   me(): Promise<BrainMe>;
   /** Sends what is queued and any acknowledgement the server has not received yet. */
   resume(): Promise<void>;
+  /** Ties the persisted queue to the logged-in profile. */
+  bindProfile(userId: string): Promise<void>;
 };
 
 export type BrainServiceDeps = {
@@ -112,6 +114,7 @@ export function createBrainService(deps: BrainServiceDeps): BrainService {
     search: (query) => deps.client.search(query),
     feedback: (factId, reason) => deps.client.feedback(factId, reason),
     me: () => deps.client.me(),
+    bindProfile: (userId) => capture.bindProfile(userId),
     async resume() {
       await syncNotice(await readNotice());
       await capture.flush();
@@ -133,9 +136,12 @@ export function startBrainService(userDataDir: string, call: BrainCall): BrainSe
 }
 
 /** A restored login resends the queue and a pending acknowledgement right away. */
-export function onBrainAccessChanged(status: string): void {
+export function onBrainAccessChanged(status: string, userId?: string): void {
   if (status !== 'authenticated') return;
-  void service?.resume().catch(() => {});
+  void (async () => {
+    if (userId) await service?.bindProfile(userId);
+    await service?.resume();
+  })().catch(() => {});
 }
 
 /** "Cérebro" IPC. Without a service (no JR access controller) capture is a silent no-op. */

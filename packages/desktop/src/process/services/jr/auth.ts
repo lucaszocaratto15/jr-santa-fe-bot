@@ -642,7 +642,8 @@ export class JrAccessController {
       return fail('JR_ACCESS_EMPLOYEE_REVOKED');
     }
     if (response.status === 413) return fail('JR_HANDBOOK_TOO_LARGE');
-    if (!response.ok) return fail('JR_ACCESS_UNAVAILABLE');
+    // The status rides on the error so queue clients can tell permanent from transient failures.
+    if (!response.ok) throw Object.assign(new Error('JR_ACCESS_UNAVAILABLE'), { status: response.status });
     let value: unknown;
     try {
       value = await response.json();

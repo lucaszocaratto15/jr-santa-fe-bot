@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('@/common', () => ({ ipcBridge: {} }));
 vi.mock('@process/services/teach/lessons/lessonRuntime', () => ({ vaultSecrets: async () => [] }));
 
-import { createBrainCapture, MAX_QUEUE_ITEMS } from '@process/services/brain/brainCapture';
+import { createBrainCapture, MAX_PAYLOAD_BYTES, MAX_QUEUE_ITEMS } from '@process/services/brain/brainCapture';
 import { createBrainService } from '@process/services/brain/brainIpc';
 import type { BrainCapturePayload } from '@/common/types/agent/brainTypes';
 
@@ -152,5 +152,114 @@ describe('brain service notice', () => {
     const s = service(async () => ({ version: '1.3', at: 'x' }));
     await s.accept('1.3');
     expect((await s.consentState()).current).toBe(false);
+  });
+});
+
+describe('brainCapture fix round 1', () => {
+  const SECRET = 'Zq9-Secret-Value-XYZ';
+  const run = async (messages: Array<{ id: string; role: 'user' | 'assistant' | 'tool'; text: string }>) => {
+    const send = vi.fn(async (_p: BrainCapturePayload) => {});
+    const { capture } = make(send, [SECRET]);
+    await capture.submit({ conversationId: 'c1', messages });
+    await capture.flush();
+    return send.mock.calls[0][0];
+  };
+
+  it('redacts a vault secret inside a tool message', async () => {
+    const sent = await run([
+      { id: 'a', role: 'assistant', text: 'ok' },
+      { id: 't', role: 'tool', text: `página: ${SECRET} fim` },
+    ]);
+    expect(JSON.stringify(sent)).not.toContain(SECRET);
+  });
+
+  it('never leaves a prefix of a secret that straddles the old cut points', async () => {
+    for (const [role, cut] of [
+      ['tool', 500],
+      ['user', 4000],
+    ] as const) {
+      for (let offset = 1; offset < SECRET.length; offset += 3) {
+        const text = 'x'.repeat(cut - offset) + SECRET + ' resto';
+        const sent = await run([
+          { id: 'a', role: 'assistant', text: 'ok' },
+          { id: 'm', role, text },
+        ]);
+        const out = sent.messages.at(-1)?.text ?? '';
+        expect(out).not.toContain(SECRET.slice(0, 6));
+        expect(out.length).toBeLessThanOrEqual(cut);
+      }
+    }
+  });
+
+  it('drops a permanently rejected head item (400) and sends the next', async () => {
+    const send = vi
+      .fn<(p: BrainCapturePayload) => Promise<void>>()
+      .mockRejectedValueOnce(Object.assign(new Error('JR_ACCESS_UNAVAILABLE'), { status: 400 }));
+    send.mockResolvedValue(undefined);
+    const { capture } = make(send, [], () => 0);
+    // First submit flushes (and is dropped) on its own; queue a second one afterwards.
+    await capture.submit(input('1'));
+    await capture.flush();
+    await capture.submit({ ...input('2'), conversationId: 'c2' });
+    await capture.flush();
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(await capture.pending()).toBe(0);
+  });
+
+  it('drops the 400 head within one pass and continues to the next item', async () => {
+    const down = vi.fn(async () => {
+      throw new Error('offline');
+    });
+    const first = make(down);
+    await first.capture.submit(input('1'));
+    await first.capture.submit({ ...input('2'), conversationId: 'c2' });
+    const send = vi
+      .fn<(p: BrainCapturePayload) => Promise<void>>()
+      .mockRejectedValueOnce(Object.assign(new Error('x'), { status: 400 }));
+    send.mockResolvedValue(undefined);
+    const second = make(send, [], () => 10_000_000);
+    await second.capture.flush();
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(await second.capture.pending()).toBe(0);
+  });
+
+  it.each([401, 408, 429, 500, 503])('keeps the item on a transient %i', async (status) => {
+    const send = vi.fn(async () => {
+      throw Object.assign(new Error('x'), { status });
+    });
+    const { capture } = make(send);
+    await capture.submit(input('1'));
+    await capture.flush();
+    expect(await capture.pending()).toBe(1);
+  });
+
+  it('trims an oversized stretch under the payload cap, oldest messages first', async () => {
+    const big = Array.from({ length: 60 }, (_, i) => ({
+      id: `m${i}`,
+      role: i % 2 ? ('assistant' as const) : ('user' as const),
+      text: `${i}-`.padEnd(4000, 'z'),
+    }));
+    const sent = await run(big);
+    expect(JSON.stringify(sent).length).toBeLessThan(MAX_PAYLOAD_BYTES + 1000);
+    expect(JSON.stringify(sent.messages).length).toBeLessThanOrEqual(MAX_PAYLOAD_BYTES);
+    expect(sent.messages.at(-1)?.text.startsWith('59-')).toBe(true);
+    expect(sent.messages.length).toBeLessThan(60);
+  });
+
+  it('empties the queue when another profile logs in', async () => {
+    const down = vi.fn(async () => {
+      throw new Error('offline');
+    });
+    const a = make(down);
+    await a.capture.bindProfile('ana');
+    await a.capture.submit(input('1'));
+    await a.capture.flush();
+    expect(await a.capture.pending()).toBe(1);
+    const b = make(vi.fn(async () => {}));
+    await b.capture.bindProfile('ana');
+    expect(await b.capture.pending()).toBe(1);
+    await b.capture.bindProfile('bia');
+    expect(await b.capture.pending()).toBe(0);
+    expect(await b.capture.lastCaptured('c1')).toBeNull();
   });
 });

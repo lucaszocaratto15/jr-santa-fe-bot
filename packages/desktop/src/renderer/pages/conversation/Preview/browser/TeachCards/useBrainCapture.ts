@@ -11,6 +11,8 @@ import { stretchAfter } from './lessonTrigger';
 import { isTurnOk, toTranscript } from './useLessonOffer';
 
 const MESSAGE_LIMIT = 200;
+/** Tool text goes uncut (up to this cap) so main can redact it whole before clipping. */
+const TOOL_TEXT_CAP = 8000;
 /** A stretch with at least one bot answer and this much text is sent right away. */
 export const CAPTURE_MIN_CHARS = 300;
 /** Otherwise every third turn sends what is pending. */
@@ -42,7 +44,7 @@ async function capture(conversationId: string, trigger: Trigger, force: boolean)
     });
     const last = await ipcBridge.brain.lastCaptured.invoke({ conversationId });
     // Cut on the full transcript: the stored marker may be the id of a tool message.
-    const stretch = stretchAfter(toTranscript(page.items), last);
+    const stretch = stretchAfter(toTranscript(page.items, TOOL_TEXT_CAP), last);
     const chat = stretch.filter((message) => message.role !== 'tool');
     if (!chat.some((message) => message.role === 'assistant')) return;
     const chars = chat.reduce((sum, message) => sum + message.text.length, 0);

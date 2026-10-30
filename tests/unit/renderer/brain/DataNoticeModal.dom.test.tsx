@@ -35,6 +35,9 @@ describe('DataNoticeModal', () => {
     expect(text).toContain('MiniMax');
     expect(text).toContain('48 horas');
     expect(text).not.toMatch(/limite|por dia|uma vez/i);
+    expect(text).toContain('resultados de ferramentas');
+    expect(text).toContain('Removemos os valores do seu Cofre');
+    expect(text).not.toContain('dados pessoais não são guardados');
     fireEvent.click(button);
     await waitFor(() => expect(accept).toHaveBeenCalledWith({ termVersion: '1.4' }));
     await waitFor(() => expect(screen.queryByTestId('data-notice')).toBeNull());

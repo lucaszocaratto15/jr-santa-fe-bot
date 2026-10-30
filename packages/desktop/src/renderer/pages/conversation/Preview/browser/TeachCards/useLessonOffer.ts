@@ -20,9 +20,10 @@ const TOOL_TEXT_MAX = 500;
 export const isTurnOk = (event: Pick<IConversationTurnCompletedEvent, 'status' | 'state'>): boolean =>
   event.status === 'finished' && event.state !== 'error' && event.state !== 'stopped';
 
-const clip = (text: string): string => (text.length > TOOL_TEXT_MAX ? text.slice(0, TOOL_TEXT_MAX) : text);
+const clipTo = (text: string, max: number): string => (text.length > max ? text.slice(0, max) : text);
 
-const toolSummary = (message: TMessage): string => {
+const toolSummary = (message: TMessage, max: number): string => {
+  const clip = (text: string): string => clipTo(text, max);
   if (message.type === 'tool_call') {
     const { name, output, error } = message.content;
     return clip([name, error || output].filter(Boolean).join(': '));
@@ -38,7 +39,7 @@ const toolSummary = (message: TMessage): string => {
 };
 
 /** Chat messages as the extractor's transcript: user/assistant text, tool calls and results as 'tool'. */
-export function toTranscript(messages: TMessage[]): TranscriptMessage[] {
+export function toTranscript(messages: TMessage[], toolMax: number = TOOL_TEXT_MAX): TranscriptMessage[] {
   const out: TranscriptMessage[] = [];
   for (const message of messages) {
     if (message.hidden || !message.id) continue;
@@ -48,7 +49,7 @@ export function toTranscript(messages: TMessage[]): TranscriptMessage[] {
       if (message.position === 'right') out.push({ id: message.id, role: 'user', text });
       else if (message.position === 'left') out.push({ id: message.id, role: 'assistant', text });
     } else if (message.type === 'tool_call' || message.type === 'tool_group') {
-      const text = toolSummary(message);
+      const text = toolSummary(message, toolMax);
       if (text) out.push({ id: message.id, role: 'tool', text });
     }
   }
