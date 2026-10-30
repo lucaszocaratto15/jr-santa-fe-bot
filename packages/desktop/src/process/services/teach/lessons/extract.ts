@@ -76,8 +76,11 @@ export function parseLessonReply(
         ? { kind: 'task', skill: item.skill }
         : { kind: 'general' };
     const proposal: LessonProposal = { text, scope, sourceQuote: quote };
-    if (typeof item.updateId === 'string' && ctx.existing.some((lesson) => lesson.id === item.updateId)) {
-      proposal.updateId = item.updateId;
+    const target = typeof item.updateId === 'string' ? ctx.existing.find((l) => l.id === item.updateId) : undefined;
+    if (target) {
+      // An update keeps the lesson where it already lives.
+      proposal.updateId = target.id;
+      proposal.scope = target.scope;
     }
     proposals.push(proposal);
   }

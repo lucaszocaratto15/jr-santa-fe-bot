@@ -161,7 +161,8 @@ const LessonCard: React.FC<LessonCardProps> = ({ conversationId, proposals, upTo
                 size='small'
                 value={row.scope}
                 onChange={(scope) => patch(index, { scope })}
-                disabled={busy || !row.checked}
+                // An update keeps the existing lesson's scope: the store does not move lessons.
+                disabled={busy || !row.checked || Boolean(proposal.updateId)}
                 options={optionsFor(row.scope)}
                 aria-label={t('common.jr.teach.lessons.scopeLabel')}
               />

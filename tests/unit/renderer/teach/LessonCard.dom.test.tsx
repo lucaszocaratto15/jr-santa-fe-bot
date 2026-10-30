@@ -124,6 +124,16 @@ describe('LessonCard', () => {
     });
   });
 
+  it('locks the scope of an update proposal to the existing lesson', async () => {
+    mount();
+    await waitFor(() => expect(listSkills).toHaveBeenCalled());
+    await act(async () => {});
+    const selects = document.querySelectorAll('.arco-select');
+    expect(selects[0].classList.contains('arco-select-disabled')).toBe(false);
+    expect(selects[1].classList.contains('arco-select-disabled')).toBe(true);
+    expect(selects[1].textContent).toContain('Baixar NFs');
+  });
+
   it('shows the secret message on a JR_LESSON_SECRET rejection', async () => {
     save.mockImplementation(async () => {
       throw new Error('JR_LESSON_SECRET');
