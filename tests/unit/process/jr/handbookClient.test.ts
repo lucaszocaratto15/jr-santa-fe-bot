@@ -194,7 +194,7 @@ describe('createHandbookClient', () => {
     const call = vi.fn<HandbookCall>(async (path) =>
       path === '/handbook/roles'
         ? { roles: [{ key: 'frota', title: 'Frota', activities: 2, updatedAt: 5 }] }
-        : { role: payload.role, items: payload.items }
+        : { role: payload.role, items: payload.items, indicatorsHidden: true }
     );
     const client = createHandbookClient(call);
     await expect(client.roles()).resolves.toEqual([{ key: 'frota', title: 'Frota', activities: 2, updatedAt: 5 }]);

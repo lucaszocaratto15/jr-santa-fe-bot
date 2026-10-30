@@ -169,7 +169,7 @@ export function createHandbookStore(db, now, httpError) {
           .map((media) => media.id),
       }));
     // Indicators the caller may not see are omitted from the payload, not sent as null.
-    if (!withIndicators) return { role: { key, title }, items };
+    if (!withIndicators) return { role: { key, title }, items, indicatorsHidden: true };
     const indicators = aggregateIndicators(
       db
         .prepare(
@@ -183,10 +183,10 @@ export function createHandbookStore(db, now, httpError) {
     db.prepare('SELECT role_title FROM handbook_items WHERE role_key = ? ORDER BY updated_at DESC, id LIMIT 1').get(key)
       ?.role_title ?? null;
   return {
-    mine(userId) {
+    mine(userId, withIndicators = true) {
       const title = userTitle(userId);
       if (!title) return { role: null, items: [], indicators: null };
-      return payloadFor(roleKey(title), title);
+      return payloadFor(roleKey(title), title, withIndicators);
     },
     forRole(key, withIndicators = true) {
       const title = latestTitle(key);
@@ -344,6 +344,8 @@ export async function handleHandbook({
   if (!path) return false;
   const isAdmin = session.user.role === 'admin';
   const userId = session.user.id;
+  // Diretoria is the user id 'owner' only: other admins are employees on the area-based routes.
+  const isOwner = userId === 'owner';
   if (path === '/admin/handbook/roles' || path.startsWith('/admin/handbook/')) {
     if (!isAdmin) throw httpError(403, 'forbidden');
     if (request.method !== 'GET') throw httpError(404, 'not_found');
@@ -364,7 +366,9 @@ export async function handleHandbook({
   }
   if (!path.startsWith('/handbook/')) return false;
   if (request.method === 'GET' && path === '/handbook/mine') {
-    json(response, 200, store.mine(userId));
+    const own = store.ownRoleKey(userId);
+    const indicators = isOwner || (own !== null && (await peerRoles(store, session, brainPeers)).get(own)?.indicators);
+    json(response, 200, store.mine(userId, Boolean(indicators)));
     return true;
   }
   if (request.method === 'POST' && path === '/handbook/items') {
@@ -383,7 +387,7 @@ export async function handleHandbook({
     return true;
   }
   if (request.method === 'GET' && path === '/handbook/roles') {
-    if (isAdmin) {
+    if (isOwner) {
       json(response, 200, { roles: store.roles() });
       return true;
     }
@@ -401,12 +405,11 @@ export async function handleHandbook({
     } catch {
       throw httpError(400, 'invalid_request');
     }
-    if (isAdmin) {
+    if (isOwner) {
       json(response, 200, store.forRole(key));
       return true;
     }
-    // Own role is always readable; `/handbook/mine` keeps serving its indicators as before. Here indicators
-    // follow the area rule for every role, own included.
+    // Own role is always readable; indicators follow the area rule for every role, own included.
     const visible = await peerRoles(store, session, brainPeers);
     const allowed = visible.get(key) ?? (key === store.ownRoleKey(userId) ? { indicators: false } : null);
     if (!allowed) throw httpError(403, 'forbidden');

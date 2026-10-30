@@ -206,7 +206,10 @@ export function createBrainServer({
 
   const peers = (response, ctx) => {
     const byUser = new Map();
+    // Geral and the fallback area never make anyone a peer (same exclusion as managed()).
+    const skip = new Set([generalId(), store.areas.fallbackId()]);
     for (const mine of ctx.memberships) {
+      if (skip.has(mine.areaId)) continue;
       for (const other of store.members.ofArea(mine.areaId)) {
         if (other.userId === ctx.identity.userId) continue;
         const entry = byUser.get(other.userId) ?? [];

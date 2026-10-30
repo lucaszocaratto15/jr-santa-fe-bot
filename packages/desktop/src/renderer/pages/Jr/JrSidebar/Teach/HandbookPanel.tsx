@@ -48,8 +48,10 @@ const HandbookPanel: React.FC = () => {
   const [peerRole, setPeerRole] = useState<{ key: string; title: string } | null>(null);
   // Roles of the employee's areas. A server without area sharing answers with the own role only.
   const roles = useSWR(ROLES_KEY, () => ipcBridge.jr.handbook.roles.invoke(), { shouldRetryOnError: false });
-  const peerPayload = useSWR(peerRole ? [ROLE_KEY, peerRole.key] : null, () =>
-    ipcBridge.jr.handbook.role.invoke({ key: (peerRole as { key: string }).key })
+  const peerPayload = useSWR(
+    peerRole ? [ROLE_KEY, peerRole.key] : null,
+    () => ipcBridge.jr.handbook.role.invoke({ key: (peerRole as { key: string }).key }),
+    { shouldRetryOnError: false }
   );
 
   const act = async (id: string, action: () => Promise<void>, success?: string) => {

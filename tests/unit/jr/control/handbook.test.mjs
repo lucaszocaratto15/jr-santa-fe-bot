@@ -174,11 +174,8 @@ test('indicators are averaged per role and never per person', async (t) => {
   await publish(a, indicators(4, 6));
   await publish(b, indicators(6, 8));
   const payload = await mine(a);
-  assert.deepEqual(payload.indicators, {
-    activities: [{ title: 'Lançar NF', timesPerWeek: 5, minutesPerRun: 7 }],
-    timePerApp: [{ app: 'Excel', minutesPerDay: 50 }],
-    contributors: 2,
-  });
+  assert.equal('indicators' in payload, false);
+  assert.equal(payload.indicatorsHidden, true);
   assert.equal(
     payload.items.some((item) => item.kind === 'indicators'),
     false
@@ -186,7 +183,11 @@ test('indicators are averaged per role and never per person', async (t) => {
   const admin = await (
     await app.request(`/admin/handbook/roles/${encodeURIComponent('auxiliar de escritorio')}`, { token: owner.token })
   ).json();
-  assert.deepEqual(admin.indicators, payload.indicators);
+  assert.deepEqual(admin.indicators, {
+    activities: [{ title: 'Lançar NF', timesPerWeek: 5, minutesPerRun: 7 }],
+    timePerApp: [{ app: 'Excel', minutesPerDay: 50 }],
+    contributors: 2,
+  });
   for (const text of [JSON.stringify(payload), JSON.stringify(admin)]) {
     assert.equal(text.includes(a.id) || text.includes(b.id), false);
     assert.equal(text.includes('Ana') || text.includes('Bruno'), false);
@@ -196,14 +197,19 @@ test('indicators are averaged per role and never per person', async (t) => {
 
 test('indicators older than 28 days are left out', async (t) => {
   const clock = { value: Date.UTC(2026, 9, 1) };
-  const { a, publish, mine } = await setup(t, clock);
+  const env = await setup(t, clock);
+  const { a, publish } = env;
   await publish(a, {
     kind: 'indicators',
     source: 'learn',
     body: { weekStart: '2026-09-28', activities: [], timePerApp: [{ app: 'Excel', minutesPerDay: 10 }] },
   });
   clock.value += 29 * 86_400_000;
-  assert.equal((await mine(a)).indicators, null);
+  const { app, owner } = env;
+  const role = await app.request(`/admin/handbook/roles/${encodeURIComponent('auxiliar de escritorio')}`, {
+    token: owner.token,
+  });
+  assert.equal((await role.json()).indicators, null);
 });
 
 test('withdraw-learn removes only source=learn items of the caller', async (t) => {
@@ -229,7 +235,7 @@ test('items keep their role after the author title changes', async (t) => {
   const renamed = await mine(a);
   assert.deepEqual(renamed.role, { key: 'gerente', title: 'Gerente' });
   assert.deepEqual(renamed.items, []);
-  assert.equal(renamed.indicators, null);
+  assert.equal('indicators' in renamed, false);
 });
 
 test('revoked employee items stay in the role handbook', async (t) => {
@@ -450,4 +456,35 @@ test('without a brain configured an employee reads only their own role', async (
     ['auxiliar de escritorio']
   );
   assert.equal((await app.request(roleUrl('financeiro'), { token: a.token })).status, 403);
+});
+
+test('/handbook/mine: indicators only for the owner or a gestor of a shared area with the role', async (t) => {
+  const { app, owner, frota1, state, peers, frota2 } = await areaSetup(t);
+  state.peersOf[frota2.id] = [{ userId: frota1.id, areas: [{ areaId: 1, level: 'colaborador' }] }];
+  const colab = await (await app.request('/handbook/mine', { token: frota2.token })).json();
+  assert.equal('indicators' in colab, false);
+  assert.equal(colab.indicatorsHidden, true);
+  assert.equal(colab.items.length, 1);
+  state.peersOf[frota2.id] = [{ userId: frota1.id, areas: [{ areaId: 1, level: 'gestor' }] }];
+  const gestor = await (await app.request('/handbook/mine', { token: frota2.token })).json();
+  assert.equal(gestor.indicators.contributors, 1);
+  assert.equal(peers('gestor').length, 1);
+  const ownerMine = await (await app.request('/handbook/mine', { token: owner.token })).json();
+  assert.equal(ownerMine.indicatorsHidden, undefined);
+});
+
+test('a non-owner admin is an employee on the area routes', async (t) => {
+  const { app, hire } = await areaSetup(t);
+  const adm = await hire('Adm', 'Frota', 'adm');
+  const db = new DatabaseSync(join(app.directory, 'control.sqlite'));
+  db.prepare("UPDATE users SET role = 'admin' WHERE id = ?").run(adm.id);
+  db.close();
+  const list = await (await app.request('/handbook/roles', { token: adm.token })).json();
+  assert.deepEqual(
+    list.roles.map((role) => role.key),
+    ['frota']
+  );
+  assert.equal((await app.request(roleUrl('financeiro'), { token: adm.token })).status, 403);
+  // The pre-existing admin routes are unchanged.
+  assert.equal((await app.request('/admin/handbook/roles/financeiro', { token: adm.token })).status, 200);
 });

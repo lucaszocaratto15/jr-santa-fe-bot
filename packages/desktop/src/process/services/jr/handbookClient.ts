@@ -161,8 +161,8 @@ export function parseHandbookPayload(value: unknown): HandbookPayload {
     role,
     items: value.items.map(parseItem).filter((item): item is HandbookItem => item !== null),
     indicators: parseIndicators(value.indicators ?? null),
-    // An absent `indicators` key means the server withheld them (not that there are none).
-    ...('indicators' in value ? {} : { indicatorsHidden: true }),
+    // The server says explicitly when it withheld the indicators (as opposed to having none).
+    ...(value.indicatorsHidden === true ? { indicatorsHidden: true } : {}),
   };
 }
 

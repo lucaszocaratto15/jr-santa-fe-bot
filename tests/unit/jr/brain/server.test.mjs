@@ -204,6 +204,19 @@ test('/me and /peers shapes', async (t) => {
   );
 });
 
+test('/peers ignores Geral and the fallback area memberships', async (t) => {
+  const { call, store, areas } = await startBrain(t);
+  member(store, 'col', areas.general, 'colaborador', false);
+  member(store, 'col', areas.frota);
+  member(store, 'fro', areas.frota);
+  member(store, 'out', areas.general, 'colaborador', false);
+  member(store, 'out', areas.compras);
+  member(store, 'only', areas.general);
+  const peers = await call('/peers', { user: 'col' });
+  assert.deepEqual(peers.body.peers, [{ userId: 'fro', areas: [{ areaId: areas.frota, level: 'colaborador' }] }]);
+  assert.deepEqual((await call('/peers', { user: 'only' })).body.peers, []);
+});
+
 test('capture returns 202, hands off to the curator and persists no raw text', async (t) => {
   const seen = [];
   const curator = { enqueue: (identity, payload) => seen.push({ identity, payload }), drain: async () => {} };
