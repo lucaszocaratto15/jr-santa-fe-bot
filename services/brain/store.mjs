@@ -338,6 +338,23 @@ export function createBrainStore(dbPath, { now = Date.now, companyId = 'jr', dai
         }
         return result;
       },
+      /**
+       * Trusted-server lookup for the curator: active, unsuperseded facts of one area and risk that share
+       * words with `text`, best match first. Not scope-filtered and not a user-facing projection.
+       */
+      similar(areaId, risk, text, limit = 10) {
+        const match = ftsQuery(text);
+        if (!match) return [];
+        return db
+          .prepare(
+            `SELECT f.* FROM brain_facts_fts JOIN brain_facts f ON f.id = brain_facts_fts.rowid
+             WHERE brain_facts_fts MATCH ? AND f.company_id = ? AND f.area_id = ? AND f.risk = ?
+               AND f.active = 1 AND f.suspended = 0 AND f.superseded_by IS NULL
+             ORDER BY bm25(brain_facts_fts) LIMIT ?`
+          )
+          .all(match, companyId, areaId, risk, limit)
+          .map((row) => factRow(row));
+      },
       update(id, patch, byUserId) {
         return transaction(() => {
           const current = getFact(id);

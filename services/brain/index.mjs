@@ -1,12 +1,20 @@
 import { resolve } from 'node:path';
+import { createCurator } from './curator.mjs';
 import { createBrainServer } from './server.mjs';
 
 try {
   const port = Number(process.env.BRAIN_PORT ?? '8790');
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('invalid_configuration');
   const calls = process.env.BRAIN_DAILY_CURATOR_CALLS;
-  // Task 3 replaces this no-op with the real curator (BRAIN_MODEL_URL / BRAIN_MODEL_KEY / BRAIN_MODEL).
-  const curator = { enqueue() {}, drain: async () => {} };
+  const { BRAIN_MODEL_URL: modelUrl, BRAIN_MODEL_KEY: modelKey, BRAIN_MODEL: model } = process.env;
+  const log = (line) => process.stderr.write(`${line}\n`);
+  let curator;
+  if (modelUrl && modelKey && model) {
+    curator = (store) => createCurator({ store, modelUrl, modelKey, model, log });
+  } else {
+    log('curator: BRAIN_MODEL_URL / BRAIN_MODEL_KEY / BRAIN_MODEL missing, capture disabled');
+    curator = { enqueue() {}, drain: async () => {} };
+  }
   const brain = createBrainServer({
     databasePath: resolve(process.env.BRAIN_DB_PATH ?? './data/brain.sqlite'),
     secret: process.env.BRAIN_SECRET,

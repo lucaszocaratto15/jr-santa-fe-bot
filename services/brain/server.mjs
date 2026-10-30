@@ -69,7 +69,7 @@ function identityOf(request) {
 export function createBrainServer({
   databasePath,
   secret,
-  curator = noopCurator,
+  curator: curatorOption = noopCurator,
   now = Date.now,
   companyId,
   dailyCuratorCalls,
@@ -81,6 +81,8 @@ export function createBrainServer({
     ...(Number.isInteger(dailyCuratorCalls) && dailyCuratorCalls >= 0 ? { dailyCuratorCalls } : {}),
   });
   store.log.prune(90);
+  // A function builds the curator from the store this server owns.
+  const curator = typeof curatorOption === 'function' ? curatorOption(store) : curatorOption;
   const generalId = () => store.areas.list().find((area) => area.isGeneral).id;
 
   const context = (identity) => {
