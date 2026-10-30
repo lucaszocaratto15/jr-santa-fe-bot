@@ -1210,7 +1210,7 @@ const handleAppReady = async (): Promise<void> => {
     appReadyDone = true;
     mark('createWindow');
 
-    // "Aprender com seu trabalho": off until the user accepts the LGPD term.
+    // "Aprender com seu trabalho": always on from launch (the Data Notice informs; no opt-in).
     void startLearnService(app.getPath('userData')).catch((error) =>
       console.warn('[JR] Learn service could not start:', error instanceof Error ? error.message : error)
     );

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { HandbookActivityBody, HandbookPayload } from '@/common/types/agent/handbookTypes';
-import { LEARN_TERM_VERSION, type LearnInsightBatch, type LearnState } from '@/common/types/agent/learnTypes';
+import type { LearnInsightBatch, LearnState } from '@/common/types/agent/learnTypes';
 import type { Lesson } from '@/common/types/agent/lessonTypes';
 import type { HandbookClient, HandbookPublishInput } from '@process/services/jr/handbookClient';
 import { MAX_PUBLISH_MEDIA_BYTES, createHandbookService } from '@process/services/teach/handbook/handbookService';
@@ -63,6 +63,9 @@ const batches: LearnInsightBatch[] = [
     suggestions: [],
   },
 ];
+
+/** Any non-null value: the handbook service must not gate publishing on Aprender's state. */
+const LEARN_TERM_VERSION = '1.3';
 
 const learnWith = (acceptedVersion: string | null) => ({
   state: () => ({ acceptedVersion }) as LearnState,

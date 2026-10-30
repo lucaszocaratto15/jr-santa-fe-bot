@@ -6,17 +6,14 @@
 
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
-import { app, BrowserWindow, Menu, powerMonitor, safeStorage, shell, systemPreferences, webContents } from 'electron';
+import { BrowserWindow, powerMonitor, safeStorage, shell, systemPreferences, webContents } from 'electron';
 import { ipcBridge } from '@/common';
 import type { LearnState } from '@/common/types/agent/learnTypes';
 import { getJrAccessController } from '@process/services/jr/auth';
 import { getJrModelConnection } from '@process/services/jr/modelConnection';
 import { getCdpBridgeHandle } from '@process/utils/cdpBridgeRegistry';
-import i18n from '@process/services/i18n';
-import { hasTray, isMainWindowOnScreen, rebuildTrayMenu } from '@process/utils/tray';
 import { sanitizeUrl } from '../recording/urlSanitizer';
-import { getHandbookService, getLearnService, setLearnService } from '../registry';
-import { learnIndicatorReachable, learnServiceMenuItems } from './learnMenu';
+import { getLearnService, setLearnService } from '../registry';
 import { createLearnService, type LearnService } from './learnService';
 
 export const LEARN_UNAVAILABLE = 'LEARN_UNAVAILABLE';
@@ -27,11 +24,10 @@ export const UNAVAILABLE_LEARN_STATE: LearnState = {
   status: 'unavailable',
   unavailableReason: 'platform',
   pausedUntil: null,
+  pauseAvailable: false,
   titles: 'full',
   samplerError: false,
   rawHours: 0,
-  acceptedVersion: null,
-  acceptedAt: null,
   lastInsightsAt: null,
   activeSince: null,
 };
@@ -45,12 +41,8 @@ const requireService = () => {
 /** "Aprender" IPC. Only state, exclusions and insights cross; raw samples never do. */
 export function initLearnBridge(): void {
   ipcBridge.learn.state.provider(async () => getLearnService()?.state() ?? UNAVAILABLE_LEARN_STATE);
-  ipcBridge.learn.accept.provider(async ({ termVersion }) => requireService().accept(termVersion));
-  ipcBridge.learn.turnOn.provider(async () => requireService().turnOn());
-  ipcBridge.learn.pause.provider(async ({ minutes }) => requireService().pause(minutes));
+  ipcBridge.learn.pause.provider(async () => requireService().pause());
   ipcBridge.learn.resume.provider(async () => requireService().resume());
-  ipcBridge.learn.turnOff.provider(async () => requireService().turnOff());
-  ipcBridge.learn.revoke.provider(async () => requireService().revoke());
   ipcBridge.learn.getExclusions.provider(async () => requireService().getExclusions());
   ipcBridge.learn.setExclusions.provider(async (rules) => requireService().setExclusions(rules));
   ipcBridge.learn.restoreDefaultExclusions.provider(async () => requireService().restoreDefaultExclusions());
@@ -81,31 +73,6 @@ export function jrBrowserPage(): { url: string; title: string } | null {
   return { url, title: contents.getTitle() };
 }
 
-/** Keep the 🧠 entries of the tray and the macOS dock menu in step with the state. */
-function syncLearnMenus(): void {
-  try {
-    rebuildTrayMenu();
-    if (process.platform === 'darwin' && app?.dock) {
-      const items = learnServiceMenuItems(
-        getLearnService(),
-        (key, options) => String(i18n.t(key, options)),
-        i18n.language || 'pt-BR'
-      );
-      app.dock.setMenu(Menu.buildFromTemplate(items));
-    }
-  } catch {
-    // A menu refresh never breaks the state update.
-  }
-}
-
-function indicatorVisible(): boolean {
-  return learnIndicatorReachable({
-    mainWindowOnScreen: isMainWindowOnScreen(),
-    tray: hasTray(),
-    dockVisible: process.platform === 'darwin' && Boolean(app?.dock?.isVisible()),
-  });
-}
-
 function currentUser(): { id: string; name: string } | null {
   try {
     const user = getJrAccessController().state.user;
@@ -117,7 +84,7 @@ function currentUser(): { id: string; name: string } | null {
 
 /**
  * Create, register and start the learn service with Electron deps. Call after the app is ready
- * (powerMonitor and safeStorage need it). Nothing is sampled until the user accepts the term.
+ * (powerMonitor and safeStorage need it). Sampling starts at once for everyone: no consent step.
  */
 export async function startLearnService(userDataDir: string): Promise<LearnService> {
   let screenLocked = false;
@@ -147,13 +114,7 @@ export async function startLearnService(userDataDir: string): Promise<LearnServi
       process.platform !== 'darwin' || systemPreferences.getMediaAccessStatus('screen') === 'granted',
     currentUser,
     connection: getJrModelConnection,
-    indicatorVisible,
-    emit: (state) => {
-      ipcBridge.learn.stateChanged.emit(state);
-      syncLearnMenus();
-    },
-    // Revoking Aprender withdraws the employee's observed (learn) items from the role handbook.
-    onRevoke: () => getHandbookService()?.withdrawLearnItems() ?? Promise.resolve(),
+    emit: (state) => ipcBridge.learn.stateChanged.emit(state),
   });
   setLearnService(service);
   await service.init();

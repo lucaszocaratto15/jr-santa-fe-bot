@@ -16,7 +16,6 @@ import { useNavigationHistory } from '@/renderer/hooks/context/NavigationHistory
 import { isElectronDesktop, isMacOS } from '@/renderer/utils/platform';
 import { IS_DISCONTINUED_BUILD } from '@/renderer/utils/discontinuedBuild';
 import MigrationInviteCapsule from './MigrationInviteCapsule';
-import LearnIndicator from './LearnIndicator';
 import ThemeToggle from './ThemeToggle';
 import './titlebar.css';
 
@@ -381,7 +380,6 @@ const Titlebar: React.FC<TitlebarProps> = ({ workspaceAvailable }) => {
             )}
           </button>
         )}
-        {isDesktopRuntime && <LearnIndicator />}
         {isDesktopRuntime && <ThemeToggle />}
         {showWindowControls && <WindowControls />}
       </div>

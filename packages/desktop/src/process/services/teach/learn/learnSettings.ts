@@ -11,10 +11,11 @@ import { DEFAULT_EXCLUSIONS } from './privacyFilter';
 import { ensurePrivateDir, writePrivateFile } from './sampleStore';
 
 export type LearnSettingsData = {
-  enabled: boolean;
-  /** End of a timed pause; null with `paused` = until resumed. */
-  pausedUntil: number | null;
-  paused: boolean;
+  /**
+   * Local date (YYYY-MM-DD) of the last pause: the only trace of it, kept just to refuse a
+   * second pause on the same day. No time, no duration; never logged or sent anywhere.
+   */
+  pauseDay: string | null;
   exclusions: LearnExclusion[];
   /** Last successful insights run. */
   lastSummaryAt: number | null;
@@ -22,26 +23,15 @@ export type LearnSettingsData = {
   attempts: { day: string; count: number };
 };
 
-export type ConsentEvent = {
-  type: 'accept' | 'revoke';
-  termVersion: string;
-  at: string;
-  user: { id: string; name: string } | null;
-};
-
 export type LearnSettings = {
   read(): Promise<LearnSettingsData>;
   write(patch: Partial<LearnSettingsData>): Promise<LearnSettingsData>;
-  consent(): Promise<ConsentEvent[]>;
-  appendConsent(event: ConsentEvent): Promise<void>;
 };
 
 const MAX_PATTERN = 200;
 
 export const defaultLearnSettings = (): LearnSettingsData => ({
-  enabled: false,
-  pausedUntil: null,
-  paused: false,
+  pauseDay: null,
   exclusions: [...DEFAULT_EXCLUSIONS],
   lastSummaryAt: null,
   attempts: { day: '', count: 0 },
@@ -49,6 +39,8 @@ export const defaultLearnSettings = (): LearnSettingsData => ({
 
 const record = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
+
+const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 const finiteOrNull = (value: unknown): number | null =>
   typeof value === 'number' && Number.isFinite(value) ? value : null;
@@ -77,9 +69,7 @@ function parseSettings(value: unknown): LearnSettingsData {
   if (!record(value)) return defaults;
   const attempts = record(value.attempts) ? value.attempts : {};
   return {
-    enabled: value.enabled === true,
-    pausedUntil: finiteOrNull(value.pausedUntil),
-    paused: value.paused === true,
+    pauseDay: typeof value.pauseDay === 'string' && DAY_PATTERN.test(value.pauseDay) ? value.pauseDay : null,
     exclusions: Array.isArray(value.exclusions) ? sanitizeExclusions(value.exclusions) : defaults.exclusions,
     lastSummaryAt: finiteOrNull(value.lastSummaryAt),
     attempts: {
@@ -87,20 +77,6 @@ function parseSettings(value: unknown): LearnSettingsData {
       count: typeof attempts.count === 'number' && attempts.count >= 0 ? attempts.count : 0,
     },
   };
-}
-
-function parseConsent(value: unknown): ConsentEvent[] {
-  if (!record(value) || !Array.isArray(value.events)) return [];
-  return value.events.filter((event): event is ConsentEvent => {
-    if (!record(event)) return false;
-    const user = event.user;
-    return (
-      (event.type === 'accept' || event.type === 'revoke') &&
-      typeof event.termVersion === 'string' &&
-      typeof event.at === 'string' &&
-      (user === null || (record(user) && typeof user.id === 'string' && typeof user.name === 'string'))
-    );
-  });
 }
 
 async function readJson(file: string): Promise<unknown> {
@@ -111,16 +87,9 @@ async function readJson(file: string): Promise<unknown> {
   }
 }
 
-/** The last event when it is an accept; null when there is none or the user revoked since. */
-export function latestAccept(events: ConsentEvent[]): ConsentEvent | null {
-  const last = events.at(-1);
-  return last?.type === 'accept' ? last : null;
-}
-
-/** `settings.json` (no observation data) and the `consent.json` proof log. Reads never create files. */
+/** `settings.json` (no observation data). Reads never create files. */
 export function createLearnSettings(root: string): LearnSettings {
   const settingsFile = join(root, 'settings.json');
-  const consentFile = join(root, 'consent.json');
   let queue: Promise<unknown> = Promise.resolve();
   const serialize = <T>(operation: () => Promise<T>): Promise<T> => {
     const next = queue.catch(() => {}).then(operation);
@@ -128,23 +97,15 @@ export function createLearnSettings(root: string): LearnSettings {
     return next;
   };
   const read = async () => parseSettings(await readJson(settingsFile));
-  const consent = async () => parseConsent(await readJson(consentFile));
 
   return {
     read,
-    consent,
     write: (patch) =>
       serialize(async () => {
         const next = parseSettings({ ...(await read()), ...patch });
         await ensurePrivateDir(root);
         await writePrivateFile(settingsFile, `${JSON.stringify(next, null, 2)}\n`);
         return next;
-      }),
-    appendConsent: (event) =>
-      serialize(async () => {
-        const events = [...(await consent()), event];
-        await ensurePrivateDir(root);
-        await writePrivateFile(consentFile, `${JSON.stringify({ events }, null, 2)}\n`);
       }),
   };
 }

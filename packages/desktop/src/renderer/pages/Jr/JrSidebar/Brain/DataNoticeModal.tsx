@@ -14,17 +14,25 @@ export const resetDataNoticeLaunch = (): void => {
   shownThisLaunch = false;
 };
 
+type DataNoticeModalProps = {
+  /** Read-only mode (e.g. from the Aprender panel): shown while true, no acknowledgement, no first-launch check. */
+  open?: boolean;
+  onClose?: () => void;
+};
+
 /**
  * "Aviso de uso de dados" (BRAIN_TERM_VERSION). A notice, not a consent: the employee can only
  * acknowledge it, and capture and Aprender run whether or not they do.
  */
-const DataNoticeModal: React.FC = () => {
+const DataNoticeModal: React.FC<DataNoticeModalProps> = ({ open, onClose }) => {
   const { t } = useTranslation();
   const [visible, setVisible] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  const readOnly = open !== undefined;
+
   useEffect(() => {
-    if (shownThisLaunch) return undefined;
+    if (readOnly || shownThisLaunch) return undefined;
     let cancelled = false;
     void (async () => {
       try {
@@ -39,7 +47,7 @@ const DataNoticeModal: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [readOnly]);
 
   const acknowledge = async () => {
     if (saving) return;
@@ -56,16 +64,22 @@ const DataNoticeModal: React.FC = () => {
 
   return (
     <Modal
-      visible={visible}
+      visible={readOnly ? open : visible}
       title={t('common.jr.dataNotice.title')}
-      onCancel={() => setVisible(false)}
-      maskClosable={false}
+      onCancel={() => (readOnly ? onClose?.() : setVisible(false))}
+      maskClosable={readOnly}
       unmountOnExit
       className='!w-600px max-w-[calc(100vw-32px)]'
       footer={
-        <Button type='primary' shape='round' loading={saving} onClick={() => void acknowledge()}>
-          {t('common.jr.dataNotice.button')}
-        </Button>
+        readOnly ? (
+          <Button type='primary' shape='round' onClick={onClose}>
+            {t('common.close')}
+          </Button>
+        ) : (
+          <Button type='primary' shape='round' loading={saving} onClick={() => void acknowledge()}>
+            {t('common.jr.dataNotice.button')}
+          </Button>
+        )
       }
     >
       <div className='max-h-60vh overflow-y-auto text-14px leading-22px text-t-secondary' data-testid='data-notice'>

@@ -11,12 +11,8 @@ const { learn, message } = vi.hoisted(() => {
     learn: {
       state: fn(),
       stateChanged: { on: vi.fn(() => () => {}) },
-      accept: fn(),
-      turnOn: fn(),
       pause: fn(),
       resume: fn(),
-      turnOff: fn(),
-      revoke: fn(),
       getExclusions: fn(),
       setExclusions: fn(),
       restoreDefaultExclusions: fn(),
@@ -67,28 +63,19 @@ import { MemoryRouter } from 'react-router-dom';
 import LearnPanel from '@renderer/pages/Jr/JrSidebar/Learn/LearnPanel';
 import { formatMinutes } from '@renderer/pages/Jr/JrSidebar/Learn/InsightList';
 import JrSettingsModal from '@renderer/pages/Jr/JrSidebar/SettingsModal';
-import { useLearnSettingsRequests } from '@renderer/hooks/agent/useLearnState';
-import { emitter } from '@renderer/utils/emitter';
 
 const base: LearnState = {
-  status: 'off',
+  status: 'active',
   unavailableReason: null,
   pausedUntil: null,
+  pauseAvailable: true,
   titles: 'full',
   samplerError: false,
   rawHours: 0,
-  acceptedVersion: null,
-  acceptedAt: null,
   lastInsightsAt: null,
   activeSince: null,
 };
-const active: LearnState = {
-  ...base,
-  status: 'active',
-  rawHours: 9,
-  acceptedVersion: '1.3',
-  acceptedAt: '2026-10-29T18:02:00.000Z',
-};
+const active: LearnState = { ...base, rawHours: 9 };
 const bankRule = (id: string): LearnExclusion => ({ id, kind: 'domain', pattern: `${id}.com.br`, builtin: true });
 const defaults = [bankRule('bank-domain-itau'), bankRule('whatsapp-domain'), bankRule('mail-domain-uol')];
 const batch: LearnInsightBatch = {
@@ -137,19 +124,22 @@ beforeEach(() => {
 });
 
 describe('LearnPanel', () => {
-  it('off: shows Ativar, which opens the consent modal', async () => {
-    renderPanel(base);
-    fireEvent.click(await screen.findByRole('button', { name: 'Ativar' }));
-    expect(await screen.findByText('Li e concordo com o Termo de Consentimento de Dados')).toBeInTheDocument();
-    expect(learn.turnOn.invoke).not.toHaveBeenCalled();
+  it('has no Ativar, Desligar, Revogar or consent button: it is always on', async () => {
+    renderPanel(active);
+    await screen.findByText('Ligado');
+    for (const name of ['Ativar', 'Desligar', 'Revogar consentimento e apagar tudo', 'Permitir', 'Revisar o termo']) {
+      expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
+    }
+    expect(screen.queryByText(/Termo aceito/)).not.toBeInTheDocument();
   });
 
-  it('off after Desligar with the current term: Ativar turns it back on without the modal', async () => {
-    learn.turnOn.invoke.mockResolvedValue(active);
-    renderPanel({ ...base, acceptedVersion: '1.3', acceptedAt: active.acceptedAt });
-    fireEvent.click(await screen.findByRole('button', { name: 'Ativar' }));
-    await waitFor(() => expect(learn.turnOn.invoke).toHaveBeenCalled());
-    expect(screen.queryByText('Li e concordo com o Termo de Consentimento de Dados')).not.toBeInTheDocument();
+  it('opens the Data Notice from the link, reusing the notice text', async () => {
+    renderPanel(active);
+    fireEvent.click(await screen.findByRole('button', { name: 'Ver o Aviso de uso de dados' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByTestId('data-notice')).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByTestId('data-notice')).not.toBeInTheDocument());
   });
 
   it('active: shows insights, exclusions and data controls', async () => {
@@ -161,19 +151,17 @@ describe('LearnPanel', () => {
     expect(screen.getByText('1h05')).toBeInTheDocument();
     expect(await screen.findByText('Bancos')).toBeInTheDocument();
     expect(screen.getByText('Registros brutos: 9 h guardadas (apagadas em até 48 h)')).toBeInTheDocument();
-    expect(screen.getByText(/Termo aceito em .* \(v1\.3\)/)).toBeInTheDocument();
     expect(screen.getByText('Só você vê isto.')).toBeInTheDocument();
   });
 
-  it('Revogar asks for confirmation, then calls learn.revoke', async () => {
-    learn.revoke.invoke.mockResolvedValue(base);
+  it('Apagar agora asks for confirmation, then wipes the raw samples', async () => {
+    learn.wipeSamples.invoke.mockResolvedValue(active);
     renderPanel(active);
-    fireEvent.click(await screen.findByRole('button', { name: 'Revogar consentimento e apagar tudo' }));
-    expect(learn.revoke.invoke).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole('button', { name: 'Apagar agora' }));
+    expect(learn.wipeSamples.invoke).not.toHaveBeenCalled();
     const dialog = await screen.findByRole('dialog');
-    expect(dialog).toHaveTextContent('Para religar, será preciso aceitar o termo de novo.');
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Revogar consentimento e apagar tudo' }));
-    await waitFor(() => expect(learn.revoke.invoke).toHaveBeenCalledTimes(1));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Apagar agora' }));
+    await waitFor(() => expect(learn.wipeSamples.invoke).toHaveBeenCalledTimes(1));
   });
 
   it('Gerar insights agora shows the no-data message for code no-data', async () => {
@@ -236,65 +224,37 @@ describe('LearnPanel', () => {
     expect(onTeach).toHaveBeenCalledWith(batch.suggestions[1]);
   });
 
-  it('autoConsent with needs-consent opens the modal with the reconsent notice', async () => {
-    renderPanel({ ...base, status: 'needs-consent', acceptedVersion: '1.2' }, { autoConsent: true });
-    expect(await screen.findByText(/O termo mudou. Leia a versão 1.3/)).toBeInTheDocument();
-  });
-
-  it('needs-consent without autoConsent waits for Revisar o termo', async () => {
-    renderPanel({ ...base, status: 'needs-consent', acceptedVersion: '1.2' });
-    const review = await screen.findByRole('button', { name: 'Revisar o termo' });
-    expect(screen.queryByText(/Leia a versão 1.3/)).not.toBeInTheDocument();
-    fireEvent.click(review);
-    expect(await screen.findByText(/Leia a versão 1.3/)).toBeInTheDocument();
-  });
-
-  it('off after Desligar still shows the insights, Apagar agora and Revogar', async () => {
-    learn.listInsights.invoke.mockResolvedValue([batch]);
-    learn.revoke.invoke.mockResolvedValue(base);
-    renderPanel({ ...base, rawHours: 3, acceptedVersion: '1.3', acceptedAt: active.acceptedAt });
-    expect(await screen.findByText('Baixar NF no portal')).toBeInTheDocument();
+  it('unavailable with raw data still offers Apagar agora', async () => {
+    renderPanel({ ...base, status: 'unavailable', unavailableReason: 'encryption', rawHours: 2 });
+    expect(await screen.findByText(/não oferece criptografia/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Apagar agora' })).toBeInTheDocument();
-    expect(screen.getByText('Registros brutos: 3 h guardadas (apagadas em até 48 h)')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Revogar consentimento e apagar tudo' }));
-    const dialog = await screen.findByRole('dialog');
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Revogar consentimento e apagar tudo' }));
-    await waitFor(() => expect(learn.revoke.invoke).toHaveBeenCalledTimes(1));
-    expect(screen.queryByRole('button', { name: 'Desligar' })).not.toBeInTheDocument();
   });
 
-  it('needs-consent (declined the new term) can still revoke and delete insights', async () => {
-    learn.listInsights.invoke.mockResolvedValue([batch]);
-    renderPanel({ ...base, status: 'needs-consent', acceptedVersion: '1.2', acceptedAt: active.acceptedAt });
-    expect(await screen.findByRole('button', { name: 'Revogar consentimento e apagar tudo' })).toBeInTheDocument();
-    expect(await screen.findByText('Baixar NF no portal')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Apagar' })).toBeInTheDocument();
-  });
-
-  it('unavailable with a prior accept still offers Revogar', async () => {
-    renderPanel({ ...base, status: 'unavailable', unavailableReason: 'encryption', acceptedVersion: '1.3' });
+  it('unavailable without encryption says why and shows no pause or notice link', async () => {
+    renderPanel({ ...base, status: 'unavailable', unavailableReason: 'encryption', pauseAvailable: false });
     expect(await screen.findByText(/não oferece criptografia/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Revogar consentimento e apagar tudo' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Pausar/ })).not.toBeInTheDocument();
   });
 
-  it('off with no accept and no data shows no data controls', async () => {
-    renderPanel(base);
-    await screen.findByRole('button', { name: 'Ativar' });
-    expect(screen.queryByRole('button', { name: 'Revogar consentimento e apagar tudo' })).not.toBeInTheDocument();
-    expect(learn.listInsights.invoke).not.toHaveBeenCalled();
-  });
-
-  it('unavailable without encryption says why and offers no Ativar', async () => {
-    renderPanel({ ...base, status: 'unavailable', unavailableReason: 'encryption' });
-    expect(await screen.findByText(/não oferece criptografia/)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Ativar' })).not.toBeInTheDocument();
-  });
-
-  it('Pausar pauses until resumed', async () => {
-    learn.pause.invoke.mockResolvedValue({ ...active, status: 'paused' });
+  it('Pausar por 15 min calls pause with no duration', async () => {
+    learn.pause.invoke.mockResolvedValue({ ...active, status: 'paused', pauseAvailable: false });
     renderPanel(active);
-    fireEvent.click(await screen.findByRole('button', { name: 'Pausar' }));
-    await waitFor(() => expect(learn.pause.invoke).toHaveBeenCalledWith({ minutes: null }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Pausar por 15 min' }));
+    await waitFor(() => expect(learn.pause.invoke).toHaveBeenCalledWith());
+  });
+
+  it("once today's pause is used the button is gone, with no message about it", async () => {
+    renderPanel({ ...active, pauseAvailable: false });
+    await screen.findByText('Ligado');
+    expect(screen.queryByRole('button', { name: /Pausar/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/pausa|limite|amanhã|já pausou/i)).not.toBeInTheDocument();
+  });
+
+  it('while paused, Retomar ends the pause early', async () => {
+    learn.resume.invoke.mockResolvedValue(active);
+    renderPanel({ ...active, status: 'paused', pauseAvailable: false, pausedUntil: Date.now() + 60_000 });
+    fireEvent.click(await screen.findByRole('button', { name: 'Retomar' }));
+    await waitFor(() => expect(learn.resume.invoke).toHaveBeenCalled());
   });
 });
 
@@ -345,52 +305,6 @@ describe('Ensinar esta tarefa (through the settings modal)', () => {
     await waitFor(() => expect(message.warning).toHaveBeenCalled());
     expect(onClose).not.toHaveBeenCalled();
     expect(startJrConversation).not.toHaveBeenCalled();
-  });
-});
-
-describe('useLearnSettingsRequests', () => {
-  const Probe: React.FC<{ open: (autoConsent: boolean) => void }> = ({ open }) => {
-    useLearnSettingsRequests(open);
-    return null;
-  };
-  const mount = (state: LearnState, open: (autoConsent: boolean) => void) => {
-    learn.state.invoke.mockResolvedValue(state);
-    return render(
-      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
-        <Probe open={open} />
-      </SWRConfig>
-    );
-  };
-
-  beforeEach(() => {
-    sessionStorage.clear();
-  });
-
-  it('asks once per session after a prior accept of another version', async () => {
-    const open = vi.fn();
-    const first = mount({ ...base, status: 'needs-consent', acceptedVersion: '1.2' }, open);
-    await waitFor(() => expect(open).toHaveBeenCalledWith(true));
-    first.unmount();
-    const again = vi.fn();
-    mount({ ...base, status: 'needs-consent', acceptedVersion: '1.2' }, again);
-    await waitFor(() => expect(learn.state.invoke).toHaveBeenCalled());
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(again).not.toHaveBeenCalled();
-  });
-
-  it('never asks when nothing was accepted before', async () => {
-    const open = vi.fn();
-    mount({ ...base, status: 'needs-consent', acceptedVersion: null }, open);
-    await waitFor(() => expect(learn.state.invoke).toHaveBeenCalled());
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(open).not.toHaveBeenCalled();
-  });
-
-  it('opens the tab on jr.settings.open', async () => {
-    const open = vi.fn();
-    mount(active, open);
-    emitter.emit('jr.settings.open', { tab: 'learn' });
-    expect(open).toHaveBeenCalledWith(false);
   });
 });
 

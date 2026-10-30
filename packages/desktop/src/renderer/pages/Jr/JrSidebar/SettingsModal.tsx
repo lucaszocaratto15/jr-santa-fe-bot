@@ -12,7 +12,7 @@ import {
   Lock,
   SettingTwo,
 } from '@icon-park/react';
-import React, { useEffect } from 'react';
+import React, { useContext, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -23,7 +23,7 @@ import { listJrBots, startJrConversation } from '@renderer/pages/Jr/jrBots';
 import { queueConversationIntent } from '@renderer/pages/conversation/Preview/browser/TeachCards/teachStore';
 import { isMacOS } from '@/renderer/utils/platform';
 import { ipcBridge } from '@/common';
-import { useJrAccess } from '@renderer/pages/Jr/Access/context';
+import { JrAccessContext } from '@renderer/pages/Jr/Access/context';
 import BrainManager from '@renderer/pages/Jr/Brain/BrainManager';
 import { ComputerPanel, GeneralPanel, UpdatesPanel } from './panels';
 import LearnPanel from './Learn/LearnPanel';
@@ -79,20 +79,19 @@ const JrSettingsModal: React.FC<{
   tab: SettingsTab;
   onTab: (tab: SettingsTab) => void;
   onClose: () => void;
-  /** Learn tab opened by the reconsent prompt: open the term modal right away. */
-  autoConsent?: boolean;
-}> = ({ tab, onTab, onClose, autoConsent }) => {
+}> = ({ tab, onTab, onClose }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const bots = useSWR(tab === 'learn' ? JR_BOTS_KEY : null, listJrBots);
-  const { state } = useJrAccess();
+  // Without the company access provider nobody is a manager: the tab stays hidden.
+  const access = useContext(JrAccessContext);
   // The owner manages the brain from the admin page; an area manager gets this tab. Hidden on any error.
-  const me = useSWR('jr.brain.me', () => ipcBridge.brain.me.invoke(), {
+  const me = useSWR(access ? 'jr.brain.me' : null, () => ipcBridge.brain.me.invoke(), {
     shouldRetryOnError: false,
     revalidateOnFocus: false,
   });
-  const showBrain = state.user?.id !== 'owner' && (me.data?.manages.length ?? 0) > 0;
+  const showBrain = Boolean(access) && access?.state.user?.id !== 'owner' && (me.data?.manages.length ?? 0) > 0;
   // A stored or requested 'brain' tab falls back to General for anyone who is not a manager.
   const current: SettingsTab = tab === 'brain' && !showBrain ? 'general' : tab;
   const tabs = SETTINGS_TABS.filter((id) => id !== 'brain' || showBrain);
@@ -174,9 +173,7 @@ const JrSettingsModal: React.FC<{
           {current === 'vault' && <VaultPanel />}
           {current === 'tasks' && <TasksPanel onClose={onClose} />}
           {current === 'lessons' && <LessonsPanel />}
-          {current === 'learn' && (
-            <LearnPanel autoConsent={autoConsent} onTeach={(suggestion) => void teachSuggestion(suggestion)} />
-          )}
+          {current === 'learn' && <LearnPanel onTeach={(suggestion) => void teachSuggestion(suggestion)} />}
           {current === 'handbook' && <HandbookPanel />}
           {current === 'brain' && showBrain && <BrainManager mode='manager' />}
           {current === 'updates' && <UpdatesPanel />}

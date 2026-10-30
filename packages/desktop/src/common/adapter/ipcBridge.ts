@@ -2742,16 +2742,9 @@ export const learn = {
   state: bridge.buildProvider<LearnState, void>('learn:state'),
   /** Main → renderer: every state change (status, pause, raw hours, sampler error). */
   stateChanged: bridge.buildEmitter<LearnState>('learn:state-changed'),
-  /** Records the LGPD accept; main refuses any version other than LEARN_TERM_VERSION. */
-  accept: bridge.buildProvider<LearnState, { termVersion: string }>('learn:accept'),
-  /** Re-enables after "Desligar" when the stored accept is for the current term. */
-  turnOn: bridge.buildProvider<LearnState, void>('learn:turn-on'),
-  /** `minutes: null` pauses until resumed. */
-  pause: bridge.buildProvider<LearnState, { minutes: number | null }>('learn:pause'),
+  /** The one 15-minute pause of the local day; a second call the same day does nothing. */
+  pause: bridge.buildProvider<LearnState, void>('learn:pause'),
   resume: bridge.buildProvider<LearnState, void>('learn:resume'),
-  turnOff: bridge.buildProvider<LearnState, void>('learn:turn-off'),
-  /** Wipes raw samples and insights, then records the revoke. */
-  revoke: bridge.buildProvider<LearnState, void>('learn:revoke'),
   getExclusions: bridge.buildProvider<LearnExclusion[], void>('learn:get-exclusions'),
   setExclusions: bridge.buildProvider<LearnExclusion[], LearnExclusion[]>('learn:set-exclusions'),
   /** "Restaurar padrão": defaults live in main, so the renderer asks for them back. */

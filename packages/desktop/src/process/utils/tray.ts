@@ -14,8 +14,6 @@ import {
 import * as path from 'path';
 import { ipcBridge } from '@/common';
 import i18n from '@process/services/i18n';
-import { learnServiceMenuItems } from '@process/services/teach/learn/learnMenu';
-import { getLearnService } from '@process/services/teach/registry';
 
 let tray: TrayInstance | null = null;
 let closeToTrayEnabled = false;
@@ -122,12 +120,6 @@ const buildTrayContextMenu = async (): Promise<Electron.Menu> => {
   const runningTasksCount = getRunningTasksCount();
 
   const template: Electron.MenuItemConstructorOptions[] = [
-    // "Aprender com seu trabalho": status and Pausar/Desligar while it is on.
-    ...learnServiceMenuItems(
-      getLearnService(),
-      (key, options) => String(i18n.t(key, options)),
-      i18n.language || 'pt-BR'
-    ),
     {
       label: i18n.t('common.tray.showWindow'),
       click: showAndFocusMainWindow,

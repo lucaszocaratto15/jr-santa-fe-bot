@@ -2,8 +2,8 @@ import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { LEARN_TERM_VERSION, type LearnState } from '@/common/types/agent/learnTypes';
-import { createLearnService, type LearnServiceDeps } from '@/process/services/teach/learn/learnService';
+import type { LearnState } from '@/common/types/agent/learnTypes';
+import { createLearnService, PAUSE_MINUTES, type LearnServiceDeps } from '@/process/services/teach/learn/learnService';
 import { createInsightStore, createSampleStore } from '@/process/services/teach/learn/sampleStore';
 import { fakeEncryption, fakeSpawn } from './fakes';
 
@@ -32,7 +32,6 @@ type Env = {
   jrFocused: boolean;
   page: { url: string; title: string } | null;
   granted: boolean;
-  indicator: boolean;
 };
 
 function harness(over: Partial<LearnServiceDeps> = {}, reply?: ((n: number) => string | null) | null) {
@@ -41,9 +40,8 @@ function harness(over: Partial<LearnServiceDeps> = {}, reply?: ((n: number) => s
   let nextId = 0;
   const emitted: LearnState[] = [];
   const { spawn, children } = fakeSpawn(reply);
-  const env: Env = { idle: 0, locked: false, jrFocused: false, page: null, granted: true, indicator: true };
+  const env: Env = { idle: 0, locked: false, jrFocused: false, page: null, granted: true };
   const request = okRequest();
-  const onRevoke = vi.fn(async () => {});
   const deps: LearnServiceDeps = {
     root,
     encryption: fakeEncryption(),
@@ -63,11 +61,9 @@ function harness(over: Partial<LearnServiceDeps> = {}, reply?: ((n: number) => s
     jrFocused: () => env.jrFocused,
     jrBrowserPage: () => env.page,
     screenTitlesGranted: () => env.granted,
-    indicatorVisible: () => env.indicator,
     currentUser: () => ({ id: 'u1', name: 'Ana' }),
     connection: () => connection,
     emit: (state) => emitted.push(state),
-    onRevoke,
     request,
     ...over,
   };
@@ -79,7 +75,7 @@ function harness(over: Partial<LearnServiceDeps> = {}, reply?: ((n: number) => s
       await service.tick();
     }
   };
-  return { service, clock, emitted, spawn, children, env, request, onRevoke, tickTimers, ticks, deps };
+  return { service, clock, emitted, spawn, children, env, request, tickTimers, ticks, deps };
 }
 
 const store = () => createSampleStore(root, fakeEncryption());
@@ -90,74 +86,37 @@ const exists = async (path: string) =>
     () => false
   );
 
-async function seedConsent(termVersion: string, enabled = true) {
-  await mkdir(root, { recursive: true });
-  await writeFile(join(root, 'settings.json'), JSON.stringify({ enabled }));
-  await writeFile(
-    join(root, 'consent.json'),
-    JSON.stringify({ events: [{ type: 'accept', termVersion, at: '2026-01-01T00:00:00.000Z', user: null }] })
-  );
-}
-
 async function seedSamples(count: number, start = T0 - 3_600_000) {
   const s = store();
   for (let i = 0; i < count; i += 1) await s.append({ t: start + i * 15_000, app: 'Excel', title: `NF ${i % 3}` });
 }
 
-describe('before consent', () => {
-  it('fresh install: state off, no spawn, no samples dir after 10 ticks', async () => {
+describe('always on', () => {
+  it('fresh install samples with no acceptance of any kind', async () => {
     const h = harness();
-    expect((await h.service.init()).status).toBe('off');
-    expect(h.tickTimers()).toHaveLength(0);
-    await h.ticks(10);
-    expect(h.spawn).not.toHaveBeenCalled();
-    expect(await exists(join(root, 'samples'))).toBe(false);
-    expect(await exists(root)).toBe(false);
-  });
-
-  it('accept with an old version is refused and records nothing', async () => {
-    const h = harness();
-    await h.service.init();
-    await expect(h.service.accept('1.2')).rejects.toThrow('LEARN_TERM_VERSION');
-    expect(await exists(join(root, 'consent.json'))).toBe(false);
-    expect(h.service.state().status).toBe('off');
-  });
-
-  it('accept(1.3) records user, version and time, then becomes active', async () => {
-    const h = harness();
-    await h.service.init();
-    const state = await h.service.accept(LEARN_TERM_VERSION);
-    expect(state.status).toBe('active');
-    expect(state.acceptedVersion).toBe('1.3');
-    const consent = JSON.parse(await readFile(join(root, 'consent.json'), 'utf8'));
-    expect(consent.events).toEqual([
-      { type: 'accept', termVersion: '1.3', at: new Date(T0).toISOString(), user: { id: 'u1', name: 'Ana' } },
-    ]);
+    expect((await h.service.init()).status).toBe('active');
     expect(h.tickTimers()).toHaveLength(1);
-    expect(h.emitted.at(-1)?.status).toBe('active');
+    await h.ticks(2);
+    expect(h.spawn).toHaveBeenCalled();
+    expect(await stored()).toHaveLength(2);
   });
 
-  it('a stored v1.2 accept pauses the feature until the v1.3 term is accepted', async () => {
-    await seedConsent('1.2');
+  it('exposes no consent, accept, turn-off or revoke path and writes no consent file', async () => {
     const h = harness();
-    const state = await h.service.init();
-    expect(state).toMatchObject({ status: 'needs-consent', acceptedVersion: '1.2' });
-    await h.ticks(3);
-    expect(h.spawn).not.toHaveBeenCalled();
-    expect((await h.service.accept(LEARN_TERM_VERSION)).status).toBe('active');
+    await h.service.init();
+    await h.ticks(2);
+    for (const name of ['accept', 'turnOn', 'turnOff', 'revoke']) {
+      expect(h.service).not.toHaveProperty(name);
+    }
+    expect(h.service.state()).not.toHaveProperty('acceptedVersion');
+    expect(await exists(join(root, 'consent.json'))).toBe(false);
   });
 
-  it('enabled with a v1.0 accept on disk → needs-consent and never spawns', async () => {
-    await seedConsent('1.0');
+  it('an old settings.json with enabled:false or a stored accept does not switch it off', async () => {
+    await mkdir(root, { recursive: true });
+    await writeFile(join(root, 'settings.json'), JSON.stringify({ enabled: false, paused: true, pausedUntil: null }));
     const h = harness();
-    const state = await h.service.init();
-    expect(state.status).toBe('needs-consent');
-    expect(state.acceptedVersion).toBe('1.0');
-    expect(h.tickTimers()).toHaveLength(0);
-    await h.ticks(5);
-    expect(h.spawn).not.toHaveBeenCalled();
-    expect(await exists(join(root, 'samples'))).toBe(false);
-    await expect(h.service.turnOn()).rejects.toThrow('LEARN_NEEDS_CONSENT');
+    expect((await h.service.init()).status).toBe('active');
   });
 });
 
@@ -165,7 +124,6 @@ describe('collection', () => {
   it('records the foreground sample from the child', async () => {
     const h = harness();
     await h.service.init();
-    await h.service.accept(LEARN_TERM_VERSION);
     expect(h.spawn).not.toHaveBeenCalled();
     await h.ticks(1);
     expect(h.spawn).toHaveBeenCalledTimes(1);
@@ -176,7 +134,6 @@ describe('collection', () => {
   it('tick while locked or idle >= 120 s writes nothing', async () => {
     const h = harness();
     await h.service.init();
-    await h.service.accept(LEARN_TERM_VERSION);
     h.env.locked = true;
     await h.ticks(2);
     h.env.locked = false;
@@ -189,7 +146,6 @@ describe('collection', () => {
   it('tick while JR is focused records the in-app browser page and not the child', async () => {
     const h = harness();
     await h.service.init();
-    await h.service.accept(LEARN_TERM_VERSION);
     h.env.jrFocused = true;
     h.env.page = { url: 'https://nfse.prefeitura.sp.gov.br/emitir', title: 'Emitir NF' };
     await h.ticks(1);
@@ -205,7 +161,6 @@ describe('collection', () => {
   it('a secret window title is stored as app-only, never with the code', async () => {
     const h = harness({}, () => '{"app":"Outlook","title":"Seu código de verificação é 482913 - Outlook"}');
     await h.service.init();
-    await h.service.accept(LEARN_TERM_VERSION);
     await h.ticks(1);
     expect(await stored()).toEqual([{ t: T0 + 15_000, app: 'Outlook', title: null }]);
     const raw = JSON.stringify(await stored());
@@ -216,7 +171,6 @@ describe('collection', () => {
   it('a title is redacted before it is stored', async () => {
     const h = harness({}, () => '{"app":"Chrome","title":"Pedido 9981234 - ana@exemplo.com"}');
     await h.service.init();
-    await h.service.accept(LEARN_TERM_VERSION);
     await h.ticks(1);
     expect(await stored()).toEqual([{ t: T0 + 15_000, app: 'Chrome', title: 'Pedido # - [email]' }]);
   });
@@ -224,7 +178,6 @@ describe('collection', () => {
   it('a JR browser url is stored without its query string or fragment', async () => {
     const h = harness();
     await h.service.init();
-    await h.service.accept(LEARN_TERM_VERSION);
     h.env.jrFocused = true;
     h.env.page = { url: 'https://portal.exemplo.com/clientes?cliente=Ana&cpf=12345678909#ficha', title: 'Clientes' };
     await h.ticks(1);
@@ -236,28 +189,13 @@ describe('collection', () => {
   it('an exclusion still matches the raw title before redaction', async () => {
     const h = harness({}, () => '{"app":"Chrome","title":"Caixa de entrada - joao@gmail.com - Gmail"}');
     await h.service.init();
-    await h.service.accept(LEARN_TERM_VERSION);
     await h.ticks(2);
     expect(await stored()).toEqual([]);
-  });
-
-  it('with no visible window, tray or dock indicator a tick samples nothing', async () => {
-    const h = harness();
-    await h.service.init();
-    await h.service.accept(LEARN_TERM_VERSION);
-    h.env.indicator = false;
-    await h.ticks(3);
-    expect(h.spawn).not.toHaveBeenCalled();
-    expect(await exists(join(root, 'samples'))).toBe(false);
-    h.env.indicator = true;
-    await h.ticks(1);
-    expect(await stored()).toHaveLength(1);
   });
 
   it('darwin: titles reported as app-only after many title-less samples despite the permission', async () => {
     const h = harness({ platform: 'darwin' }, () => '{"app":"Finder","title":null}');
     await h.service.init();
-    await h.service.accept(LEARN_TERM_VERSION);
     expect(h.service.state().titles).toBe('full');
     await h.ticks(20);
     expect(h.service.state().titles).toBe('app-only');
@@ -269,7 +207,6 @@ describe('collection', () => {
       titled ? '{"app":"Excel","title":"NF.xlsx"}' : '{"app":"Finder","title":null}'
     );
     await h.service.init();
-    await h.service.accept(LEARN_TERM_VERSION);
     await h.ticks(20);
     titled = true;
     await h.ticks(1);
@@ -279,7 +216,6 @@ describe('collection', () => {
   it('excluded sample is not written and leaves no trace', async () => {
     const h = harness({}, () => '{"app":"Google Chrome","title":"Itaú - Internet Banking"}');
     await h.service.init();
-    await h.service.accept(LEARN_TERM_VERSION);
     await h.ticks(3);
     expect(h.spawn).toHaveBeenCalled();
     expect(await exists(join(root, 'samples'))).toBe(false);
@@ -289,7 +225,6 @@ describe('collection', () => {
   it('an excluded JR browser site is not written', async () => {
     const h = harness();
     await h.service.init();
-    await h.service.accept(LEARN_TERM_VERSION);
     h.env.jrFocused = true;
     h.env.page = { url: 'https://www2.bb.com.br/aapf/login', title: 'Login' };
     await h.ticks(1);
@@ -299,7 +234,6 @@ describe('collection', () => {
   it('a new exclusion applies on the next tick', async () => {
     const h = harness();
     await h.service.init();
-    await h.service.accept(LEARN_TERM_VERSION);
     await h.service.setExclusions([{ id: 'x', kind: 'app', pattern: 'excel', builtin: false }]);
     await h.ticks(2);
     expect(await stored()).toEqual([]);
@@ -319,7 +253,6 @@ describe('collection', () => {
   it('a sampler that gave up stays failed and does not respawn 11 minutes later', async () => {
     const h = harness({}, () => 'garbage');
     await h.service.init();
-    await h.service.accept(LEARN_TERM_VERSION);
     await h.ticks(4);
     expect(h.service.state().samplerError).toBe(true);
     h.clock.now += 11 * 60_000;
@@ -331,7 +264,6 @@ describe('collection', () => {
   it('three sampler failures set samplerError, and resume() retries with a fresh child', async () => {
     const h = harness({}, () => 'garbage');
     await h.service.init();
-    await h.service.accept(LEARN_TERM_VERSION);
     await h.ticks(4);
     expect(h.service.state().samplerError).toBe(true);
     expect(h.spawn).toHaveBeenCalledTimes(3);
@@ -342,14 +274,16 @@ describe('collection', () => {
   });
 });
 
-describe('pause, off and revoke', () => {
-  it('pause(60) stops writing; the first tick after pausedUntil resumes and emits once', async () => {
+describe('daily pause', () => {
+  const DAY = 86_400_000;
+
+  it('pause stops writing for 15 min and the first tick after it resumes and emits once', async () => {
     const h = harness();
     await h.service.init();
-    await h.service.accept(LEARN_TERM_VERSION);
-    const paused = await h.service.pause(60);
+    const paused = await h.service.pause();
     expect(paused.status).toBe('paused');
-    expect(paused.pausedUntil).toBe(T0 + 3_600_000);
+    expect(paused.pausedUntil).toBe(T0 + PAUSE_MINUTES * 60_000);
+    expect(PAUSE_MINUTES).toBe(15);
     await h.ticks(3);
     expect(await stored()).toEqual([]);
     expect(h.children[0]?.requests ?? 0).toBe(0);
@@ -364,137 +298,75 @@ describe('pause, off and revoke', () => {
     expect(await stored()).toHaveLength(1);
   });
 
+  it('auto-resumes by itself right after 15 minutes', async () => {
+    const h = harness();
+    await h.service.init();
+    await h.service.pause();
+    h.clock.now = T0 + 15 * 60_000 - 1;
+    expect(h.service.state().status).toBe('paused');
+    await h.ticks(1);
+    expect(h.service.state().status).toBe('active');
+  });
+
+  it('a second pause the same day is refused silently and the control is reported unavailable', async () => {
+    const h = harness();
+    await h.service.init();
+    expect(h.service.state().pauseAvailable).toBe(true);
+    await h.service.pause();
+    expect(h.service.state().pauseAvailable).toBe(false);
+    await h.service.resume();
+    const again = await h.service.pause();
+    expect(again.status).toBe('active');
+    expect(again.pauseAvailable).toBe(false);
+    await h.ticks(1);
+    expect(await stored()).toHaveLength(1);
+  });
+
+  it('the pause is available again the next local day, also without a new sample', async () => {
+    const h = harness();
+    await h.service.init();
+    await h.service.pause();
+    h.clock.now += DAY;
+    h.env.locked = true;
+    await h.service.tick();
+    expect(h.service.state()).toMatchObject({ status: 'active', pauseAvailable: true });
+    expect((await h.service.pause()).status).toBe('paused');
+  });
+
+  it('the only datum stored is the local date: no times, no durations, nothing in consent', async () => {
+    const h = harness();
+    await h.service.init();
+    await h.service.pause();
+    const settings = JSON.parse(await readFile(join(root, 'settings.json'), 'utf8'));
+    expect(settings.pauseDay).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    const text = JSON.stringify(settings);
+    expect(text).not.toContain(String(T0));
+    expect(text).not.toMatch(/pausedUntil|paused"/);
+    expect(await exists(join(root, 'consent.json'))).toBe(false);
+  });
+
+  it('a restart in the middle of a pause simply samples again, and today stays used', async () => {
+    const first = harness();
+    await first.service.init();
+    await first.service.pause();
+    first.service.dispose();
+    const second = harness();
+    expect(await second.service.init()).toMatchObject({ status: 'active', pauseAvailable: false });
+  });
+
   it('reports activeSince for the current active stretch only', async () => {
     const h = harness();
     await h.service.init();
-    expect(h.service.state().activeSince).toBeNull();
-    await h.service.accept(LEARN_TERM_VERSION);
     expect(h.service.state().activeSince).toBe(T0);
-    await h.service.pause(null);
+    await h.service.pause();
     expect(h.service.state().activeSince).toBeNull();
     h.clock.now += 60_000;
     expect((await h.service.resume()).activeSince).toBe(T0 + 60_000);
   });
 
-  it('pause(null) stays paused until resume()', async () => {
+  it('wipeSamples deletes raw samples but keeps insights, and Aprender keeps running', async () => {
     const h = harness();
     await h.service.init();
-    await h.service.accept(LEARN_TERM_VERSION);
-    await h.service.pause(null);
-    h.clock.now += 30 * 86_400_000;
-    await h.service.tick();
-    expect(h.service.state().status).toBe('paused');
-    expect(await stored()).toEqual([]);
-    expect((await h.service.resume()).status).toBe('active');
-  });
-
-  it('rejects an invalid pause length', async () => {
-    const h = harness();
-    await h.service.init();
-    await h.service.accept(LEARN_TERM_VERSION);
-    await expect(h.service.pause(-5)).rejects.toThrow('LEARN_BAD_PAUSE');
-  });
-
-  it('turnOff keeps consent and insights; re-enable does not need a new accept', async () => {
-    const h = harness();
-    await h.service.init();
-    await h.service.accept(LEARN_TERM_VERSION);
-    await h.ticks(1);
-    await seedSamples(30);
-    expect((await h.service.generateNow()).ok).toBe(true);
-    const off = await h.service.turnOff();
-    expect(off.status).toBe('off');
-    expect(off.acceptedVersion).toBe('1.3');
-    expect(h.children[0].kill).toHaveBeenCalled();
-    expect(h.tickTimers()).toHaveLength(0);
-    expect(await h.service.listInsights()).toHaveLength(1);
-    expect((await h.service.turnOn()).status).toBe('active');
-  });
-
-  it('revoke wipes samples and insights and needs a new accept', async () => {
-    const h = harness();
-    await h.service.init();
-    await h.service.accept(LEARN_TERM_VERSION);
-    await h.ticks(1);
-    await seedSamples(30);
-    await h.service.generateNow();
-    const state = await h.service.revoke();
-    expect(state.status).toBe('off');
-    expect(state.acceptedVersion).toBeNull();
-    expect(state.rawHours).toBe(0);
-    expect(await exists(join(root, 'samples'))).toBe(false);
-    expect(await exists(join(root, 'insights.bin'))).toBe(false);
-    expect(await h.service.listInsights()).toEqual([]);
-    expect(h.children[0].kill).toHaveBeenCalled();
-    const consent = JSON.parse(await readFile(join(root, 'consent.json'), 'utf8'));
-    expect(consent.events.map((e: { type: string }) => e.type)).toEqual(['accept', 'revoke']);
-    await expect(h.service.turnOn()).rejects.toThrow('LEARN_NEEDS_CONSENT');
-    await h.ticks(2);
-    expect(await exists(join(root, 'samples'))).toBe(false);
-  });
-
-  it('revoke during generateNow writes no batch', async () => {
-    let release!: (response: Response) => void;
-    const request = vi.fn(
-      () =>
-        new Promise<Response>((resolve) => {
-          release = resolve;
-        })
-    );
-    const h = harness({ request });
-    await h.service.init();
-    await h.service.accept(LEARN_TERM_VERSION);
-    await seedSamples(30);
-    const run = h.service.generateNow();
-    await vi.waitFor(() => expect(request).toHaveBeenCalled());
-    const revoked = h.service.revoke();
-    release(new Response(JSON.stringify({ choices: [{ message: { content: modelReply } }] })));
-    expect((await run).ok).toBe(false);
-    await revoked;
-    expect(await exists(join(root, 'insights.bin'))).toBe(false);
-    expect(await h.service.listInsights()).toEqual([]);
-  });
-
-  it('generateNow started after revoke began does not call the model or write a batch', async () => {
-    const h = harness();
-    await h.service.init();
-    await h.service.accept(LEARN_TERM_VERSION);
-    await seedSamples(30);
-    const revoked = h.service.revoke();
-    expect(await h.service.generateNow()).toEqual({ ok: false, code: 'unavailable' });
-    await revoked;
-    expect(h.request).not.toHaveBeenCalled();
-    expect(await exists(join(root, 'insights.bin'))).toBe(false);
-  });
-
-  it('generateNow started after turnOff began does not call the model', async () => {
-    const h = harness();
-    await h.service.init();
-    await h.service.accept(LEARN_TERM_VERSION);
-    await seedSamples(30);
-    const off = h.service.turnOff();
-    expect(await h.service.generateNow()).toEqual({ ok: false, code: 'unavailable' });
-    await off;
-    expect(h.request).not.toHaveBeenCalled();
-  });
-
-  it('revoke calls onRevoke after the local wipe and still resolves off when it rejects', async () => {
-    const onRevoke = vi.fn(async () => {
-      expect(await exists(join(root, 'samples'))).toBe(false);
-      throw new Error('server down');
-    });
-    const h = harness({ onRevoke });
-    await h.service.init();
-    await h.service.accept(LEARN_TERM_VERSION);
-    await h.ticks(1);
-    expect((await h.service.revoke()).status).toBe('off');
-    expect(onRevoke).toHaveBeenCalledTimes(1);
-  });
-
-  it('wipeSamples deletes raw samples but keeps consent and insights', async () => {
-    const h = harness();
-    await h.service.init();
-    await h.service.accept(LEARN_TERM_VERSION);
     await seedSamples(30);
     await h.service.generateNow();
     const state = await h.service.wipeSamples();
@@ -503,10 +375,18 @@ describe('pause, off and revoke', () => {
     expect(await stored()).toEqual([]);
     expect(await h.service.listInsights()).toHaveLength(1);
   });
+
+  it('generateNow works while paused', async () => {
+    const h = harness();
+    await h.service.init();
+    await seedSamples(30);
+    await h.service.pause();
+    expect((await h.service.generateNow()).ok).toBe(true);
+  });
 });
 
 describe('retention and insights runs', () => {
-  it('hourly purges even when off', async () => {
+  it('hourly purges stale samples and insights', async () => {
     await createSampleStore(root, fakeEncryption()).append({ t: T0 - 50 * 3_600_000, app: 'old', title: null });
     await createInsightStore(root, fakeEncryption()).add({
       id: 'old',
@@ -519,7 +399,6 @@ describe('retention and insights runs', () => {
     });
     const h = harness();
     await h.service.init();
-    expect(h.service.state().status).toBe('off');
     await h.service.hourly();
     expect(await stored()).toEqual([]);
     expect(await createInsightStore(root, fakeEncryption()).list()).toEqual([]);
@@ -530,7 +409,6 @@ describe('retention and insights runs', () => {
     await createSampleStore(root, fakeEncryption()).append({ t: hourStart, app: 'old', title: null });
     const h = harness();
     await h.service.init();
-    await h.service.accept(LEARN_TERM_VERSION);
     h.env.locked = true; // No new sample: only the purge runs.
     await h.service.tick();
     expect(await stored()).toEqual([]);
@@ -539,7 +417,6 @@ describe('retention and insights runs', () => {
   it('a newly added exclusion also filters samples already on disk before the model call', async () => {
     const h = harness();
     await h.service.init();
-    await h.service.accept(LEARN_TERM_VERSION);
     const s = store();
     for (let i = 0; i < 60; i += 1) {
       await s.append({ t: T0 + i * 15_000, app: i % 2 ? 'Excel' : 'MeuBanco', title: i % 2 ? 'NF.xlsx' : 'Extrato' });
@@ -550,34 +427,11 @@ describe('retention and insights runs', () => {
     expect(body.messages[1].content).not.toMatch(/meubanco|extrato/i);
   });
 
-  it('generateNow while off or needs-consent does not call the model', async () => {
-    const h = harness();
-    await h.service.init();
-    await h.service.accept(LEARN_TERM_VERSION);
-    await seedSamples(30);
-    await h.service.turnOff();
-    expect(await h.service.generateNow()).toEqual({ ok: false, code: 'unavailable' });
-    expect(h.request).not.toHaveBeenCalled();
-  });
-
-  it('generateNow works while paused', async () => {
-    const h = harness();
-    await h.service.init();
-    await h.service.accept(LEARN_TERM_VERSION);
-    await seedSamples(30);
-    await h.service.pause(null);
-    expect((await h.service.generateNow()).ok).toBe(true);
-  });
-
-  it('daily run waits for 24 h and 120 samples; max 3 attempts per day', async () => {
+  it('daily run needs 120 samples; max 3 attempts per day', async () => {
     const request = vi.fn(async () => new Response('', { status: 502 }));
     const h = harness({ request });
     await h.service.init();
-    await h.service.accept(LEARN_TERM_VERSION);
     await seedSamples(150, T0 + 3_600_000);
-    h.clock.now = T0 + 20 * 3_600_000;
-    await h.service.hourly();
-    expect(request).not.toHaveBeenCalled(); // < 24 h since the accept
     h.clock.now = T0 + 25 * 3_600_000;
     for (let i = 0; i < 5; i += 1) {
       await h.service.hourly();
@@ -586,10 +440,21 @@ describe('retention and insights runs', () => {
     expect(request).toHaveBeenCalledTimes(3);
   });
 
+  it('no second daily run within 24 h of a successful one', async () => {
+    const h = harness();
+    await h.service.init();
+    await seedSamples(150, T0 + 3_600_000);
+    h.clock.now = T0 + 5 * 3_600_000;
+    await h.service.hourly();
+    expect(h.request).toHaveBeenCalledTimes(1);
+    h.clock.now += 20 * 3_600_000;
+    await h.service.hourly();
+    expect(h.request).toHaveBeenCalledTimes(1);
+  });
+
   it('daily run skips when there are fewer than 120 samples', async () => {
     const h = harness();
     await h.service.init();
-    await h.service.accept(LEARN_TERM_VERSION);
     await seedSamples(100, T0 + 3_600_000);
     h.clock.now = T0 + 25 * 3_600_000;
     await h.service.hourly();
@@ -599,7 +464,6 @@ describe('retention and insights runs', () => {
   it('a successful daily run stores a batch and sets lastInsightsAt', async () => {
     const h = harness();
     await h.service.init();
-    await h.service.accept(LEARN_TERM_VERSION);
     await seedSamples(150, T0 + 3_600_000);
     h.clock.now = T0 + 25 * 3_600_000;
     await h.service.hourly();
@@ -610,7 +474,6 @@ describe('retention and insights runs', () => {
   it('generateNow with < 20 samples returns no-data without calling the model', async () => {
     const h = harness();
     await h.service.init();
-    await h.service.accept(LEARN_TERM_VERSION);
     await seedSamples(19);
     expect(await h.service.generateNow()).toEqual({ ok: false, code: 'no-data' });
     expect(h.request).not.toHaveBeenCalled();
@@ -626,7 +489,6 @@ describe('retention and insights runs', () => {
     );
     const h = harness({ request });
     await h.service.init();
-    await h.service.accept(LEARN_TERM_VERSION);
     await seedSamples(30);
     const first = h.service.generateNow();
     expect(await h.service.generateNow()).toEqual({ ok: false, code: 'busy' });
@@ -635,16 +497,9 @@ describe('retention and insights runs', () => {
     expect((await first).ok).toBe(true);
   });
 
-  it('generateNow without a current accept is unavailable', async () => {
-    const h = harness();
-    await h.service.init();
-    expect(await h.service.generateNow()).toEqual({ ok: false, code: 'unavailable' });
-  });
-
   it('the summary sent to the model has no secret titles or e-mails', async () => {
     const h = harness();
     await h.service.init();
-    await h.service.accept(LEARN_TERM_VERSION);
     const s = store();
     for (let i = 0; i < 30; i += 1) {
       await s.append({
@@ -666,11 +521,10 @@ describe('availability', () => {
     const h = harness({ encryption: fakeEncryption('basic_text') });
     const state = await h.service.init();
     expect(state).toMatchObject({ status: 'unavailable', unavailableReason: 'encryption' });
-    await expect(h.service.accept(LEARN_TERM_VERSION)).rejects.toThrow('LEARN_UNAVAILABLE');
+    expect(await h.service.generateNow()).toEqual({ ok: false, code: 'unavailable' });
   });
 
-  it('unavailable on linux even with a stored accept', async () => {
-    await seedConsent('1.3');
+  it('unavailable on linux', async () => {
     const h = harness({ platform: 'linux' });
     expect(await h.service.init()).toMatchObject({ status: 'unavailable', unavailableReason: 'platform' });
     await h.ticks(2);
@@ -682,17 +536,9 @@ describe('availability', () => {
     expect((await h.service.init()).titles).toBe('app-only');
   });
 
-  it('a stored v1.3 accept with enabled settings starts active after a restart', async () => {
-    await seedConsent('1.3');
-    const h = harness();
-    expect((await h.service.init()).status).toBe('active');
-    expect(h.tickTimers()).toHaveLength(1);
-  });
-
   it('dispose stops the timers and the child', async () => {
     const h = harness();
     await h.service.init();
-    await h.service.accept(LEARN_TERM_VERSION);
     await h.ticks(1);
     h.service.dispose();
     expect(h.tickTimers()).toHaveLength(0);

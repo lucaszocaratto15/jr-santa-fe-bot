@@ -9,24 +9,24 @@
  * Raw samples never cross the IPC: only state, exclusions and insights do.
  */
 
-/** Version of the binding LGPD term. A stored accept of another version pauses the feature. */
-export const LEARN_TERM_VERSION = '1.3';
-
-export type LearnStatus = 'off' | 'needs-consent' | 'active' | 'paused' | 'unavailable';
+/**
+ * Aprender is always on: there is no consent state and no off switch. Its use is covered by the
+ * Data Notice (DATA_NOTICE_VERSION), which the employee can only acknowledge.
+ */
+export type LearnStatus = 'active' | 'paused' | 'unavailable';
 
 export type LearnState = {
   status: LearnStatus;
   unavailableReason: 'encryption' | 'platform' | null;
-  /** null with status 'paused' = paused until resumed. */
+  /** End of today's pause (in memory only); null unless status is 'paused'. */
   pausedUntil: number | null;
+  /** The one pause of the local day is still unused. Once used, the control is hidden. */
+  pauseAvailable: boolean;
   /** macOS without Screen Recording permission → 'app-only'. */
   titles: 'full' | 'app-only';
   samplerError: boolean;
   /** Distinct sample hours on disk. */
   rawHours: number;
-  acceptedVersion: string | null;
-  /** ISO time of the latest accept. */
-  acceptedAt: string | null;
   lastInsightsAt: number | null;
   /** When the current 'active' stretch started (for "Aprendendo · desde 08:12"); null otherwise. */
   activeSince: number | null;

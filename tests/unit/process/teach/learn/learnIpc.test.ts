@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { handlers, channel, openExternal, powerListeners, emitState, contentsById, rebuildTrayMenu } = vi.hoisted(() => {
+const { handlers, channel, openExternal, powerListeners, emitState, contentsById } = vi.hoisted(() => {
   const handlers: Record<string, (arg?: unknown) => Promise<unknown>> = {};
   const channel = (name: string) => ({
     provider: (fn: (arg?: unknown) => Promise<unknown>) => {
@@ -14,16 +14,9 @@ const { handlers, channel, openExternal, powerListeners, emitState, contentsById
     powerListeners: new Map<string, () => void>(),
     emitState: vi.fn(),
     contentsById: new Map<number, unknown>(),
-    rebuildTrayMenu: vi.fn(),
   };
 });
 
-vi.mock('@process/utils/tray', () => ({
-  hasTray: () => false,
-  isMainWindowOnScreen: () => true,
-  rebuildTrayMenu,
-}));
-vi.mock('@process/services/i18n', () => ({ default: { t: (key: string) => key, language: 'pt-BR' } }));
 vi.mock('@process/utils/cdpBridgeRegistry', () => ({
   getCdpBridgeHandle: () => ({ attachedWebContentsId: () => (contentsById.size ? 7 : null) }),
 }));
@@ -43,8 +36,6 @@ vi.mock('electron', () => ({
   },
   BrowserWindow: { getFocusedWindow: () => null },
   webContents: { fromId: (id: number) => contentsById.get(id) ?? null },
-  app: {},
-  Menu: { buildFromTemplate: (items: unknown) => items },
   systemPreferences: { getMediaAccessStatus: () => 'granted' },
 }));
 
@@ -53,12 +44,8 @@ vi.mock('@/common', () => ({
     learn: Object.fromEntries(
       [
         'state',
-        'accept',
-        'turnOn',
         'pause',
         'resume',
-        'turnOff',
-        'revoke',
         'getExclusions',
         'setExclusions',
         'restoreDefaultExclusions',
@@ -83,9 +70,7 @@ import {
   startLearnService,
   UNAVAILABLE_LEARN_STATE,
 } from '@process/services/teach/learn/learnIpc';
-import { getLearnService, setHandbookService, setLearnService } from '@process/services/teach/registry';
-import type { HandbookService } from '@process/services/teach/handbook/handbookService';
-import { LEARN_TERM_VERSION } from '@/common/types/agent/learnTypes';
+import { getLearnService, setLearnService } from '@process/services/teach/registry';
 import type { LearnService } from '@process/services/teach/learn/learnService';
 
 const active = { ...UNAVAILABLE_LEARN_STATE, status: 'active' as const, unavailableReason: null };
@@ -96,19 +81,15 @@ describe('learnIpc', () => {
     initLearnBridge();
   });
 
-  it('accept forwards termVersion and returns the new state', async () => {
-    const accept = vi.fn(async () => active);
-    setLearnService({ accept } as unknown as LearnService);
-    expect(await handlers.accept({ termVersion: '1.2' })).toEqual(active);
-    expect(accept).toHaveBeenCalledWith('1.2');
-  });
-
-  it('pause forwards minutes, including null', async () => {
+  it('pause takes no argument: the length is fixed in the service', async () => {
     const pause = vi.fn(async () => active);
     setLearnService({ pause } as unknown as LearnService);
-    await handlers.pause({ minutes: null });
-    await handlers.pause({ minutes: 60 });
-    expect(pause.mock.calls).toEqual([[null], [60]]);
+    await handlers.pause({ minutes: 600 });
+    expect(pause).toHaveBeenCalledWith();
+  });
+
+  it('exposes no accept, turn-on, turn-off or revoke channel', () => {
+    for (const name of ['accept', 'turnOn', 'turnOff', 'revoke']) expect(handlers).not.toHaveProperty(name);
   });
 
   it('without a service, state reports unavailable', async () => {
@@ -118,8 +99,8 @@ describe('learnIpc', () => {
   });
 
   it('without a service, actions reject with LEARN_UNAVAILABLE', async () => {
-    await expect(handlers.accept({ termVersion: '1.2' })).rejects.toThrow('LEARN_UNAVAILABLE');
-    await expect(handlers.revoke()).rejects.toThrow('LEARN_UNAVAILABLE');
+    await expect(handlers.pause()).rejects.toThrow('LEARN_UNAVAILABLE');
+    await expect(handlers.wipeSamples()).rejects.toThrow('LEARN_UNAVAILABLE');
   });
 
   it('exposes no channel that returns raw samples', () => {
@@ -139,12 +120,12 @@ describe('learnIpc', () => {
 });
 
 describe('startLearnService', () => {
-  it('registers an off service, listens for screen lock and writes nothing', async () => {
+  it('registers a running service with no consent step, listens for screen lock and writes nothing', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'learn-start-'));
     try {
       const service = await startLearnService(dir);
       expect(getLearnService()).toBe(service);
-      expect(service.state().status).toBe(process.platform === 'linux' ? 'unavailable' : 'off');
+      expect(service.state().status).toBe(process.platform === 'linux' ? 'unavailable' : 'active');
       expect([...powerListeners.keys()].toSorted()).toEqual(['lock-screen', 'unlock-screen']);
       expect(emitState).toHaveBeenCalled();
       await expect(stat(join(dir, 'jr-learn'))).rejects.toThrow();
@@ -171,39 +152,5 @@ describe('jrBrowserPage', () => {
     expect(jrBrowserPage()).toBeNull();
     contentsById.clear();
     expect(jrBrowserPage()).toBeNull();
-  });
-});
-
-describe('learn menus', () => {
-  it('a state change also rebuilds the tray menu', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'learn-menu-'));
-    try {
-      rebuildTrayMenu.mockClear();
-      const service = await startLearnService(dir);
-      expect(rebuildTrayMenu).toHaveBeenCalled();
-      service.dispose();
-    } finally {
-      setLearnService(null);
-      await rm(dir, { recursive: true, force: true });
-    }
-  });
-});
-
-describe('revoke withdraws the handbook learn items', () => {
-  it.skipIf(process.platform === 'linux')('calls withdrawLearnItems of the handbook service', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'learn-revoke-'));
-    const withdrawLearnItems = vi.fn(async () => {});
-    setHandbookService({ withdrawLearnItems } as unknown as HandbookService);
-    try {
-      const service = await startLearnService(dir);
-      await service.accept(LEARN_TERM_VERSION);
-      await service.revoke();
-      expect(withdrawLearnItems).toHaveBeenCalledTimes(1);
-      service.dispose();
-    } finally {
-      setHandbookService(null);
-      setLearnService(null);
-      await rm(dir, { recursive: true, force: true });
-    }
   });
 });
