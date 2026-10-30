@@ -5,11 +5,12 @@
  */
 
 /**
- * "Manual da função" in main: builds the employee's drafts (taught tasks always; observed
- * activities and weekly indicators only with the current Aprender consent), publishes the
- * items the employee approves, and remembers what was published or dismissed in
- * `userData/jr-handbook/state.json`. Screenshots are read from disk only to publish them to
- * the company server or to show them to the employee; they never go to the model.
+ * "Manual da função" in main: builds the employee's items (taught tasks, observed activities and
+ * weekly indicators) and publishes every new or changed one automatically on each sync. The
+ * employee reviews afterwards: edit a published item (the edit is republished, sanitized) or hide
+ * it (withdrawn and not republished until its source changes). State lives in
+ * `userData/jr-handbook/state.json`. Screenshots are read from disk only to publish them to the
+ * company server or to show them to the employee; they never go to the model.
  */
 
 import { randomUUID } from 'node:crypto';
@@ -20,6 +21,7 @@ import type {
   HandbookDraft,
   HandbookDraftBody,
   HandbookDraftsResult,
+  HandbookHidden,
   HandbookFrequency,
   HandbookIndicatorsBody,
   HandbookKind,
@@ -30,7 +32,7 @@ import type {
   HandbookView,
 } from '@/common/types/agent/handbookTypes';
 import type { Lesson } from '@/common/types/agent/lessonTypes';
-import { LEARN_TERM_VERSION, type LearnInsightBatch } from '@/common/types/agent/learnTypes';
+import type { LearnInsightBatch } from '@/common/types/agent/learnTypes';
 import type { HandbookClient } from '@process/services/jr/handbookClient';
 import type { LearnService } from '../learn/learnService';
 import { TAUGHT_SKILL_NAME_RE } from '../recording/skillDraft';
@@ -57,16 +59,29 @@ const SHOT_FILE_RE = /^(\d{1,3})\.jpg$/;
  * Steps past the budget are published as text only.
  */
 export const MAX_PUBLISH_MEDIA_BYTES = 4 * 1024 * 1024;
-/** Retry interval of a pending learn-items withdrawal. */
-export const WITHDRAW_RETRY_MS = 3_600_000;
+/** Interval of the background sync (auto-publish and pending withdrawal retry). */
+export const SYNC_INTERVAL_MS = 3_600_000;
+/** Errors that make the rest of a sync pointless (offline, no role, no permission): retried next sync. */
+const STOP_SYNC_RE = /(^|\W)(unavailable|no_role|forbidden)$/;
 
-type PublishedEntry = { itemId: string; hash: string; kind: HandbookKind; source: HandbookSource; title: string };
+type PublishedEntry = {
+  itemId: string;
+  /** Hash of the source the item was published from (not of the employee's edit). */
+  hash: string;
+  kind: HandbookKind;
+  source: HandbookSource;
+  title: string;
+  /** The employee's edit of an activity, reopened by the editor until the source changes. */
+  edited?: HandbookActivityBody;
+  keepShots?: number[];
+};
 type HandbookState = {
   published: Record<string, PublishedEntry>;
+  /** Hidden items: key → source hash at the time. Hidden until the hash changes. */
   dismissed: Record<string, string>;
   /**
    * Set when an Aprender revoke could not reach the server. Retried at startup, when the
-   * login is restored, hourly while set, and on the next drafts/mine call.
+   * login is restored, every sync interval while set, and on the next drafts/mine call.
    */
   pendingWithdrawLearn?: boolean;
 };
@@ -85,18 +100,28 @@ export type HandbookServiceDeps = {
   now?: () => number;
   /** Raw image budget of one publish (default MAX_PUBLISH_MEDIA_BYTES). */
   maxPublishMediaBytes?: number;
+  /** Called once per sync that auto-published something (the "Seu Manual foi atualizado" notice). */
+  onPublished?: (count: number) => void;
 };
 
 export type HandbookService = {
   drafts(): Promise<HandbookDraftsResult>;
+  /** Save the employee's edit of an item: republished with the edited body (sanitized). */
   publish(key: string, edited: HandbookDraftBody, keepShots: number[]): Promise<void>;
-  dismiss(key: string): Promise<void>;
+  /** Hide a published item: withdrawn now and not republished until its source changes. */
+  hide(key: string): Promise<void>;
+  /** Show a hidden item again: published on the spot when possible, otherwise on the next sync. */
+  unhide(key: string): Promise<void>;
   withdraw(itemId: string): Promise<void>;
+  /** Publish every new or changed item. Silent on failure; returns how many items were published. */
+  syncPublish(): Promise<number>;
+  /** Fire-and-forget sync (after a teach save, a restored login...). */
+  requestSync(): void;
   withdrawLearnItems(): Promise<void>;
   /** Retry a pending learn-items withdrawal now (no-op when none is pending). */
   retryPendingWithdraw(): Promise<void>;
-  /** Retry a pending withdrawal now and every `intervalMs` while one stays pending. Returns a stop function. */
-  startWithdrawRetries(intervalMs?: number): () => void;
+  /** Sync now and every `intervalMs`: retry a pending withdrawal, then auto-publish. Returns a stop function. */
+  startSync(intervalMs?: number): () => void;
   mine(): Promise<HandbookView>;
   media(id: string): Promise<string>;
   draftShot(key: string, shot: number): Promise<string>;
@@ -212,8 +237,6 @@ export function createHandbookService(deps: HandbookServiceDeps): HandbookServic
     return run;
   };
 
-  const learnAllowed = (): boolean => deps.learn()?.state().acceptedVersion === LEARN_TERM_VERSION;
-
   const listShots = async (dirs: string[]): Promise<{ dir: string | null; shots: number[] }> => {
     for (const dir of dirs) {
       try {
@@ -261,7 +284,6 @@ export function createHandbookService(deps: HandbookServiceDeps): HandbookServic
   };
 
   const learnDrafts = async (): Promise<SourceDraft[]> => {
-    if (!learnAllowed()) return [];
     const service = deps.learn();
     if (!service) return [];
     const batches = await service.listInsights().catch((): LearnInsightBatch[] => []);
@@ -303,39 +325,20 @@ export function createHandbookService(deps: HandbookServiceDeps): HandbookServic
     }
   };
 
-  let retryIntervalMs: number | null = null;
-  let retryTimer: ReturnType<typeof setInterval> | null = null;
   let retrying: Promise<void> | null = null;
-
-  const disarmRetry = () => {
-    if (retryTimer) clearInterval(retryTimer);
-    retryTimer = null;
-  };
-
-  const armRetry = () => {
-    if (retryIntervalMs === null || retryTimer) return;
-    retryTimer = setInterval(() => {
-      void retryPendingWithdraw();
-    }, retryIntervalMs);
-    retryTimer.unref?.();
-  };
+  let syncing: Promise<number> | null = null;
 
   const retryPendingWithdraw = (): Promise<void> => {
     if (retrying) return retrying;
     retrying = (async () => {
       const state = await loadState();
-      if (!state.pendingWithdrawLearn) {
-        disarmRetry();
-        return;
-      }
+      if (!state.pendingWithdrawLearn) return;
       try {
         await deps.client.withdrawLearn();
       } catch {
-        // Still offline, blocked or outside hours: the hourly timer tries again.
-        armRetry();
+        // Still offline, blocked or outside hours: the next sync tries again.
         return;
       }
-      disarmRetry();
       await updateState(clearLearnLocal);
     })().finally(() => {
       retrying = null;
@@ -346,7 +349,6 @@ export function createHandbookService(deps: HandbookServiceDeps): HandbookServic
   const findSource = async (key: string): Promise<SourceDraft> => {
     const source = (await sources()).find((draft) => draft.key === key);
     if (!source) throw new Error('not_found');
-    if (source.source === 'learn' && !learnAllowed()) throw new Error('needs_consent');
     return source;
   };
 
@@ -362,81 +364,154 @@ export function createHandbookService(deps: HandbookServiceDeps): HandbookServic
     }
   };
 
+  const titleOf = (source: Pick<SourceDraft, 'kind' | 'body'>): string =>
+    source.kind === 'activity'
+      ? (source.body as HandbookActivityBody).title
+      : (source.body as HandbookIndicatorsBody).weekStart;
+
+  /**
+   * Send one item to the company server. Nothing is stored locally unless the server accepted
+   * it (no_role, offline...). `keepShots` are the screenshots that go along.
+   */
+  const publishSource = async (
+    source: SourceDraft,
+    edited: unknown,
+    keepShots: number[],
+    remember: { edited: boolean }
+  ): Promise<void> => {
+    const state = await loadState();
+    const itemId = state.published[source.key]?.itemId ?? randomUUID();
+    const hash = draftHash(source.body, source.shots);
+    let body: object;
+    const media: Array<{ id: string; base64: string }> = [];
+    let activity: HandbookActivityBody | null = null;
+    if (source.kind === 'activity') {
+      activity = sanitizeActivity(edited, source.body as HandbookActivityBody);
+      const keep = new Set(keepShots.filter((n) => source.shots.includes(n)));
+      const images = await Promise.all(
+        activity.steps.map((step) =>
+          step.shot !== undefined && keep.has(step.shot) ? readShot(source.shotsDir, step.shot) : null
+        )
+      );
+      // Media ids are assigned in step order once every file is read, within the budget.
+      const budget = deps.maxPublishMediaBytes ?? MAX_PUBLISH_MEDIA_BYTES;
+      let mediaBytes = 0;
+      const steps = activity.steps.map((step, index) => {
+        const data = images[index];
+        if (!data || mediaBytes + data.length > budget) return { text: step.text };
+        mediaBytes += data.length;
+        const mediaId = randomUUID();
+        media.push({ id: mediaId, base64: data.toString('base64') });
+        return { text: step.text, mediaId };
+      });
+      body = { ...activity, steps };
+    } else {
+      body = sanitizeIndicators(edited, source.body as HandbookIndicatorsBody);
+    }
+    await deps.client.publish({ id: itemId, kind: source.kind, source: source.source, body, media });
+    const entry: PublishedEntry = {
+      itemId,
+      hash,
+      kind: source.kind,
+      source: source.source,
+      title: titleOf(source),
+    };
+    if (remember.edited && activity) {
+      entry.edited = activity;
+      entry.keepShots = [...keepShots];
+    }
+    await updateState((next) => {
+      next.published[source.key] = entry;
+      delete next.dismissed[source.key];
+    });
+  };
+
+  const runSync = async (notify: boolean): Promise<number> => {
+    let count = 0;
+    try {
+      const state = await loadState();
+      for (const source of await sources()) {
+        const hash = draftHash(source.body, source.shots);
+        if (state.published[source.key]?.hash === hash || state.dismissed[source.key] === hash) continue;
+        try {
+          // eslint-disable-next-line no-await-in-loop -- one upload at a time
+          await publishSource(source, source.body, source.shots, { edited: false });
+          count += 1;
+        } catch (error) {
+          // Offline / no role / no permission: stop and retry next sync. Anything else only skips the item.
+          if (STOP_SYNC_RE.test((error instanceof Error ? error.message : String(error)).trim())) break;
+        }
+      }
+    } catch {
+      // A sync never throws: whatever is left is retried next time.
+    }
+    if (count > 0 && notify) deps.onPublished?.(count);
+    return count;
+  };
+
+  const syncPublish = (notify = true): Promise<number> => {
+    if (syncing) return syncing;
+    syncing = runSync(notify).finally(() => {
+      syncing = null;
+    });
+    return syncing;
+  };
+
+  let syncTimer: ReturnType<typeof setInterval> | null = null;
+
   return {
     async drafts() {
       await retryPendingWithdraw();
       const state = await loadState();
       const payload = await deps.client.mine();
-      const drafts: HandbookDraft[] = [];
-      for (const source of await sources()) {
-        const hash = draftHash(source.body, source.shots);
-        const published = state.published[source.key];
-        if (published?.hash === hash || state.dismissed[source.key] === hash) continue;
-        const { shotsDir: _dir, ...draft } = source;
-        drafts.push({
-          ...draft,
-          hash,
-          publishedItemId: published?.itemId ?? null,
-          status: published ? 'changed' : 'new',
-        });
+      const bySource = new Map((await sources()).map((source) => [source.key, source]));
+      const published: HandbookPublished[] = Object.entries(state.published).map(([key, entry]) => {
+        const source = bySource.get(key);
+        const hash = source ? draftHash(source.body, source.shots) : entry.hash;
+        const { shotsDir: _dir, ...rest } = source ?? ({} as SourceDraft);
+        const edited = entry.edited && entry.hash === hash ? entry.edited : null;
+        return {
+          key,
+          itemId: entry.itemId,
+          kind: entry.kind,
+          title: entry.title,
+          draft: source ? { ...rest, body: edited ?? source.body, hash, publishedItemId: entry.itemId } : null,
+        };
+      });
+      const hidden: HandbookHidden[] = [];
+      for (const [key, hiddenHash] of Object.entries(state.dismissed)) {
+        const source = bySource.get(key);
+        if (source && draftHash(source.body, source.shots) === hiddenHash) {
+          hidden.push({ key, kind: source.kind, title: titleOf(source) });
+        }
       }
-      const published: HandbookPublished[] = Object.entries(state.published).map(([key, entry]) => ({
-        key,
-        itemId: entry.itemId,
-        kind: entry.kind,
-        title: entry.title,
-      }));
-      return { role: payload.role, drafts, published };
+      return { role: payload.role, published, hidden };
     },
 
     async publish(key, edited, keepShots) {
       const source = await findSource(key);
+      await publishSource(source, edited, keepShots, { edited: true });
+    },
+
+    async hide(key) {
       const state = await loadState();
-      const itemId = state.published[key]?.itemId ?? randomUUID();
-      const hash = draftHash(source.body, source.shots);
-      let body: object;
-      const media: Array<{ id: string; base64: string }> = [];
-      let title: string;
-      if (source.kind === 'activity') {
-        const activity = sanitizeActivity(edited, source.body as HandbookActivityBody);
-        const keep = new Set(keepShots.filter((n) => source.shots.includes(n)));
-        const images = await Promise.all(
-          activity.steps.map((step) =>
-            step.shot !== undefined && keep.has(step.shot) ? readShot(source.shotsDir, step.shot) : null
-          )
-        );
-        // Media ids are assigned in step order once every file is read, within the budget.
-        const budget = deps.maxPublishMediaBytes ?? MAX_PUBLISH_MEDIA_BYTES;
-        let mediaBytes = 0;
-        const steps = activity.steps.map((step, index) => {
-          const data = images[index];
-          if (!data || mediaBytes + data.length > budget) return { text: step.text };
-          mediaBytes += data.length;
-          const mediaId = randomUUID();
-          media.push({ id: mediaId, base64: data.toString('base64') });
-          return { text: step.text, mediaId };
-        });
-        body = { ...activity, steps };
-        title = activity.title;
-      } else {
-        body = sanitizeIndicators(edited, source.body as HandbookIndicatorsBody);
-        title = (source.body as HandbookIndicatorsBody).weekStart;
-      }
-      // Nothing is stored locally unless the server accepted the item (no_role, offline...).
-      await deps.client.publish({ id: itemId, kind: source.kind, source: source.source, body, media });
+      const entry = state.published[key];
+      const source = (await sources()).find((draft) => draft.key === key);
+      if (!entry && !source) return;
+      const hash = source ? draftHash(source.body, source.shots) : (entry?.hash ?? '');
+      if (entry) await deps.client.remove(entry.itemId);
       await updateState((next) => {
-        next.published[key] = { itemId, hash, kind: source.kind, source: source.source, title };
-        delete next.dismissed[key];
+        delete next.published[key];
+        next.dismissed[key] = hash;
       });
     },
 
-    async dismiss(key) {
-      const source = (await sources()).find((draft) => draft.key === key);
-      if (!source) return;
-      const hash = draftHash(source.body, source.shots);
+    async unhide(key) {
       await updateState((state) => {
-        state.dismissed[key] = hash;
+        delete state.dismissed[key];
       });
+      // Not announced: the employee just asked for it. An offline failure is retried next sync.
+      await syncPublish(false);
     },
 
     async withdraw(itemId) {
@@ -455,21 +530,32 @@ export function createHandbookService(deps: HandbookServiceDeps): HandbookServic
         await updateState((state) => {
           state.pendingWithdrawLearn = true;
         });
-        armRetry();
         throw error;
       }
-      disarmRetry();
       await updateState(clearLearnLocal);
     },
 
     retryPendingWithdraw: () => retryPendingWithdraw(),
 
-    startWithdrawRetries(intervalMs = WITHDRAW_RETRY_MS) {
-      retryIntervalMs = intervalMs;
-      void retryPendingWithdraw();
+    syncPublish: () => syncPublish(),
+
+    requestSync() {
+      void syncPublish();
+    },
+
+    startSync(intervalMs = SYNC_INTERVAL_MS) {
+      const tick = () => {
+        void retryPendingWithdraw()
+          .catch(() => {})
+          .then(() => syncPublish());
+      };
+      tick();
+      if (syncTimer) clearInterval(syncTimer);
+      syncTimer = setInterval(tick, intervalMs);
+      syncTimer.unref?.();
       return () => {
-        retryIntervalMs = null;
-        disarmRetry();
+        if (syncTimer) clearInterval(syncTimer);
+        syncTimer = null;
       };
     },
 

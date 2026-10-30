@@ -864,37 +864,26 @@
       }
     },
     "handbook": {
-      "title": "Role handbook",
+      "title": "Your Handbook",
       "roleLabel": "Role: {{role}}",
-      "visibleNotice": "What you approve becomes visible to your manager and to whoever holds your role in the future.",
+      "visibleNotice": "What is in your Handbook is visible to your manager and to whoever holds your role.",
       "peerRolesTitle": "Handbooks from your area",
       "peerRolesHint": "Activities of other roles held by people in your areas. Read only.",
       "peerRoleActivities": "{{count}} activities",
       "noRole": "Your role is not registered. Ask the administrator to register it.",
       "unavailable": "Available only with the company server.",
       "loadFailed": "Could not load the role handbook.",
-      "draftsTitle": "Drafts to review",
-      "noDrafts": "No drafts to review right now.",
-      "publishedTitle": "In the handbook (approved by you)",
-      "noPublished": "You have not approved any item yet.",
-      "kindTaught": "Activity · {{title}} (taught task)",
-      "kindLearn": "Activity · {{title}} (observed)",
+      "publishedTitle": "In your Handbook",
+      "noPublished": "Your Handbook has no items yet. They show up here as you work.",
       "kindIndicators": "Indicators for the week of {{week}}",
-      "changed": "Update",
-      "stepsCount": "{{steps}} steps · {{shots}} screens",
-      "review": "Review",
-      "dismiss": "Discard",
       "view": "View",
-      "withdraw": "Withdraw",
-      "withdrawConfirm": "Remove this item from the role handbook now?",
-      "withdrawn": "Item removed from the handbook",
       "frequency": {
         "daily": "Daily",
         "weekly": "Weekly",
         "occasional": "Occasional"
       },
       "editor": {
-        "title": "Review handbook item",
+        "title": "Edit handbook item",
         "fieldTitle": "Title",
         "fieldDescription": "Description",
         "fieldFrequency": "Frequency",
@@ -905,11 +894,8 @@
         "confirmBefore": "Confirm before (one per line)",
         "preview": "Flowchart preview",
         "indicatorsHint": "Your time and frequency for the week. In the handbook they only appear as the role average.",
-        "approve": "Approve and publish to the handbook",
-        "confirmTitle": "Publish to the role handbook?",
-        "confirmBody": "This item will be visible to your manager and to whoever holds your role. Publish?",
-        "publish": "Publish",
-        "published": "Published to the handbook"
+        "save": "Save changes",
+        "saved": "Changes saved"
       },
       "errors": {
         "no_role": "Your role is not registered. Ask the administrator to register it.",
@@ -952,7 +938,15 @@
         "title": "Role handbook",
         "close": "Close",
         "loadFailed": "Could not open the role handbook."
-      }
+      },
+      "reviewHint": "Your Handbook updates itself from your work. Review it if you like: edit or hide anything that should not appear.",
+      "edit": "Edit",
+      "hide": "Hide",
+      "hideConfirm": "Hide this item? It leaves the role handbook and only comes back if the task changes.",
+      "hidden": "Item hidden",
+      "hiddenTitle": "Hidden items",
+      "unhide": "Show again",
+      "updatedNotice": "Your Handbook was updated — review it if you like"
     },
     "dataNotice": {
       "title": "Aviso de uso de dados",

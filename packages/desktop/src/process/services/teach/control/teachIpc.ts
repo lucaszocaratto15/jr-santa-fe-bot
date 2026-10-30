@@ -6,7 +6,7 @@
 
 import { ipcBridge } from '@/common';
 import type { Lesson } from '@/common/types/agent/lessonTypes';
-import { getSecureInputBroker, getTeachServices, getTeachSession } from '../registry';
+import { getHandbookService, getSecureInputBroker, getTeachServices, getTeachSession } from '../registry';
 import { getSkillsDir } from '@process/utils/initStorage';
 import { TEACH_ERRORS } from '../recording/teachSession';
 import { readTaughtTask, writeTaughtTask } from '../recording/taskSkillFile';
@@ -61,18 +61,25 @@ export function initTeachBridge(): void {
   ipcBridge.teach.resume.provider(async () => requireSession().resume());
   ipcBridge.teach.stop.provider(async () => requireSession().stop());
   ipcBridge.teach.discard.provider(async () => requireSession().discard());
-  ipcBridge.teach.saveDraft.provider(async (input) => requireSession().saveDraft(input));
+  ipcBridge.teach.saveDraft.provider(async (input) => {
+    const saved = await requireSession().saveDraft(input);
+    // A new taught task goes to the role handbook on its own.
+    getHandbookService()?.requestSync();
+    return saved;
+  });
   ipcBridge.teach.takeOver.provider(async ({ on }) => requireSession().takeOver(on));
   ipcBridge.teach.takeOverState.provider(async () => getTeachSession()?.takeOverState() ?? { on: false });
   ipcBridge.teach.readTask.provider(async ({ name }) => {
     const task = await readTaughtTask(await userSkillsDir(), name);
     return { ...task, body: stripTaskLessons(task.body) };
   });
-  ipcBridge.teach.saveTask.provider(async (input) =>
-    writeTaughtTask(await userSkillsDir(), {
+  ipcBridge.teach.saveTask.provider(async (input) => {
+    const saved = await writeTaughtTask(await userSkillsDir(), {
       ...input,
       // Editing a task never depends on the lesson store being readable.
       body: withTaskLessons(input.body, await activeLessonsFor(input.name).catch((): Lesson[] => [])),
-    })
-  );
+    });
+    getHandbookService()?.requestSync();
+    return saved;
+  });
 }

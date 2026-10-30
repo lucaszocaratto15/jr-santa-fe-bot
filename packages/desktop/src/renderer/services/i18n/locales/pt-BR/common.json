@@ -864,37 +864,26 @@
       }
     },
     "handbook": {
-      "title": "Manual da função",
+      "title": "Seu Manual",
       "roleLabel": "Cargo: {{role}}",
-      "visibleNotice": "O que você aprovar fica visível para o seu gestor e para quem ocupar o seu cargo no futuro.",
+      "visibleNotice": "O que está no seu Manual fica visível para o seu gestor e para quem ocupar o seu cargo.",
       "peerRolesTitle": "Manuais da sua área",
       "peerRolesHint": "Atividades de outras funções ocupadas por pessoas das suas áreas. Somente leitura.",
       "peerRoleActivities": "{{count}} atividades",
       "noRole": "Seu cargo não está cadastrado. Peça ao administrador para cadastrá-lo.",
       "unavailable": "Disponível só com o servidor da empresa.",
       "loadFailed": "Não foi possível carregar o Manual da função.",
-      "draftsTitle": "Rascunhos para revisar",
-      "noDrafts": "Nenhum rascunho para revisar agora.",
-      "publishedTitle": "No manual (aprovados por você)",
-      "noPublished": "Você ainda não aprovou nenhum item.",
-      "kindTaught": "Atividade · {{title}} (tarefa ensinada)",
-      "kindLearn": "Atividade · {{title}} (observada)",
+      "publishedTitle": "No seu Manual",
+      "noPublished": "Ainda não há itens no seu Manual. Eles aparecem aqui conforme você trabalha.",
       "kindIndicators": "Indicadores da semana de {{week}}",
-      "changed": "Atualizar",
-      "stepsCount": "{{steps}} passos · {{shots}} telas",
-      "review": "Revisar",
-      "dismiss": "Descartar",
       "view": "Ver",
-      "withdraw": "Retirar",
-      "withdrawConfirm": "Retirar este item do manual do cargo agora?",
-      "withdrawn": "Item retirado do manual",
       "frequency": {
         "daily": "Diária",
         "weekly": "Semanal",
         "occasional": "Eventual"
       },
       "editor": {
-        "title": "Revisar item do manual",
+        "title": "Editar item do manual",
         "fieldTitle": "Título",
         "fieldDescription": "Descrição",
         "fieldFrequency": "Frequência",
@@ -905,11 +894,8 @@
         "confirmBefore": "Confirmar antes de (um por linha)",
         "preview": "Prévia do fluxograma",
         "indicatorsHint": "Seu tempo e sua frequência na semana. No manual eles só aparecem como média do cargo.",
-        "approve": "Aprovar e publicar no manual",
-        "confirmTitle": "Publicar no manual do cargo?",
-        "confirmBody": "Este item ficará visível para o seu gestor e para quem ocupar o seu cargo. Publicar?",
-        "publish": "Publicar",
-        "published": "Publicado no manual"
+        "save": "Salvar alterações",
+        "saved": "Alterações salvas"
       },
       "errors": {
         "no_role": "Seu cargo não está cadastrado. Peça ao administrador para cadastrá-lo.",
@@ -952,7 +938,15 @@
         "title": "Manual da função",
         "close": "Fechar",
         "loadFailed": "Não foi possível abrir o Manual da função."
-      }
+      },
+      "reviewHint": "Seu Manual é atualizado sozinho com o seu trabalho. Revise se quiser: edite ou oculte o que não deve aparecer.",
+      "edit": "Editar",
+      "hide": "Ocultar",
+      "hideConfirm": "Ocultar este item? Ele sai do manual do cargo e só volta se a tarefa mudar.",
+      "hidden": "Item ocultado",
+      "hiddenTitle": "Itens ocultos",
+      "unhide": "Mostrar de novo",
+      "updatedNotice": "Seu Manual foi atualizado — revise se quiser"
     },
     "dataNotice": {
       "title": "Aviso de uso de dados",

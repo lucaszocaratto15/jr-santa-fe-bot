@@ -60,8 +60,8 @@ const DraftShot: React.FC<{ draftKey: string; shot: number; onRemove: () => void
 };
 
 /**
- * Review of one draft. Only "Aprovar e publicar no manual", after a confirmation that names who
- * will see the item, sends it to the company server. Nothing waits for a manager.
+ * Edit of one published item. "Salvar alterações" republishes the edited item (the item is
+ * already in the handbook; nothing waits for a manager).
  */
 const HandbookDraftEditor: React.FC<HandbookDraftEditorProps> = ({ draft, onDone }) => {
   const { t } = useTranslation();
@@ -73,7 +73,6 @@ const HandbookDraftEditor: React.FC<HandbookDraftEditorProps> = ({ draft, onDone
     isActivity ? (draft.body as HandbookActivityBody).confirmBefore.join('\n') : ''
   );
   const [preview, setPreview] = useState('');
-  const [confirming, setConfirming] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -128,11 +127,9 @@ const HandbookDraftEditor: React.FC<HandbookDraftEditorProps> = ({ draft, onDone
         body: edited ?? (draft.body as HandbookIndicatorsBody),
         keepShots,
       });
-      Message.success(t('common.jr.handbook.editor.published'));
-      setConfirming(false);
+      Message.success(t('common.jr.handbook.editor.saved'));
       onDone();
     } catch (failure) {
-      setConfirming(false);
       setError(t(handbookErrorKey(failure)));
     } finally {
       setPublishing(false);
@@ -152,9 +149,9 @@ const HandbookDraftEditor: React.FC<HandbookDraftEditorProps> = ({ draft, onDone
           shape='round'
           loading={publishing}
           disabled={edited !== null && !edited.title.trim()}
-          onClick={() => setConfirming(true)}
+          onClick={() => void publish()}
         >
-          {t('common.jr.handbook.editor.approve')}
+          {t('common.jr.handbook.editor.save')}
         </Button>
       }
     >
@@ -257,21 +254,6 @@ const HandbookDraftEditor: React.FC<HandbookDraftEditorProps> = ({ draft, onDone
           </>
         )}
       </div>
-      <Modal
-        visible={confirming}
-        title={t('common.jr.handbook.editor.confirmTitle')}
-        onCancel={() => setConfirming(false)}
-        footer={[
-          <Button key='cancel' shape='round' disabled={publishing} onClick={() => setConfirming(false)}>
-            {t('common.cancel')}
-          </Button>,
-          <Button key='publish' type='primary' shape='round' loading={publishing} onClick={() => void publish()}>
-            {t('common.jr.handbook.editor.publish')}
-          </Button>,
-        ]}
-      >
-        <p>{t('common.jr.handbook.editor.confirmBody')}</p>
-      </Modal>
     </Modal>
   );
 };

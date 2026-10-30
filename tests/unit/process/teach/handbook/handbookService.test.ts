@@ -76,6 +76,7 @@ async function setup(
     maxPublishMediaBytes?: number;
     lessons?: Lesson[];
     lessonsFor?: (skill: string) => Promise<Lesson[]>;
+    onPublished?: (count: number) => void;
   } = {}
 ) {
   const root = await mkdtemp(join(tmpdir(), 'jr-handbook-'));
@@ -86,17 +87,20 @@ async function setup(
   await Promise.all([1, 2, 3].map((n) => writeFile(join(skillsDir, SKILL, 'telas', `${n}.jpg`), `jpeg-${n}`)));
   await mkdir(join(skillsDir, 'outra-skill'), { recursive: true });
   const fake = fakeClient(options.client);
-  const learn = learnWith(options.accepted === undefined ? null : options.accepted);
+  // Without `accepted` there is no Aprender service at all; with it, the value must not gate anything.
+  const learn = learnWith(options.accepted ?? null);
+  const learnService = options.accepted === undefined ? null : learn;
   const stateFile = join(root, 'jr-handbook', 'state.json');
   const service = createHandbookService({
     client: fake.client,
     skillsDir: async () => skillsDir,
     shotsDirs: (skill, dir) => [join(dir, skill, 'telas')],
-    learn: () => learn,
+    learn: () => learnService,
     ...(options.lessons ? { lessonsFor: async () => options.lessons ?? [] } : {}),
     ...(options.lessonsFor ? { lessonsFor: options.lessonsFor } : {}),
     stateFile,
     now: () => NOW,
+    ...(options.onPublished ? { onPublished: options.onPublished } : {}),
     ...(options.maxPublishMediaBytes === undefined ? {} : { maxPublishMediaBytes: options.maxPublishMediaBytes }),
   });
   return { service, ...fake, learn, stateFile, skillsDir };
@@ -104,59 +108,189 @@ async function setup(
 
 const taughtKey = `taught:${SKILL}`;
 
-describe('handbook service drafts', () => {
-  it('lists the taught task as an activity draft with its screenshots', async () => {
-    const { service } = await setup();
-    const { drafts, role: current } = await service.drafts();
-    expect(current).toEqual(role);
-    expect(drafts.map((draft) => draft.key)).toEqual([taughtKey]);
-    expect(drafts[0].shots).toEqual([1, 2, 3]);
-    expect(drafts[0].status).toBe('new');
-  });
+const itemOf = async (service: Awaited<ReturnType<typeof setup>>['service'], key: string) =>
+  (await service.drafts()).published.find((entry) => entry.key === key);
 
-  it(`learn drafts are absent unless Aprender accepted version is ${LEARN_TERM_VERSION}`, async () => {
-    for (const accepted of [null, '1.2']) {
-      // eslint-disable-next-line no-await-in-loop
-      const { service, learn } = await setup({ accepted });
-      // eslint-disable-next-line no-await-in-loop
-      const { drafts } = await service.drafts();
-      expect(drafts.every((draft) => draft.source === 'taught')).toBe(true);
-      expect(learn.listInsights).not.toHaveBeenCalled();
-    }
-    const { service } = await setup({ accepted: LEARN_TERM_VERSION });
-    const keys = (await service.drafts()).drafts.map((draft) => draft.key);
-    expect(keys).toContain('learn:conferir banco');
-    expect(keys).toContain('indicators:2026-10-26');
-  });
+const itemBody = async (service: Awaited<ReturnType<typeof setup>>['service']) =>
+  (await itemOf(service, taughtKey))?.draft?.body;
 
-  it('a learn draft cannot be published without the current consent', async () => {
-    const { service, client } = await setup({ accepted: '1.2' });
-    await expect(service.publish('learn:conferir banco', {} as HandbookActivityBody, [])).rejects.toThrow();
-    expect(client.publish).not.toHaveBeenCalled();
-  });
-
-  it('a published draft with an unchanged hash is hidden; a changed source shows status changed', async () => {
-    const { service, published, skillsDir } = await setup();
-    const [draft] = (await service.drafts()).drafts;
-    await service.publish(taughtKey, draft.body, draft.shots);
-    expect((await service.drafts()).drafts).toEqual([]);
-    expect((await service.drafts()).published).toEqual([
-      { key: taughtKey, itemId: published[0].id, kind: 'activity', title: 'Lança a nota fiscal' },
+describe('handbook service automatic publishing', () => {
+  it('publishes a new taught task without any user action, with all its screenshots', async () => {
+    const { service, published, client } = await setup();
+    await expect(service.syncPublish()).resolves.toBe(1);
+    expect(client.publish).toHaveBeenCalledTimes(1);
+    const [input] = published;
+    expect(input.kind).toBe('activity');
+    expect(input.source).toBe('taught');
+    expect(input.media.map((media) => Buffer.from(media.base64, 'base64').toString())).toEqual([
+      'jpeg-1',
+      'jpeg-2',
+      'jpeg-3',
     ]);
+    expect(JSON.stringify(input.body)).not.toContain('"shot"');
+    expect(await itemOf(service, taughtKey)).toMatchObject({ itemId: input.id, kind: 'activity' });
+    expect((await service.drafts()).role).toEqual(role);
+  });
+
+  it('does not republish an unchanged item and republishes a changed source under the same id', async () => {
+    const { service, published, skillsDir } = await setup();
+    await service.syncPublish();
+    await expect(service.syncPublish()).resolves.toBe(0);
+    expect(published).toHaveLength(1);
     await writeFile(join(skillsDir, SKILL, 'SKILL.md'), SKILL_MD.replace('3. Emitir', '3. Emitir a nota'));
-    const [changed] = (await service.drafts()).drafts;
-    expect(changed.status).toBe('changed');
-    expect(changed.publishedItemId).toBe(published[0].id);
-    await service.publish(taughtKey, changed.body, []);
+    await expect(service.syncPublish()).resolves.toBe(1);
+    expect(published).toHaveLength(2);
     expect(published[1].id).toBe(published[0].id);
   });
 
-  it('dismissed draft returns when its hash changes', async () => {
-    const { service, skillsDir } = await setup();
-    await service.dismiss(taughtKey);
-    expect((await service.drafts()).drafts).toEqual([]);
+  it('publishes observed items and indicators without any Aprender consent gate', async () => {
+    for (const accepted of [null, '1.2', LEARN_TERM_VERSION]) {
+      // eslint-disable-next-line no-await-in-loop
+      const { service, published } = await setup({ accepted });
+      // eslint-disable-next-line no-await-in-loop
+      await service.syncPublish();
+      expect(published.map((input) => input.source)).toEqual(['taught', 'learn', 'learn']);
+      expect(published.map((input) => input.kind)).toEqual(['activity', 'activity', 'indicators']);
+    }
+  });
+
+  it('notifies once per sync that published something, and stays silent otherwise', async () => {
+    const onPublished = vi.fn();
+    const { service } = await setup({ onPublished, accepted: null });
+    await service.syncPublish();
+    expect(onPublished).toHaveBeenCalledTimes(1);
+    expect(onPublished).toHaveBeenCalledWith(3);
+    await service.syncPublish();
+    expect(onPublished).toHaveBeenCalledTimes(1);
+  });
+
+  it('offline: nothing is stored, the sync does not throw and the next sync retries', async () => {
+    let offline = true;
+    const publish = vi.fn(async (input: HandbookPublishInput) => {
+      if (offline) throw new Error('unavailable');
+      return { id: input.id };
+    });
+    const onPublished = vi.fn();
+    const { service, stateFile } = await setup({ client: { publish }, onPublished, accepted: null });
+    await expect(service.syncPublish()).resolves.toBe(0);
+    // Offline stops the sync at the first item instead of timing out on every one.
+    expect(publish).toHaveBeenCalledTimes(1);
+    expect(onPublished).not.toHaveBeenCalled();
+    await expect(readFile(stateFile, 'utf8')).rejects.toThrow();
+    offline = false;
+    await expect(service.syncPublish()).resolves.toBe(3);
+    expect(onPublished).toHaveBeenCalledWith(3);
+  });
+
+  it('no_role is silent too and an item that fails otherwise does not block the rest', async () => {
+    const noRole = await setup({
+      client: {
+        publish: vi.fn(async () => {
+          throw new Error('no_role');
+        }),
+      },
+    });
+    await expect(noRole.service.syncPublish()).resolves.toBe(0);
+    expect(noRole.client.publish).toHaveBeenCalledTimes(1);
+    const tooLarge = await setup({
+      accepted: null,
+      client: {
+        publish: vi.fn(async (input: HandbookPublishInput) => {
+          if (input.source === 'taught') throw new Error('too_large');
+          return { id: input.id };
+        }),
+      },
+    });
+    await expect(tooLarge.service.syncPublish()).resolves.toBe(2);
+  });
+
+  it('concurrent syncs share one run', async () => {
+    const { service, client } = await setup({ accepted: null });
+    const counts = await Promise.all([service.syncPublish(), service.syncPublish()]);
+    expect(counts).toEqual([3, 3]);
+    expect(client.publish).toHaveBeenCalledTimes(3);
+  });
+
+  it('requestSync is fire-and-forget and publishes', async () => {
+    const onPublished = vi.fn();
+    const { service } = await setup({ onPublished, accepted: null });
+    service.requestSync();
+    await vi.waitFor(() => expect(onPublished).toHaveBeenCalledWith(3));
+  });
+});
+
+describe('handbook service edit and hide', () => {
+  it('the editor opens the source and, after an edit, the edited body until the source changes', async () => {
+    const { service, published, skillsDir } = await setup();
+    await service.syncPublish();
+    const entry = await itemOf(service, taughtKey);
+    expect(entry?.draft?.shots).toEqual([1, 2, 3]);
+    const source = entry?.draft?.body as HandbookActivityBody;
+    await service.publish(
+      taughtKey,
+      { ...source, title: 'Lançar NF', steps: [{ text: 'Abrir o portal', shot: 1 }] },
+      [1]
+    );
+    expect(published).toHaveLength(2);
+    expect(published[1].id).toBe(published[0].id);
+    expect((published[1].body as HandbookActivityBody).title).toBe('Lançar NF');
+    const edited = (await itemBody(service)) as HandbookActivityBody;
+    expect(edited.title).toBe('Lançar NF');
+    // The edit does not make the unchanged source republish over it.
+    await expect(service.syncPublish()).resolves.toBe(0);
+    expect(published).toHaveLength(2);
+    // A source change publishes the new source over the edit.
+    await writeFile(join(skillsDir, SKILL, 'SKILL.md'), SKILL_MD.replace('3. Emitir', '3. Emitir a nota'));
+    await service.syncPublish();
+    expect(published).toHaveLength(3);
+    expect((published[2].body as HandbookActivityBody).title).toBe('Lança a nota fiscal');
+    expect(((await itemBody(service)) as HandbookActivityBody).title).toBe('Lança a nota fiscal');
+  });
+
+  it('hiding withdraws the item and keeps it hidden until its source changes', async () => {
+    const { service, client, published, skillsDir } = await setup();
+    await service.syncPublish();
+    await service.hide(taughtKey);
+    expect(client.remove).toHaveBeenCalledWith(published[0].id);
+    let result = await service.drafts();
+    expect(result.published).toEqual([]);
+    expect(result.hidden).toEqual([{ key: taughtKey, kind: 'activity', title: 'Lança a nota fiscal' }]);
+    await expect(service.syncPublish()).resolves.toBe(0);
+    expect(published).toHaveLength(1);
+    // Source changes: published again and no longer listed as hidden.
     await writeFile(join(skillsDir, SKILL, 'SKILL.md'), SKILL_MD.replace('1. Abrir o portal', '1. Abrir o site'));
-    expect((await service.drafts()).drafts.map((draft) => draft.key)).toEqual([taughtKey]);
+    await expect(service.syncPublish()).resolves.toBe(1);
+    result = await service.drafts();
+    expect(result.hidden).toEqual([]);
+    expect(result.published.map((entry) => entry.key)).toEqual([taughtKey]);
+  });
+
+  it('a hide that cannot reach the server leaves the item published', async () => {
+    const { service } = await setup({
+      client: {
+        remove: vi.fn(async () => {
+          throw new Error('unavailable');
+        }),
+      },
+    });
+    await service.syncPublish();
+    await expect(service.hide(taughtKey)).rejects.toThrow('unavailable');
+    expect((await service.drafts()).published.map((entry) => entry.key)).toEqual([taughtKey]);
+    expect((await service.drafts()).hidden).toEqual([]);
+  });
+
+  it('showing a hidden item again publishes it without announcing it', async () => {
+    const onPublished = vi.fn();
+    const { service, published } = await setup({ onPublished });
+    await service.syncPublish();
+    await service.hide(taughtKey);
+    onPublished.mockClear();
+    await service.unhide(taughtKey);
+    expect(published).toHaveLength(2);
+    expect(published[1].id).not.toBe('');
+    expect((await service.drafts()).hidden).toEqual([]);
+    expect((await itemOf(service, taughtKey))?.itemId).toBe(published[1].id);
+    expect(onPublished).not.toHaveBeenCalled();
   });
 });
 
@@ -171,45 +305,49 @@ const lesson = (text: string): Lesson =>
   }) as unknown as Lesson;
 
 describe('handbook service task lessons', () => {
-  it('adds the active lesson texts to the draft body and omits the field when there are none', async () => {
+  it('publishes the active lesson texts and omits the field when there are none', async () => {
     const withLessons = await setup({ lessons: [lesson('Usar o CNPJ da matriz'), lesson('Conferir o valor')] });
-    const { drafts } = await withLessons.service.drafts();
-    expect((drafts[0].body as HandbookActivityBody).lessons).toEqual(['Usar o CNPJ da matriz', 'Conferir o valor']);
+    await withLessons.service.syncPublish();
+    expect((withLessons.published[0].body as HandbookActivityBody).lessons).toEqual([
+      'Usar o CNPJ da matriz',
+      'Conferir o valor',
+    ]);
     const none = await setup({ lessons: [] });
-    expect('lessons' in (await none.service.drafts()).drafts[0].body).toBe(false);
+    await none.service.syncPublish();
+    expect('lessons' in none.published[0].body).toBe(false);
   });
 
-  it('keeps the taught draft, without lessons, when the lesson store cannot be read', async () => {
+  it('keeps the taught item, without lessons, when the lesson store cannot be read', async () => {
     const broken = await setup({
       lessonsFor: async () => Promise.reject(Object.assign(new Error('EACCES'), { code: 'EACCES' })),
     });
-    const { drafts } = await broken.service.drafts();
-    expect(drafts.map((draft) => draft.key)).toEqual([taughtKey]);
-    expect('lessons' in drafts[0].body).toBe(false);
+    await broken.service.syncPublish();
+    expect(broken.published[0].source).toBe('taught');
+    expect('lessons' in broken.published[0].body).toBe(false);
   });
 
-  it('changing the lessons changes the draft hash and publishes them in the body', async () => {
-    const plain = await setup();
-    const hashPlain = (await plain.service.drafts()).drafts[0].hash;
-    const one = await setup({ lessons: [lesson('A')] });
-    const two = await setup({ lessons: [] });
-    expect((await two.service.drafts()).drafts[0].hash).toBe(hashPlain);
-    const hashOne = (await one.service.drafts()).drafts[0].hash;
-    expect(hashOne).not.toBe(hashPlain);
-    const draft = (await one.service.drafts()).drafts[0];
-    await one.service.publish(draft.key, { ...(draft.body as HandbookActivityBody), lessons: ['forged'] }, []);
-    expect((one.published[0].body as HandbookActivityBody).lessons).toEqual(['A']);
+  it('a new lesson republishes the item, and an edit can never forge lessons', async () => {
+    const lessons: Lesson[] = [];
+    const { service, published } = await setup({ lessonsFor: async () => lessons });
+    await service.syncPublish();
+    lessons.push(lesson('A'));
+    await expect(service.syncPublish()).resolves.toBe(1);
+    expect((published[1].body as HandbookActivityBody).lessons).toEqual(['A']);
+    const source = (await itemOf(service, taughtKey))?.draft?.body as HandbookActivityBody;
+    await service.publish(taughtKey, { ...source, lessons: ['forged'] }, []);
+    expect((published[2].body as HandbookActivityBody).lessons).toEqual(['A']);
   });
 });
 
-describe('handbook service publish', () => {
-  it('publish sends only keepShots as media, read from telas/', async () => {
+describe('handbook service publish of an edit', () => {
+  const source = async (service: Awaited<ReturnType<typeof setup>>['service']) =>
+    (await itemOf(service, taughtKey))?.draft?.body as HandbookActivityBody;
+
+  it('sends only keepShots as media, read from telas/', async () => {
     const { service, published } = await setup();
-    const [draft] = (await service.drafts()).drafts;
-    await service.publish(taughtKey, draft.body, [1, 3, 7]);
-    const [input] = published;
-    expect(input.kind).toBe('activity');
-    expect(input.source).toBe('taught');
+    await service.syncPublish();
+    await service.publish(taughtKey, await source(service), [1, 3, 7]);
+    const input = published[1];
     expect(input.media.map((media) => Buffer.from(media.base64, 'base64').toString())).toEqual(['jpeg-1', 'jpeg-3']);
     const steps = (input.body as HandbookActivityBody).steps;
     expect(steps.map((step) => Boolean(step.mediaId))).toEqual([true, false, true]);
@@ -220,8 +358,7 @@ describe('handbook service publish', () => {
   it('keeps the images of a publish under the media budget and sends the rest of the steps as text', async () => {
     // Each fixture shot is 6 bytes: a 12-byte budget holds the first two.
     const { service, published } = await setup({ maxPublishMediaBytes: 12 });
-    const [draft] = (await service.drafts()).drafts;
-    await service.publish(taughtKey, draft.body, [1, 2, 3]);
+    await service.syncPublish();
     const [input] = published;
     expect(input.media.map((media) => Buffer.from(media.base64, 'base64').toString())).toEqual(['jpeg-1', 'jpeg-2']);
     const steps = (input.body as HandbookActivityBody).steps;
@@ -235,39 +372,38 @@ describe('handbook service publish', () => {
 
   it('applies the employee edits and ignores unknown fields', async () => {
     const { service, published } = await setup();
-    const [draft] = (await service.drafts()).drafts;
+    await service.syncPublish();
     const edited = {
-      ...(draft.body as HandbookActivityBody),
+      ...(await source(service)),
       title: 'Lançar NF',
       frequency: 'daily',
       steps: [{ text: 'Abrir o portal', shot: 1 }],
       authorName: 'Ana',
     } as HandbookActivityBody;
     await service.publish(taughtKey, edited, [1]);
-    const body = published[0].body as Record<string, unknown>;
+    const body = published[1].body as Record<string, unknown>;
     expect(body.title).toBe('Lançar NF');
     expect(body.frequency).toBe('daily');
     expect(body).not.toHaveProperty('authorName');
   });
 
-  it('publish with no_role rejects with no_role and stores nothing locally', async () => {
-    const { service, stateFile } = await setup({
-      client: {
-        publish: vi.fn(async () => {
-          throw new Error('no_role');
-        }),
-      },
+  it('a refused edit rejects and keeps the previous state', async () => {
+    let refuse = false;
+    const publish = vi.fn(async (input: HandbookPublishInput) => {
+      if (refuse) throw new Error('no_role');
+      return { id: input.id };
     });
-    const [draft] = (await service.drafts()).drafts;
-    await expect(service.publish(taughtKey, draft.body, draft.shots)).rejects.toThrow('no_role');
-    await expect(readFile(stateFile, 'utf8')).rejects.toThrow();
-    expect((await service.drafts()).drafts).toHaveLength(1);
+    const { service } = await setup({ client: { publish } });
+    await service.syncPublish();
+    const before = await source(service);
+    refuse = true;
+    await expect(service.publish(taughtKey, { ...before, title: 'Outro' }, [])).rejects.toThrow('no_role');
+    expect(((await itemBody(service)) as HandbookActivityBody).title).toBe(before.title);
   });
 
   it('withdraw removes the item on the server and from the local state', async () => {
     const { service, client, published } = await setup();
-    const [draft] = (await service.drafts()).drafts;
-    await service.publish(taughtKey, draft.body, []);
+    await service.syncPublish();
     await service.withdraw(published[0].id);
     expect(client.remove).toHaveBeenCalledWith(published[0].id);
     expect((await service.drafts()).published).toEqual([]);
@@ -275,11 +411,7 @@ describe('handbook service publish', () => {
 
   it('withdrawLearnItems calls the client and clears learn entries from state', async () => {
     const { service, client } = await setup({ accepted: LEARN_TERM_VERSION });
-    const { drafts } = await service.drafts();
-    for (const draft of drafts) {
-      // eslint-disable-next-line no-await-in-loop
-      await service.publish(draft.key, draft.body, []);
-    }
+    await service.syncPublish();
     expect((await service.drafts()).published).toHaveLength(3);
     await service.withdrawLearnItems();
     expect(client.withdrawLearn).toHaveBeenCalledTimes(1);
@@ -322,7 +454,7 @@ describe('handbook service pending withdraw retries', () => {
     const { service, client, stateFile } = await setup({ client: { withdrawLearn } });
     await expect(service.withdrawLearnItems()).rejects.toThrow('unavailable');
     control.offline = false;
-    const stop = service.startWithdrawRetries();
+    const stop = service.startSync();
     await vi.waitFor(() => expect(withdrawLearn).toHaveBeenCalledTimes(2));
     await vi.waitFor(async () => expect(await pendingFlag(stateFile)).toBe(false));
     stop();
@@ -332,11 +464,7 @@ describe('handbook service pending withdraw retries', () => {
   it('a restored login retries a pending withdraw and clears the learn entries', async () => {
     const { control, withdrawLearn } = offlineWithdraw();
     const { service, client, stateFile } = await setup({ accepted: LEARN_TERM_VERSION, client: { withdrawLearn } });
-    const { drafts } = await service.drafts();
-    for (const draft of drafts) {
-      // eslint-disable-next-line no-await-in-loop
-      await service.publish(draft.key, draft.body, []);
-    }
+    await service.syncPublish();
     await expect(service.withdrawLearnItems()).rejects.toThrow('unavailable');
     control.offline = false;
     const mineCalls = vi.mocked(client.mine).mock.calls.length;
@@ -352,7 +480,7 @@ describe('handbook service pending withdraw retries', () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
     const { control, withdrawLearn } = offlineWithdraw();
     const { service, stateFile } = await setup({ client: { withdrawLearn } });
-    const stop = service.startWithdrawRetries(3_600_000);
+    const stop = service.startSync(3_600_000);
     await expect(service.withdrawLearnItems()).rejects.toThrow('unavailable');
     expect(withdrawLearn).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(3_600_000);
@@ -366,14 +494,23 @@ describe('handbook service pending withdraw retries', () => {
     stop();
   });
 
-  it('runs no hourly timer when nothing is pending', async () => {
+  it('auto-publishes on every interval, retrying what failed offline', async () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
-    const { service, client } = await setup();
-    const stop = service.startWithdrawRetries(3_600_000);
+    let offline = true;
+    const publish = vi.fn(async (input: HandbookPublishInput) => {
+      if (offline) throw new Error('unavailable');
+      return { id: input.id };
+    });
+    const { service } = await setup({ client: { publish }, accepted: null });
+    const stop = service.startSync(3_600_000);
+    await vi.waitFor(() => expect(publish).toHaveBeenCalledTimes(1));
+    offline = false;
+    await vi.advanceTimersByTimeAsync(3_600_000);
+    await vi.waitFor(() => expect(publish).toHaveBeenCalledTimes(4));
     await vi.advanceTimersByTimeAsync(3 * 3_600_000);
-    expect(client.withdrawLearn).not.toHaveBeenCalled();
-    expect(vi.getTimerCount()).toBe(0);
+    expect(publish).toHaveBeenCalledTimes(4);
     stop();
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
 

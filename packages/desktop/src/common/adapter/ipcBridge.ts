@@ -202,7 +202,7 @@ export const jr = {
     ),
   },
   /**
-   * "Manual da função". Only the employee approves (publish = approve); admins only read.
+   * "Manual da função". Items publish automatically; the employee edits or hides them afterwards; admins only read.
    * Images cross as data URLs; the JR token stays in main. Errors are HandbookError codes.
    */
   handbook: {
@@ -211,7 +211,10 @@ export const jr = {
     publish: bridge.buildProvider<void, { key: string; body: HandbookDraftBody; keepShots: number[] }>(
       'jr-handbook-publish'
     ),
-    dismiss: bridge.buildProvider<void, { key: string }>('jr-handbook-dismiss'),
+    hide: bridge.buildProvider<void, { key: string }>('jr-handbook-hide'),
+    unhide: bridge.buildProvider<void, { key: string }>('jr-handbook-unhide'),
+    /** Main → renderer: a sync published new or changed items ("Seu Manual foi atualizado"). */
+    updated: bridge.buildEmitter<{ count: number }>('jr-handbook-updated'),
     withdraw: bridge.buildProvider<void, { itemId: string }>('jr-handbook-withdraw'),
     media: bridge.buildProvider<string, { id: string }>('jr-handbook-media'),
     /** A local screenshot of a draft, for the review editor. */

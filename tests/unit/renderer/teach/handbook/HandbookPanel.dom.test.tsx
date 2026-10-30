@@ -13,7 +13,8 @@ const { handbook, message } = vi.hoisted(() => {
       mine: fn(),
       drafts: fn(),
       publish: fn(),
-      dismiss: fn(),
+      hide: fn(),
+      unhide: fn(),
       withdraw: fn(),
       media: fn(),
       draftShot: fn(),
@@ -58,14 +59,15 @@ const draft: HandbookDraft = {
   body: activity,
   shots: [1, 2],
   hash: 'h',
-  publishedItemId: null,
-  status: 'new',
+  publishedItemId: 'item-1',
 };
+
+const entry = { key: draft.key, itemId: 'item-1', kind: 'activity' as const, title: 'Lança a nota fiscal', draft };
 
 const result = (overrides: Partial<HandbookDraftsResult> = {}): HandbookDraftsResult => ({
   role: view.role,
-  drafts: [draft],
-  published: [],
+  published: [entry],
+  hidden: [],
   ...overrides,
 });
 
@@ -103,22 +105,21 @@ beforeEach(() => {
 });
 
 describe('HandbookPanel', () => {
-  it('lists drafts with the role and the visibility notice', async () => {
-    show();
+  it('lists the published items with the role and the visibility notice, no approval step', async () => {
+    const { container } = show();
     expect(await screen.findByText('Cargo: Auxiliar de escritório')).toBeInTheDocument();
-    expect(screen.getByText(/ficará|fica visível para o seu gestor/)).toBeInTheDocument();
-    expect(screen.getByText(/Atividade · Lança a nota fiscal \(tarefa ensinada\)/)).toBeInTheDocument();
-    expect(screen.getByText('2 passos · 2 telas')).toBeInTheDocument();
+    expect(screen.getByText(/fica visível para o seu gestor/)).toBeInTheDocument();
+    expect(await screen.findByTestId('published-item-1')).toHaveTextContent('Lança a nota fiscal');
+    expect(container.textContent).not.toMatch(/Aprovar|Aguardando gestor|aprovação do gestor|pendente|Rascunho/i);
   });
 
-  it('panel without a title shows the cargo-not-registered message and no Aprovar', async () => {
+  it('panel without a title shows the cargo-not-registered message and no Editar', async () => {
     handbook.drafts.invoke.mockResolvedValue(result({ role: null }));
     show();
     expect(
       await screen.findByText('Seu cargo não está cadastrado. Peça ao administrador para cadastrá-lo.')
     ).toBeInTheDocument();
-    expect(screen.queryByText('Revisar')).not.toBeInTheDocument();
-    expect(screen.queryByText('Aprovar e publicar no manual')).not.toBeInTheDocument();
+    expect(screen.queryByText('Editar')).not.toBeInTheDocument();
   });
 
   it('in pilot mode says it works only with the company server', async () => {
@@ -127,77 +128,75 @@ describe('HandbookPanel', () => {
     expect(await screen.findByText('Disponível só com o servidor da empresa.')).toBeInTheDocument();
   });
 
-  it('Aprovar asks for confirmation that names gestor and future role holders, then publishes', async () => {
+  it('Editar opens the item and Salvar alterações republishes it with the edit, without a confirmation', async () => {
     show();
-    fireEvent.click(await screen.findByText('Revisar'));
-    fireEvent.click(await screen.findByText('Aprovar e publicar no manual'));
-    expect(handbook.publish.invoke).not.toHaveBeenCalled();
-    expect(
-      await screen.findByText('Este item ficará visível para o seu gestor e para quem ocupar o seu cargo. Publicar?')
-    ).toBeInTheDocument();
-    fireEvent.click(screen.getByText('Publicar'));
+    fireEvent.click(await screen.findByText('Editar'));
+    fireEvent.click(await screen.findByText('Salvar alterações'));
     await waitFor(() => expect(handbook.publish.invoke).toHaveBeenCalledTimes(1));
     const call = handbook.publish.invoke.mock.calls[0][0];
     expect(call.key).toBe(draft.key);
     expect(call.keepShots).toEqual([1, 2]);
     expect(call.body.confirmBefore).toEqual(['Valor']);
-    expect(message.success).toHaveBeenCalledWith('Publicado no manual');
+    expect(message.success).toHaveBeenCalledWith('Alterações salvas');
   });
 
   it('removing a screenshot in the editor excludes it from keepShots', async () => {
     show();
-    fireEvent.click(await screen.findByText('Revisar'));
+    fireEvent.click(await screen.findByText('Editar'));
     fireEvent.click(await screen.findByTestId('remove-shot-1'));
     expect(screen.queryByTestId('remove-shot-1')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByText('Aprovar e publicar no manual'));
-    fireEvent.click(await screen.findByText('Publicar'));
+    fireEvent.click(screen.getByText('Salvar alterações'));
     await waitFor(() => expect(handbook.publish.invoke).toHaveBeenCalled());
     const call = handbook.publish.invoke.mock.calls[0][0];
     expect(call.keepShots).toEqual([2]);
     expect(call.body.steps[0]).toEqual({ text: 'Abrir o portal' });
   });
 
-  it('a publish refused for no_role shows the role message and keeps the editor open', async () => {
+  it('a save refused for no_role shows the role message and keeps the editor open', async () => {
     handbook.publish.invoke.mockRejectedValue(
       new Error("Error invoking remote method 'jr-handbook-publish': Error: no_role")
     );
     show();
-    fireEvent.click(await screen.findByText('Revisar'));
-    fireEvent.click(await screen.findByText('Aprovar e publicar no manual'));
-    fireEvent.click(await screen.findByText('Publicar'));
+    fireEvent.click(await screen.findByText('Editar'));
+    fireEvent.click(await screen.findByText('Salvar alterações'));
     expect(
       await screen.findByText('Seu cargo não está cadastrado. Peça ao administrador para cadastrá-lo.')
     ).toBeInTheDocument();
-    expect(screen.getByText('Aprovar e publicar no manual')).toBeInTheDocument();
+    expect(screen.getByText('Salvar alterações')).toBeInTheDocument();
   });
 
-  it('Descartar dismisses the draft', async () => {
+  it('an item whose source is gone has no Editar', async () => {
+    handbook.drafts.invoke.mockResolvedValue(result({ published: [{ ...entry, draft: null }] }));
     show();
-    fireEvent.click(await screen.findByText('Descartar'));
-    await waitFor(() => expect(handbook.dismiss.invoke).toHaveBeenCalledWith({ key: draft.key }));
+    await screen.findByTestId('published-item-1');
+    expect(screen.queryByText('Editar')).not.toBeInTheDocument();
   });
 
-  it('Retirar calls withdraw and removes the row', async () => {
-    const entry = { key: draft.key, itemId: 'item-1', kind: 'activity' as const, title: 'Lançar NF' };
-    handbook.drafts.invoke.mockResolvedValueOnce(result({ drafts: [], published: [entry] }));
-    handbook.drafts.invoke.mockResolvedValue(result({ drafts: [], published: [] }));
-    handbook.withdraw.invoke.mockResolvedValue(undefined);
+  it('Ocultar hides the item after a confirmation and moves it to the hidden list; Mostrar de novo brings it back', async () => {
+    handbook.hide.invoke.mockResolvedValue(undefined);
+    handbook.unhide.invoke.mockResolvedValue(undefined);
+    handbook.drafts.invoke.mockResolvedValueOnce(result());
+    handbook.drafts.invoke.mockResolvedValueOnce(
+      result({ published: [], hidden: [{ key: draft.key, kind: 'activity', title: 'Lança a nota fiscal' }] })
+    );
     show();
     const row = await screen.findByTestId('published-item-1');
-    fireEvent.click(within(row).getByText('Retirar'));
-    const popup = await screen.findByText('Retirar este item do manual do cargo agora?');
-    const confirm = popup.closest('.arco-popconfirm')?.querySelector('.arco-btn-primary') as HTMLElement;
-    fireEvent.click(confirm);
-    await waitFor(() => expect(handbook.withdraw.invoke).toHaveBeenCalledWith({ itemId: 'item-1' }));
-    await waitFor(() => expect(screen.queryByTestId('published-item-1')).not.toBeInTheDocument());
+    fireEvent.click(within(row).getByText('Ocultar'));
+    const popup = await screen.findByText(/Ocultar este item\?/);
+    fireEvent.click(popup.closest('.arco-popconfirm')?.querySelector('.arco-btn-primary') as HTMLElement);
+    await waitFor(() => expect(handbook.hide.invoke).toHaveBeenCalledWith({ key: draft.key }));
+    const hiddenRow = await screen.findByTestId(`hidden-${draft.key}`);
+    expect(screen.queryByTestId('published-item-1')).not.toBeInTheDocument();
+    handbook.drafts.invoke.mockResolvedValue(result());
+    fireEvent.click(within(hiddenRow).getByText('Mostrar de novo'));
+    await waitFor(() => expect(handbook.unhide.invoke).toHaveBeenCalledWith({ key: draft.key }));
+    await screen.findByTestId('published-item-1');
   });
 
-  it('there is no manager-approval state anywhere in the panel', async () => {
-    const entry = { key: draft.key, itemId: 'item-1', kind: 'activity' as const, title: 'Lançar NF' };
-    handbook.drafts.invoke.mockResolvedValue(result({ published: [entry] }));
-    const { container } = show();
+  it('shows no hidden section when nothing is hidden', async () => {
+    show();
     await screen.findByTestId('published-item-1');
-    expect(container.textContent).not.toMatch(/Aguardando gestor|aprovação do gestor|pendente/i);
+    expect(screen.queryByText('Itens ocultos')).not.toBeInTheDocument();
   });
 
   it('lists other roles of the area and opens one without indicators when the server withheld them', async () => {

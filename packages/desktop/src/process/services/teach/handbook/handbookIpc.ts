@@ -21,14 +21,15 @@ const requireService = (): HandbookService => {
   return service;
 };
 
-/** "Manual da função" IPC. Publishing only happens on the employee's own approval. */
+/** "Manual da função" IPC. Items publish on their own; here the employee edits or hides them. */
 export function initHandbookBridge(): void {
   ipcBridge.jr.handbook.mine.provider(async () => requireService().mine());
   ipcBridge.jr.handbook.drafts.provider(async () => requireService().drafts());
   ipcBridge.jr.handbook.publish.provider(async ({ key, body, keepShots }) =>
     requireService().publish(key, body, Array.isArray(keepShots) ? keepShots : [])
   );
-  ipcBridge.jr.handbook.dismiss.provider(async ({ key }) => requireService().dismiss(key));
+  ipcBridge.jr.handbook.hide.provider(async ({ key }) => requireService().hide(key));
+  ipcBridge.jr.handbook.unhide.provider(async ({ key }) => requireService().unhide(key));
   ipcBridge.jr.handbook.withdraw.provider(async ({ itemId }) => requireService().withdraw(itemId));
   ipcBridge.jr.handbook.media.provider(async ({ id }) => requireService().media(id));
   ipcBridge.jr.handbook.draftShot.provider(async ({ key, shot }) => requireService().draftShot(key, shot));
@@ -51,17 +52,21 @@ export function startHandbookService(userDataDir: string, call: HandbookCall): H
     learn: getLearnService,
     lessonsFor: activeLessonsFor,
     stateFile: path.join(userDataDir, HANDBOOK_DIRNAME, 'state.json'),
+    onPublished: (count) => ipcBridge.jr.handbook.updated.emit({ count }),
   });
   setHandbookService(service);
-  // An Aprender revoke that could not reach the server is retried now and hourly while pending.
-  service.startWithdrawRetries();
+  // One background sync: auto-publish new/changed items and retry a pending Aprender withdrawal.
+  service.startSync();
   return service;
 }
 
-/** A restored login retries a pending learn-items withdrawal right away. */
+/** A restored login retries a pending learn-items withdrawal and publishes what is waiting. */
 export function onHandbookAccessChanged(status: JrAccessState['status']): void {
   if (status !== 'authenticated') return;
   const service = getHandbookService();
   if (!service) return;
-  void service.retryPendingWithdraw().catch(() => {});
+  void service
+    .retryPendingWithdraw()
+    .catch(() => {})
+    .then(() => service.requestSync());
 }

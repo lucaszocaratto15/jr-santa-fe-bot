@@ -6,7 +6,7 @@
 
 /**
  * "Manual da função": per-role handbook items shared through the company control server.
- * Only the employee approves an item, and approving publishes it. Admins only read.
+ * Items publish automatically; the employee reviews afterwards (edit or hide). Admins only read.
  */
 
 export type HandbookFrequency = 'daily' | 'weekly' | 'occasional';
@@ -66,7 +66,7 @@ export type HandbookRoleSummary = { key: string; title: string; activities: numb
 
 export type HandbookDraftBody = HandbookActivityBody | HandbookIndicatorsBody;
 
-/** A local draft the employee may review, approve (publish) or dismiss. */
+/** A local item (from a taught task or Aprender) as the editor opens it. */
 export type HandbookDraft = {
   key: string;
   kind: HandbookKind;
@@ -76,19 +76,27 @@ export type HandbookDraft = {
   shots: number[];
   hash: string;
   publishedItemId: string | null;
-  status: 'new' | 'changed';
 };
 
-/** An item this employee published, as remembered locally. */
-export type HandbookPublished = { key: string; itemId: string; kind: HandbookKind; title: string };
+/** An item published for this employee. `draft` is what the editor opens (null when the source is gone). */
+export type HandbookPublished = {
+  key: string;
+  itemId: string;
+  kind: HandbookKind;
+  title: string;
+  draft: HandbookDraft | null;
+};
+
+/** An item the employee hid: stays hidden until its source changes. */
+export type HandbookHidden = { key: string; kind: HandbookKind; title: string };
 
 export type HandbookError = 'no_role' | 'unavailable' | 'forbidden' | 'too_large';
 
 /** Main → renderer: what the employee tab needs in one call. */
 export type HandbookDraftsResult = {
   role: { key: string; title: string } | null;
-  drafts: HandbookDraft[];
   published: HandbookPublished[];
+  hidden: HandbookHidden[];
 };
 
 /** Mermaid flowcharts built in main (the renderer does not import main code). */

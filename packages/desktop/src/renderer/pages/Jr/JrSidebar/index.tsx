@@ -46,6 +46,7 @@ import styles from './JrSidebar.module.css';
 import { useTaughtRunWatcher } from './Teach/useTaughtRunWatcher';
 import { useLessonRuleSync } from './Teach/useLessonRuleSync';
 import DataNoticeModal from './Brain/DataNoticeModal';
+import { useHandbookUpdatedNotice } from '@renderer/hooks/agent/useHandbookUpdatedNotice';
 import { useLearnSettingsRequests } from '@renderer/hooks/agent/useLearnState';
 
 const JrConnections = lazy(() => import('../Connections'));
@@ -145,6 +146,7 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
   const location = useLocation();
   useTaughtRunWatcher();
   useLessonRuleSync();
+  useHandbookUpdatedNotice();
   const { state, logout } = useJrAccess();
   const { user } = useAuth();
   const [connectionsOpen, setConnectionsOpen] = useState(false);

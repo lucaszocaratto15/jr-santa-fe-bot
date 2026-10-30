@@ -8,6 +8,7 @@ import { ipcBridge } from '@/common';
 import type { Lesson, LessonProposal, LessonScope, TranscriptMessage } from '@/common/types/agent/lessonTypes';
 import { getJrModelConnection } from '@process/services/jr/modelConnection';
 import { userSkillsDir } from '../control/teachIpc';
+import { getHandbookService } from '../registry';
 import { extractLessons } from './extract';
 import { generalLessonsText, syncTaskLessons } from './lessonInjection';
 import { getLessonStore, vaultSecrets } from './lessonRuntime';
@@ -123,7 +124,11 @@ export function initLessonsBridge(): void {
     secrets: vaultSecrets,
     connection: getJrModelConnection,
     syncTask: async (skill, lessons) => syncTaskLessons(await userSkillsDir(), skill, lessons),
-    emitChanged: (scope) => ipcBridge.teach.lessonsChanged.emit({ scope }),
+    emitChanged: (scope) => {
+      ipcBridge.teach.lessonsChanged.emit({ scope });
+      // Lessons are part of the task's handbook item.
+      getHandbookService()?.requestSync();
+    },
   });
   ipcBridge.teach.lessonsList.provider(async () => handlers.list());
   ipcBridge.teach.lessonsCounters.provider(async () => handlers.counters());
