@@ -136,10 +136,13 @@ describe('brain service notice', () => {
       throw new Error('offline');
     });
     const s = service(consent);
+    await s.bindProfile('ana');
     expect((await s.consentState()).current).toBe(false);
     const state = await s.accept('1.4');
     expect(state).toMatchObject({ acknowledgedVersion: '1.4', current: true });
-    expect((await service(consent).consentState()).current).toBe(true);
+    const restarted = service(consent);
+    await restarted.bindProfile('ana');
+    expect((await restarted.consentState()).current).toBe(true);
     // Resent when the server is back.
     consent.mockResolvedValueOnce({ version: '1.4', at: 'x' });
     await s.resume();
@@ -150,7 +153,35 @@ describe('brain service notice', () => {
 
   it('treats another acknowledged version as not current', async () => {
     const s = service(async () => ({ version: '1.3', at: 'x' }));
+    await s.bindProfile('ana');
     await s.accept('1.3');
+    expect((await s.consentState()).current).toBe(false);
+  });
+
+  it('keys the acknowledgement per user: a second employee on the same PC sees the notice and sends their own', async () => {
+    const consent = vi.fn(async (version: string) => ({ version, at: 'x' }));
+    const s = service(consent);
+    // Nobody is bound yet: no acknowledgement can be recorded.
+    expect((await s.consentState()).current).toBe(false);
+    await expect(s.accept('1.4')).rejects.toThrow('unavailable');
+    await s.bindProfile('ana');
+    await s.accept('1.4');
+    expect(consent).toHaveBeenCalledTimes(1);
+    await s.bindProfile('bia');
+    expect((await s.consentState()).current).toBe(false);
+    await s.accept('1.4');
+    expect(consent).toHaveBeenCalledTimes(2);
+    expect((await s.consentState()).current).toBe(true);
+    await s.bindProfile('ana');
+    expect((await s.consentState()).current).toBe(true);
+    const stored = JSON.parse(await readFile(join(dir, 'notice.json'), 'utf8'));
+    expect(Object.keys(stored).toSorted()).toEqual(['ana', 'bia']);
+  });
+
+  it('ignores an old single-user notice.json, so its unknown owner acknowledges nobody', async () => {
+    await writeFile(join(dir, 'notice.json'), JSON.stringify({ version: '1.4', at: 'x', synced: true }));
+    const s = service(async () => ({ version: '1.4', at: 'x' }));
+    await s.bindProfile('ana');
     expect((await s.consentState()).current).toBe(false);
   });
 });

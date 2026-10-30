@@ -19,7 +19,11 @@ import { createBrainClient, type BrainCall, type BrainClient } from '@process/se
 import { vaultSecrets } from '../teach/lessons/lessonRuntime';
 import { BRAIN_DIRNAME, createBrainCapture, type BrainCapture } from './brainCapture';
 
-type NoticeFile = { version: string | null; at: string | null; synced: boolean };
+type NoticeEntry = { version: string | null; at: string | null; synced: boolean };
+/** notice.json: one acknowledgement per JR user id, so each employee on a shared PC sees the notice. */
+type NoticeFile = Record<string, NoticeEntry>;
+
+const EMPTY_NOTICE: NoticeEntry = { version: null, at: null, synced: false };
 
 export type BrainService = {
   capture(input: BrainCaptureInput): Promise<void>;
@@ -32,7 +36,7 @@ export type BrainService = {
   manage: BrainClient['manage'];
   /** Sends what is queued and any acknowledgement the server has not received yet. */
   resume(): Promise<void>;
-  /** Ties the persisted queue to the logged-in profile. */
+  /** Ties the persisted queue and the notice acknowledgement to the logged-in profile. */
   bindProfile(userId: string): Promise<void>;
 };
 
@@ -54,20 +58,34 @@ export function createBrainService(deps: BrainServiceDeps): BrainService {
     requireBoundProfile: true,
   });
 
-  const readNotice = async (): Promise<NoticeFile> => {
+  // Until a profile is bound nobody has acknowledged anything on this PC.
+  let userId: string | null = null;
+
+  const readAll = async (): Promise<NoticeFile> => {
+    const all: NoticeFile = {};
     try {
-      const data = JSON.parse(await readFile(noticeFile, 'utf8')) as Partial<NoticeFile>;
-      return {
-        version: typeof data.version === 'string' ? data.version : null,
-        at: typeof data.at === 'string' ? data.at : null,
-        synced: data.synced === true,
-      };
+      const data = JSON.parse(await readFile(noticeFile, 'utf8')) as unknown;
+      if (typeof data !== 'object' || data === null || Array.isArray(data)) return all;
+      for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
+        if (typeof value !== 'object' || value === null) continue;
+        const entry = value as Partial<NoticeEntry>;
+        all[key] = {
+          version: typeof entry.version === 'string' ? entry.version : null,
+          at: typeof entry.at === 'string' ? entry.at : null,
+          synced: entry.synced === true,
+        };
+      }
     } catch {
-      return { version: null, at: null, synced: false };
+      // Missing or corrupt: nobody has acknowledged.
     }
+    return all;
   };
 
-  const writeNotice = async (data: NoticeFile): Promise<void> => {
+  const readNotice = async (user: string | null): Promise<NoticeEntry> =>
+    user === null ? EMPTY_NOTICE : ((await readAll())[user] ?? EMPTY_NOTICE);
+
+  const writeNotice = async (user: string, entry: NoticeEntry): Promise<void> => {
+    const data = { ...(await readAll()), [user]: entry };
     await mkdir(deps.dir, { recursive: true, mode: 0o700 });
     const temporary = `${noticeFile}.${randomUUID()}.tmp`;
     try {
@@ -84,17 +102,17 @@ export function createBrainService(deps: BrainServiceDeps): BrainService {
     }
   };
 
-  const toState = (data: NoticeFile): BrainNoticeState => ({
+  const toState = (data: NoticeEntry): BrainNoticeState => ({
     acknowledgedVersion: data.version,
     acknowledgedAt: data.at,
     current: data.version === BRAIN_TERM_VERSION,
   });
 
-  const syncNotice = async (data: NoticeFile): Promise<void> => {
-    if (!data.version || data.synced) return;
+  const syncNotice = async (user: string | null, data: NoticeEntry): Promise<void> => {
+    if (user === null || !data.version || data.synced) return;
     try {
       await deps.client.consent(data.version);
-      await writeNotice({ ...data, synced: true });
+      await writeNotice(user, { ...data, synced: true });
     } catch {
       // The server is unreachable: the local acknowledgement stands and is resent on resume.
     }
@@ -104,22 +122,28 @@ export function createBrainService(deps: BrainServiceDeps): BrainService {
     capture: (input) => capture.submit(input),
     lastCaptured: (conversationId) => capture.lastCaptured(conversationId),
     async consentState() {
-      return toState(await readNotice());
+      return toState(await readNotice(userId));
     },
     async accept(termVersion) {
       // Acknowledgement only: capture and Aprender never wait for it.
-      const data: NoticeFile = { version: termVersion, at: new Date(now()).toISOString(), synced: false };
-      await writeNotice(data);
-      await syncNotice(data);
+      const user = userId;
+      if (user === null) throw new Error('unavailable');
+      const data: NoticeEntry = { version: termVersion, at: new Date(now()).toISOString(), synced: false };
+      await writeNotice(user, data);
+      await syncNotice(user, data);
       return toState(data);
     },
     search: (query) => deps.client.search(query),
     feedback: (factId, reason) => deps.client.feedback(factId, reason),
     me: () => deps.client.me(),
     manage: deps.client.manage,
-    bindProfile: (userId) => capture.bindProfile(userId),
+    async bindProfile(id) {
+      userId = id;
+      await capture.bindProfile(id);
+    },
     async resume() {
-      await syncNotice(await readNotice());
+      const user = userId;
+      await syncNotice(user, await readNotice(user));
       await capture.flush();
     },
   };
