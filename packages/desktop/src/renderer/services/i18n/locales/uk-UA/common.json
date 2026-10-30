@@ -477,7 +477,8 @@
         "vault": "Vault",
         "tasks": "My tasks",
         "learn": "Learn",
-        "handbook": "Role handbook"
+        "handbook": "Role handbook",
+        "lessons": "Lessons"
       },
       "generalTitle": "General",
       "account": "Account",
@@ -723,7 +724,25 @@
           "limit_task": "This task already has 20 lessons. Turn off or edit one before saving another.",
           "limit_general": "You already have 30 general lessons. Turn off or edit one before saving another.",
           "secret": "The lesson seems to contain sensitive data (password, tax ID, e-mail or key). Remove it and try again.",
-          "too_long": "The lesson is over 200 characters. Shorten the text."
+          "too_long": "The lesson is over 200 characters. Shorten the text.",
+          "not_found": "This lesson no longer exists."
+        },
+        "panel": {
+          "title": "Lessons",
+          "subtitle": "What the bot learned from your corrections. Turn them off, edit them or go back to an earlier version.",
+          "counters": "Offered: {{offered}} · Saved: {{saved}} · Edited: {{edited}} · Discarded: {{discarded}}",
+          "general": "General (all conversations)",
+          "emptyTitle": "No lessons yet",
+          "emptyHint": "When you correct the bot until it gets it right, it will suggest lessons to keep.",
+          "loadFailed": "Could not load the lessons.",
+          "failed": "Could not change the lesson. Try again.",
+          "edit": "Edit",
+          "history": "History",
+          "active": "Lesson active",
+          "cancel": "Cancel",
+          "historyTitle": "Lesson history",
+          "noVersions": "No earlier versions.",
+          "revert": "Go back to this one"
         }
       }
     },

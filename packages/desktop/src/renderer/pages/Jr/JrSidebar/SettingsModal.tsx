@@ -1,6 +1,7 @@
 import { Button, Message } from '@arco-design/web-react';
 import {
   BookOpen,
+  Bookmark,
   Brain,
   ChartHistogram,
   Close,
@@ -23,6 +24,7 @@ import { isMacOS } from '@/renderer/utils/platform';
 import { ComputerPanel, GeneralPanel, UpdatesPanel } from './panels';
 import LearnPanel from './Learn/LearnPanel';
 import HandbookPanel from './Teach/HandbookPanel';
+import LessonsPanel from './Teach/LessonsPanel';
 import TasksPanel from './Teach/TasksPanel';
 import { pickRunBot } from './Teach/taskActions';
 import UsagePanel from './Usage/UsagePanel';
@@ -35,6 +37,7 @@ export const SETTINGS_TABS = [
   'usage',
   'vault',
   'tasks',
+  'lessons',
   'learn',
   'handbook',
   'updates',
@@ -47,6 +50,7 @@ const TAB_LABEL = {
   usage: 'common.jr.look.tabs.usage',
   vault: 'common.jr.look.tabs.vault',
   tasks: 'common.jr.look.tabs.tasks',
+  lessons: 'common.jr.look.tabs.lessons',
   learn: 'common.jr.look.tabs.learn',
   handbook: 'common.jr.look.tabs.handbook',
   updates: 'common.jr.look.tabs.updates',
@@ -57,6 +61,7 @@ const tabIcon = (id: SettingsTab) => {
   if (id === 'usage') return <ChartHistogram size={20} />;
   if (id === 'vault') return <Lock size={20} />;
   if (id === 'tasks') return <ListCheckbox size={20} />;
+  if (id === 'lessons') return <Bookmark size={20} />;
   if (id === 'learn') return <Brain size={20} />;
   if (id === 'handbook') return <BookOpen size={20} />;
   if (id === 'updates') return <Download size={20} />;
@@ -151,6 +156,7 @@ const JrSettingsModal: React.FC<{
           {tab === 'usage' && <UsagePanel />}
           {tab === 'vault' && <VaultPanel />}
           {tab === 'tasks' && <TasksPanel onClose={onClose} />}
+          {tab === 'lessons' && <LessonsPanel />}
           {tab === 'learn' && (
             <LearnPanel autoConsent={autoConsent} onTeach={(suggestion) => void teachSuggestion(suggestion)} />
           )}

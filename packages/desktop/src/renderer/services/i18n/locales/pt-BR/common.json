@@ -474,7 +474,8 @@
         "vault": "Cofre",
         "tasks": "Minhas tarefas",
         "learn": "Aprender",
-        "handbook": "Manual da função"
+        "handbook": "Manual da função",
+        "lessons": "Lições"
       },
       "generalTitle": "Geral",
       "account": "Conta",
@@ -720,7 +721,25 @@
           "limit_task": "Essa tarefa já tem 20 lições. Desative ou edite alguma antes de guardar outra.",
           "limit_general": "Você já tem 30 lições gerais. Desative ou edite alguma antes de guardar outra.",
           "secret": "A lição parece conter um dado sensível (senha, CPF, CNPJ, e-mail ou chave). Tire esse dado e tente de novo.",
-          "too_long": "A lição passou de 200 caracteres. Encurte o texto."
+          "too_long": "A lição passou de 200 caracteres. Encurte o texto.",
+          "not_found": "Essa lição não existe mais."
+        },
+        "panel": {
+          "title": "Lições",
+          "subtitle": "O que o robô aprendeu com as suas correções. Desligue, edite ou volte a uma versão anterior.",
+          "counters": "Oferecidas: {{offered}} · Salvas: {{saved}} · Editadas: {{edited}} · Descartadas: {{discarded}}",
+          "general": "Geral (todas as conversas)",
+          "emptyTitle": "Nenhuma lição ainda",
+          "emptyHint": "Quando você corrigir o robô até ele acertar, ele vai sugerir lições para guardar.",
+          "loadFailed": "Não foi possível carregar as lições.",
+          "failed": "Não foi possível alterar a lição. Tente de novo.",
+          "edit": "Editar",
+          "history": "Histórico",
+          "active": "Lição ativa",
+          "cancel": "Cancelar",
+          "historyTitle": "Histórico da lição",
+          "noVersions": "Sem versões anteriores.",
+          "revert": "Voltar para esta"
         }
       }
     },

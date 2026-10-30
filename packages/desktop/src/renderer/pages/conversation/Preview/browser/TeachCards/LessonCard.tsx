@@ -15,7 +15,7 @@ import { clearLessonCard } from './lessonCardStore';
 import styles from './TeachCards.module.css';
 
 const GENERAL = '__general__';
-const LESSON_ERRORS = ['limit_task', 'limit_general', 'secret', 'too_long'] as const;
+const LESSON_ERRORS = ['limit_task', 'limit_general', 'secret', 'too_long', 'not_found'] as const;
 type LessonError = (typeof LESSON_ERRORS)[number];
 
 type LessonCardProps = {
@@ -32,7 +32,7 @@ const toScope = (value: string): LessonScope =>
   value === GENERAL ? { kind: 'general' } : { kind: 'task', skill: value };
 
 /** The lesson store error code in an IPC rejection (`JR_LESSON_<CODE>`), or null. */
-const lessonErrorCode = (failure: unknown): LessonError | null => {
+export const lessonErrorCode = (failure: unknown): LessonError | null => {
   const message = failure instanceof Error ? failure.message : typeof failure === 'string' ? failure : '';
   const match = /JR_LESSON_([A-Z_]+)/.exec(message);
   const code = match?.[1]?.toLowerCase();
