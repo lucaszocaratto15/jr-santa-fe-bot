@@ -50,6 +50,7 @@ export function createBrainService(deps: BrainServiceDeps): BrainService {
     send: (payload) => deps.client.capture(payload),
     secrets: deps.secrets,
     now,
+    requireBoundProfile: true,
   });
 
   const readNotice = async (): Promise<NoticeFile> => {
@@ -131,7 +132,7 @@ export function startBrainService(userDataDir: string, call: BrainCall): BrainSe
     client: createBrainClient(call),
     secrets: vaultSecrets,
   });
-  void service.resume().catch(() => {});
+  // No flush here: the queue is resumed after the first bindProfile (login).
   return service;
 }
 

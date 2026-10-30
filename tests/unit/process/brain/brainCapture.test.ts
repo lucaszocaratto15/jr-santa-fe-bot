@@ -262,4 +262,46 @@ describe('brainCapture fix round 1', () => {
     expect(await b.capture.pending()).toBe(0);
     expect(await b.capture.lastCaptured('c1')).toBeNull();
   });
+
+  it('counts bytes of the whole serialized payload, multibyte text included', async () => {
+    const accented = Array.from({ length: 60 }, (_, i) => ({
+      id: `m${i}`,
+      role: i % 2 ? ('assistant' as const) : ('user' as const),
+      text: `${i}-`.padEnd(3500, 'ação 😀 ').slice(0, 3500),
+    }));
+    const sent = await run(accented);
+    expect(Buffer.byteLength(JSON.stringify(sent))).toBeLessThanOrEqual(MAX_PAYLOAD_BYTES);
+    expect(sent.messages.at(-1)?.text.startsWith('59-')).toBe(true);
+    expect(sent.messages.length).toBeLessThan(60);
+  });
+
+  it('treats 409 as permanent', async () => {
+    const send = vi
+      .fn<(p: BrainCapturePayload) => Promise<void>>()
+      .mockRejectedValueOnce(Object.assign(new Error('JR_ACCESS_EMPLOYEE_REVOKED'), {}));
+    send.mockResolvedValue(undefined);
+    const { capture } = make(send);
+    await capture.submit(input('1'));
+    await capture.flush();
+    expect(await capture.pending()).toBe(0);
+  });
+
+  it('clears a queue without profile.json on the first bind and sends nothing before it', async () => {
+    const down = vi.fn(async () => {
+      throw new Error('offline');
+    });
+    const old = make(down);
+    await old.capture.submit(input('1'));
+    expect(await old.capture.pending()).toBe(1);
+    const send = vi.fn(async () => {});
+    const gated = createBrainCapture({ dir, send, secrets: async () => [], requireBoundProfile: true });
+    await gated.submit(input('2'));
+    await gated.flush();
+    expect(send).not.toHaveBeenCalled();
+    await gated.bindProfile('ana');
+    expect(await gated.pending()).toBe(0);
+    await gated.submit(input('3'));
+    await gated.flush();
+    expect(send).toHaveBeenCalledTimes(1);
+  });
 });
