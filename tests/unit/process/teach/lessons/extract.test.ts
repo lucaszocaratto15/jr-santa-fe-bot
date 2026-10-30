@@ -56,6 +56,9 @@ describe('parseLessonReply', () => {
     expect(out).toHaveLength(1);
     expect(out[0].sourceQuote).toBe('use sempre o campo data de emissão');
   });
+  it('drops lessons whose quote is shorter than 8 characters', () => {
+    expect(parseLessonReply(reply([lesson({ quote: 'use' })]), ctx)).toEqual([]);
+  });
   it('parses a reply with a think block', () => {
     expect(parseLessonReply(`<think>{"corrected":false}</think>${reply([lesson()])}`, ctx)).toHaveLength(1);
   });

@@ -8,6 +8,7 @@ import type { Lesson, LessonProposal, LessonScope, TranscriptMessage } from '@/c
 import { redactSecrets } from '@process/resources/builtinMcp/secretRedact';
 import type { JrRelayConfig } from '@process/services/jr/bootstrap';
 import { chatCompletion, CHAT_COMPLETION_TIMEOUT_MS } from '@process/services/jr/modelConnection';
+import { firstJsonObject } from '../learn/insights';
 import { containsSecret, MAX_LESSON_CHARS } from './lessonStore';
 
 export const LESSONS_SYSTEM_PROMPT = [
@@ -26,43 +27,10 @@ export const LESSONS_SYSTEM_PROMPT = [
 export const MAX_TRANSCRIPT_CHARS = 30_000;
 const MAX_LESSONS = 3;
 const MAX_TOOL_CHARS = 500;
+const MIN_QUOTE_CHARS = 8;
 
 const record = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
-
-/** Same approach as learn/insights.ts: the first balanced `{…}` that parses, ignoring `<think>` blocks. */
-function firstJsonObject(reply: string): Record<string, unknown> | null {
-  const source = reply.replace(/<think>[\s\S]*?<\/think>/gi, '');
-  for (let start = source.indexOf('{'); start >= 0; start = source.indexOf('{', start + 1)) {
-    let depth = 0;
-    let inString = false;
-    let escaped = false;
-    for (let i = start; i < source.length; i += 1) {
-      const ch = source[i];
-      if (inString) {
-        if (escaped) escaped = false;
-        else if (ch === '\\') escaped = true;
-        else if (ch === '"') inString = false;
-        continue;
-      }
-      if (ch === '"') inString = true;
-      else if (ch === '{') depth += 1;
-      else if (ch === '}') {
-        depth -= 1;
-        if (depth === 0) {
-          try {
-            const value: unknown = JSON.parse(source.slice(start, i + 1));
-            if (record(value)) return value;
-          } catch {
-            // Try the next opening brace.
-          }
-          break;
-        }
-      }
-    }
-  }
-  return null;
-}
 
 const line = (message: TranscriptMessage, secrets: readonly string[]): string => {
   const text = redactSecrets(message.text, secrets);
@@ -102,7 +70,7 @@ export function parseLessonReply(
     const text = item.text.trim();
     const quote = item.quote.trim();
     if (!text || text.length > MAX_LESSON_CHARS || containsSecret(text, [])) continue;
-    if (!quote || !ctx.userTexts.some((userText) => userText.includes(quote))) continue;
+    if (quote.length < MIN_QUOTE_CHARS || !ctx.userTexts.some((userText) => userText.includes(quote))) continue;
     const scope: LessonScope =
       typeof item.skill === 'string' && ctx.installedSkills.includes(item.skill)
         ? { kind: 'task', skill: item.skill }

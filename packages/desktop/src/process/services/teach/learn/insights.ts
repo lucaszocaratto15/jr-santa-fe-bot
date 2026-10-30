@@ -37,7 +37,7 @@ const count = (value: unknown): number =>
   typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.round(value * 10) / 10 : 0;
 
 /** The first balanced `{…}` that parses as a JSON object, ignoring `<think>` blocks and prose. */
-function firstJsonObject(reply: string): Record<string, unknown> | null {
+export function firstJsonObject(reply: string): Record<string, unknown> | null {
   const source = reply.replace(/<think>[\s\S]*?<\/think>/gi, '');
   for (let start = source.indexOf('{'); start >= 0; start = source.indexOf('{', start + 1)) {
     let depth = 0;
