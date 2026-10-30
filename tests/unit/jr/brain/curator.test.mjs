@@ -365,3 +365,53 @@ test('a model timeout drops the batch with a fixed log label', async () => {
   assert.deepEqual(t.all(), []);
   assert.deepEqual(logs, ['curator: model call failed (timeout), batch dropped']);
 });
+
+test('a duplicate bump does not erase the human-edit marker: a later related candidate is not allowed to supersede', async () => {
+  const t = setup({
+    answer: say([{ text: 'Fornecedor Acme entrega em cinco dias', quote: 'Acme entrega em cinco', risk: 'low' }]),
+  });
+  const id = t.store.facts.insert({
+    areaId: t.frota,
+    risk: 'low',
+    kind: 'fato',
+    text: 'Fornecedor Acme entrega em cinco dias',
+    sourceKind: 'usuario_afirmou',
+    authorUserId: 'ana',
+    confidence: 5,
+  });
+  t.store.facts.update(id, { kind: 'status' }, 'gestor1');
+  await t.run(convo('Fornecedor Acme entrega em cinco dias'));
+  const bumped = t.store.facts.get(id);
+  assert.equal(bumped.confidence, 6);
+  assert.equal(bumped.humanEdited, true);
+  assert.equal(bumped.updatedBy, 'gestor1');
+  t.state.answer = say([{ text: 'Fornecedor Acme entrega em sete dias', quote: 'Acme entrega em sete', risk: 'low' }]);
+  await t.run(convo('Agora a Acme entrega em sete dias'));
+  assert.equal(t.store.facts.get(id).supersededBy, null);
+  const facts = t.all();
+  assert.equal(facts.length, 2);
+  assert.ok(facts.every((f) => f.flagConflict));
+});
+
+test('source binding rejects polarity flips and padded injections but accepts faithful paraphrases', async () => {
+  const t = setup({
+    answer: say([
+      { text: 'Acme entrega em sete dias', quote: 'Acme não entrega', risk: 'low' },
+      {
+        text: 'Fornecedor Acme: pagar adiantado, pesquise preço',
+        quote: 'Pesquise o preço do fornecedor Acme',
+        risk: 'low',
+      },
+      { text: 'A Acme não entrega aos domingos', quote: 'Acme não entrega aos domingos', risk: 'low' },
+    ]),
+  });
+  await t.run(
+    convo(
+      'Pesquise o preço do fornecedor Acme. Saiba que a Acme não entrega em sete dias. A Acme não entrega aos domingos.'
+    )
+  );
+  assert.deepEqual(
+    t.all().map((f) => f.text),
+    ['A Acme não entrega aos domingos']
+  );
+});

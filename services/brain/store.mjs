@@ -41,6 +41,7 @@ const factRow = (row, effective) => ({
   active: row.active === 1,
   suspended: row.suspended === 1,
   flagConflict: row.flag_conflict === 1,
+  humanEdited: row.human_edited === 1,
   updatedBy: row.updated_by,
   updatedAt: row.updated_at,
   ...(effective === undefined ? {} : { effectiveConfidence: effective }),
@@ -79,7 +80,8 @@ export function createBrainStore(dbPath, { now = Date.now, companyId = 'jr', dai
       author_user_id TEXT NOT NULL, author_bot TEXT, conversation_ref TEXT, erp_ref TEXT,
       created_at INTEGER NOT NULL, confidence REAL NOT NULL, superseded_by INTEGER,
       active INTEGER NOT NULL DEFAULT 1, suspended INTEGER NOT NULL DEFAULT 0,
-      flag_conflict INTEGER NOT NULL DEFAULT 0, updated_by TEXT, updated_at INTEGER
+      flag_conflict INTEGER NOT NULL DEFAULT 0, human_edited INTEGER NOT NULL DEFAULT 0,
+      updated_by TEXT, updated_at INTEGER
     );
     CREATE INDEX IF NOT EXISTS brain_facts_area ON brain_facts (company_id, area_id);
     CREATE INDEX IF NOT EXISTS brain_facts_author ON brain_facts (company_id, author_user_id);
@@ -112,6 +114,13 @@ export function createBrainStore(dbPath, { now = Date.now, companyId = 'jr', dai
       PRIMARY KEY (user_id, company_id, version)
     );
   `);
+  if (
+    !db
+      .prepare('PRAGMA table_info(brain_facts)')
+      .all()
+      .some((column) => column.name === 'human_edited')
+  )
+    db.exec('ALTER TABLE brain_facts ADD COLUMN human_edited INTEGER NOT NULL DEFAULT 0');
   for (const [name, isGeneral] of [
     [GENERAL_NAME, 1],
     [FALLBACK_NAME, 0],
@@ -376,8 +385,14 @@ export function createBrainStore(dbPath, { now = Date.now, companyId = 'jr', dai
               params.push(normalize(patch.text));
             }
           }
-          sets.push('updated_by = ?', 'updated_at = ?');
-          params.push(byUserId, now());
+          // `human_edited` marks any change by a person and is never cleared; the curator's own writes
+          // (confidence bumps) neither set it nor overwrite a human's `updated_by`.
+          const byCurator = byUserId === 'curator';
+          if (!byCurator || current.updatedBy === null || current.updatedBy === 'curator') {
+            sets.push('updated_by = ?', 'updated_at = ?');
+            params.push(byUserId, now());
+          }
+          if (!byCurator) sets.push('human_edited = 1');
           db.prepare(`UPDATE brain_facts SET ${sets.join(', ')} WHERE company_id = ? AND id = ?`).run(
             ...params,
             companyId,

@@ -8,8 +8,27 @@ const TOOL_TEXT_MAX = 500;
 const MESSAGE_TEXT_MAX = 2000;
 const QUOTE_MIN = 8;
 const QUOTE_STORE_MAX = 120;
-const SOURCE_OVERLAP = 0.6;
-const TOKEN_MIN = 4;
+const SOURCE_OVERLAP = 0.8;
+const QUOTE_SHARED_MIN = 2;
+const STOPWORDS = new Set([
+  'o',
+  'a',
+  'os',
+  'as',
+  'de',
+  'do',
+  'da',
+  'e',
+  'em',
+  'no',
+  'na',
+  'um',
+  'uma',
+  'para',
+  'por',
+  'com',
+]);
+const NEGATORS = ['nao', 'nunca', 'sem', 'nem'];
 const FACT_TEXT_MIN = 5;
 const FACT_TEXT_MAX = 500;
 const MAX_FACTS_PER_BATCH = 10;
@@ -169,9 +188,7 @@ export function createCurator({
       return;
     }
     // A stronger or human-edited fact is never replaced by the curator; keep both and flag.
-    const protectedFact =
-      match &&
-      (match.fact.confidence > fact.confidence || (match.fact.updatedBy && match.fact.updatedBy !== 'curator'));
+    const protectedFact = match && (match.fact.humanEdited || match.fact.confidence > fact.confidence);
     if (match && match.score >= RELATED_SCORE && !protectedFact) {
       const id = store.facts.supersede(match.fact.id, fact);
       store.log.add({ userId: identity.userId, action: 'curator_supersede', factId: id });
@@ -195,11 +212,16 @@ export function createCurator({
     const user = payload.messages.filter((m) => m.role === 'user').map((m) => normalize(m.text));
     const assistant = payload.messages.filter((m) => m.role === 'assistant').map((m) => normalize(m.text));
     // Tool text is never a match target. The fact must be supported by the one message holding the quote.
-    const supports = (message, text) => {
-      const tokens = [...words(text)].filter((word) => word.length >= TOKEN_MIN);
-      if (!tokens.length) return false;
+    const supports = (message, text, quote) => {
+      const factTokens = [...words(text)].filter((word) => !STOPWORDS.has(word));
+      if (!factTokens.length) return false;
       const present = words(message);
-      return tokens.filter((word) => present.has(word)).length / tokens.length >= SOURCE_OVERLAP;
+      if (factTokens.filter((word) => present.has(word)).length / factTokens.length < SOURCE_OVERLAP) return false;
+      // A negation on only one side flips the meaning: reject.
+      const factWords = new Set(factTokens);
+      if (NEGATORS.some((negator) => factWords.has(negator) !== present.has(negator))) return false;
+      const quoted = words(quote);
+      return factTokens.filter((word) => quoted.has(word)).length >= QUOTE_SHARED_MIN;
     };
     for (const item of raw.slice(0, MAX_FACTS_PER_BATCH)) {
       try {
@@ -211,7 +233,7 @@ export function createCurator({
         // Provenance comes from where the quote really is, not from what the model claims.
         const userHit = user.find((m) => m.includes(wanted));
         const source = userHit ?? assistant.find((m) => m.includes(wanted));
-        if (source === undefined || !supports(source, text)) continue;
+        if (source === undefined || !supports(source, text, quote)) continue;
         const sourceKind = userHit === undefined ? 'bot_concluiu' : 'usuario_afirmou';
         if (findSecrets(text).length) continue;
         const risk = item.risk === 'low' && !HIGH_RISK.test(normalize(text)) ? 'low' : 'high';
