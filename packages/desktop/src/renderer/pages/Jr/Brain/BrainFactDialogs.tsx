@@ -93,6 +93,7 @@ export const HistoryModal: React.FC<{ factId: number; onClose: () => void }> = (
   const { t, i18n } = useTranslation();
   const history = useSWR(['jr.brain.history', factId], () => ipcBridge.brain.manage.history.invoke({ id: factId }), {
     shouldRetryOnError: false,
+    revalidateOnFocus: false,
   });
   return (
     <Modal visible title={t('common.jr.brainManage.facts.historyTitle')} footer={null} onCancel={onClose}>

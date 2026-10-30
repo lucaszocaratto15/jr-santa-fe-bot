@@ -88,8 +88,13 @@ const JrSettingsModal: React.FC<{
   const bots = useSWR(tab === 'learn' ? JR_BOTS_KEY : null, listJrBots);
   const { state } = useJrAccess();
   // The owner manages the brain from the admin page; an area manager gets this tab. Hidden on any error.
-  const me = useSWR('jr.brain.me', () => ipcBridge.brain.me.invoke(), { shouldRetryOnError: false });
+  const me = useSWR('jr.brain.me', () => ipcBridge.brain.me.invoke(), {
+    shouldRetryOnError: false,
+    revalidateOnFocus: false,
+  });
   const showBrain = state.user?.id !== 'owner' && (me.data?.manages.length ?? 0) > 0;
+  // A stored or requested 'brain' tab falls back to General for anyone who is not a manager.
+  const current: SettingsTab = tab === 'brain' && !showBrain ? 'general' : tab;
   const tabs = SETTINGS_TABS.filter((id) => id !== 'brain' || showBrain);
 
   /** "Ensinar esta tarefa": a new conversation of the active bot, browser on the url, Ensinar prefilled. */
@@ -153,8 +158,8 @@ const JrSettingsModal: React.FC<{
               key={id}
               type='text'
               long
-              className={`${styles.tab} ${tab === id ? styles.tabActive : ''}`}
-              aria-current={tab === id ? 'page' : undefined}
+              className={`${styles.tab} ${current === id ? styles.tabActive : ''}`}
+              aria-current={current === id ? 'page' : undefined}
               onClick={() => onTab(id)}
             >
               {tabIcon(id)}
@@ -163,18 +168,18 @@ const JrSettingsModal: React.FC<{
           ))}
         </nav>
         <div className={styles.content}>
-          {tab === 'general' && <GeneralPanel />}
-          {tab === 'computer' && <ComputerPanel />}
-          {tab === 'usage' && <UsagePanel />}
-          {tab === 'vault' && <VaultPanel />}
-          {tab === 'tasks' && <TasksPanel onClose={onClose} />}
-          {tab === 'lessons' && <LessonsPanel />}
-          {tab === 'learn' && (
+          {current === 'general' && <GeneralPanel />}
+          {current === 'computer' && <ComputerPanel />}
+          {current === 'usage' && <UsagePanel />}
+          {current === 'vault' && <VaultPanel />}
+          {current === 'tasks' && <TasksPanel onClose={onClose} />}
+          {current === 'lessons' && <LessonsPanel />}
+          {current === 'learn' && (
             <LearnPanel autoConsent={autoConsent} onTeach={(suggestion) => void teachSuggestion(suggestion)} />
           )}
-          {tab === 'handbook' && <HandbookPanel />}
-          {tab === 'brain' && showBrain && <BrainManager mode='manager' />}
-          {tab === 'updates' && <UpdatesPanel />}
+          {current === 'handbook' && <HandbookPanel />}
+          {current === 'brain' && showBrain && <BrainManager mode='manager' />}
+          {current === 'updates' && <UpdatesPanel />}
         </div>
       </div>
     </div>,

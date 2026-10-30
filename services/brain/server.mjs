@@ -199,7 +199,8 @@ export function createBrainServer({
       isDirector,
       manages: isDirector
         ? [...names.keys()]
-        : ctx.memberships.filter((m) => m.level === 'gestor').map((m) => m.areaId),
+        : // Same set as managed(): Geral and the fallback area are never managed by a non-owner.
+          [...ctx.managed().low],
     });
   };
 

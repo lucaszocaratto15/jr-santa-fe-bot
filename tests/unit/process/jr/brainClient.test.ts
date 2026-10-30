@@ -29,10 +29,18 @@ describe('brainClient', () => {
   });
 
   it('parses feedback, me and consent', async () => {
-    expect(await client({ recorded: true, suspended: true }).brain.feedback('f1', 'errado')).toEqual({
+    expect(await client({ recorded: true, suspended: true }).brain.feedback('12', 'errado')).toEqual({
       suspended: true,
     });
-    await expect(client({ recorded: true }).brain.feedback('f1')).rejects.toThrow('unavailable');
+    await expect(client({ recorded: true }).brain.feedback('12')).rejects.toThrow('unavailable');
+    const guarded = client({ recorded: true, suspended: false });
+    await expect(guarded.brain.feedback('f1')).rejects.toThrow('unavailable');
+    await expect(guarded.brain.feedback('0')).rejects.toThrow('unavailable');
+    expect(guarded.call).not.toHaveBeenCalled();
+    await guarded.brain.feedback('12');
+    expect(JSON.parse(String(((guarded.call.mock.calls[0] as unknown[])[1] as RequestInit).body))).toEqual({
+      factId: 12,
+    });
     const me = {
       areas: [{ id: 'a', name: 'Obras', level: 'gestor', primary: true }],
       isDirector: false,

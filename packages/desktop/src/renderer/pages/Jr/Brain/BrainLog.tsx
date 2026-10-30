@@ -18,6 +18,7 @@ const BrainLog: React.FC<{ people: BrainPeople }> = ({ people }) => {
   const [shown, setShown] = useState(PAGE);
   const log = useSWR('jr.brain.log', () => ipcBridge.brain.manage.log.invoke({ since: Date.now() - LOG_DAYS * DAY }), {
     shouldRetryOnError: false,
+    revalidateOnFocus: false,
   });
   const rows = log.data ?? [];
   const actionLabel = (action: string) =>

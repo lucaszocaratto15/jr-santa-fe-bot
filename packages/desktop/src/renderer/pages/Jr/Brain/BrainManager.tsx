@@ -26,11 +26,15 @@ const BrainManager: React.FC<BrainManagerProps> = ({ mode }) => {
   const owner = mode === 'owner';
   const areas = useSWR(owner ? 'jr.brain.areas' : null, () => ipcBridge.brain.manage.areas.invoke(), {
     shouldRetryOnError: false,
+    revalidateOnFocus: false,
   });
   const employees = useSWR(owner ? 'jr.admin.employees' : null, () => ipcBridge.jr.admin.list.invoke(), {
     shouldRetryOnError: false,
   });
-  const me = useSWR(owner ? null : 'jr.brain.me', () => ipcBridge.brain.me.invoke(), { shouldRetryOnError: false });
+  const me = useSWR(owner ? null : 'jr.brain.me', () => ipcBridge.brain.me.invoke(), {
+    shouldRetryOnError: false,
+    revalidateOnFocus: false,
+  });
 
   const options = useMemo<BrainAreaOption[]>(() => {
     if (owner)

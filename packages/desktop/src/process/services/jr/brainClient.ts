@@ -33,10 +33,14 @@ const invalid = (): never => {
   throw new Error('unavailable');
 };
 
+/** Fact ids are integers on the brain; the shared type keeps them as strings. */
+const factIdText = (value: unknown): string | null =>
+  typeof value === 'string' && value ? value : Number.isInteger(value) ? String(value) : null;
+
 function parseFact(value: unknown): BrainFact {
   if (
     !record(value) ||
-    typeof value.id !== 'string' ||
+    !factIdText(value.id) ||
     typeof value.text !== 'string' ||
     (value.risk !== 'low' && value.risk !== 'high') ||
     typeof value.confidence !== 'number' ||
@@ -47,7 +51,15 @@ function parseFact(value: unknown): BrainFact {
   const date = value.date ?? null;
   const erpRef = value.erpRef ?? null;
   if (!nullableText(area) || !nullableText(date) || !nullableText(erpRef)) return invalid();
-  return { id: value.id, text: value.text, area, risk: value.risk, date, confidence: value.confidence, erpRef };
+  return {
+    id: factIdText(value.id) as string,
+    text: value.text,
+    area,
+    risk: value.risk,
+    date,
+    confidence: value.confidence,
+    erpRef,
+  };
 }
 
 /** The brain sends numeric area ids; the shared type keeps them as strings. */
@@ -75,8 +87,12 @@ function parseMe(value: unknown): BrainMe {
 }
 
 function parseConsent(value: unknown): { version: string | null; at: string | null } {
-  if (!record(value) || !nullableText(value.version ?? null) || !nullableText(value.at ?? null)) return invalid();
-  return { version: (value.version ?? null) as string | null, at: (value.at ?? null) as string | null };
+  if (!record(value) || !nullableText(value.version ?? null)) return invalid();
+  // The brain stores the acknowledgement time as epoch milliseconds.
+  const raw = value.at ?? null;
+  if (raw !== null && typeof raw !== 'string' && !Number.isFinite(raw)) return invalid();
+  const at = typeof raw === 'number' ? new Date(raw).toISOString() : raw;
+  return { version: (value.version ?? null) as string | null, at: at as string | null };
 }
 
 const post = (body: unknown): RequestInit => ({
@@ -97,7 +113,10 @@ export function createBrainClient(call: BrainCall): BrainClient {
       return value.facts.map(parseFact);
     },
     async feedback(factId, reason) {
-      const value = await call('/api/brain/feedback', post(reason ? { factId, reason } : { factId }));
+      // The brain wants a positive integer id; anything else never reaches it.
+      if (!/^[0-9]{1,12}$/u.test(factId) || Number(factId) < 1) return invalid();
+      const id = Number(factId);
+      const value = await call('/api/brain/feedback', post(reason ? { factId: id, reason } : { factId: id }));
       if (!record(value) || value.recorded !== true || typeof value.suspended !== 'boolean') return invalid();
       return { suspended: value.suspended };
     },

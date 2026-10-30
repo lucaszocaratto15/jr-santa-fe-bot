@@ -73,6 +73,8 @@ export type BrainManagedFact = {
   flagConflict: boolean;
   humanEdited: boolean;
   updatedAt: number | null;
+  /** Confidence after recency decay and feedback; absent in history rows. */
+  effectiveConfidence?: number;
 };
 
 export type BrainFactFilters = {

@@ -46,7 +46,7 @@ const BrainFacts: React.FC<Props> = ({ areas, people }) => {
   const facts = useSWR(
     ['jr.brain.facts', areaId, risk, kind, suspendedOnly, debounced],
     () => ipcBridge.brain.manage.facts.invoke(filters),
-    { shouldRetryOnError: false }
+    { shouldRetryOnError: false, revalidateOnFocus: false }
   );
   const visible = (facts.data ?? []).filter((fact) => !conflictOnly || fact.flagConflict);
   const areaName = (id: number) => areas.find((area) => area.id === id)?.name ?? String(id);
@@ -162,7 +162,9 @@ const BrainFacts: React.FC<Props> = ({ areas, people }) => {
                   <span className={styles.meta}>
                     {areaName(fact.areaId)} ·{' '}
                     {t(`common.jr.brainManage.facts.kinds.${fact.kind}`, { defaultValue: fact.kind })} ·{' '}
-                    {t('common.jr.brainManage.facts.confidence', { value: Math.round(fact.confidence * 10) / 10 })}
+                    {t('common.jr.brainManage.facts.confidence', {
+                      value: Math.round((fact.effectiveConfidence ?? fact.confidence) * 10) / 10,
+                    })}
                   </span>
                   <span className={styles.meta}>
                     {origin}

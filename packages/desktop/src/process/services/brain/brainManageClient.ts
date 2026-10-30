@@ -75,7 +75,8 @@ function parseFact(value: unknown): BrainManagedFact {
     typeof value.suspended !== 'boolean' ||
     typeof value.flagConflict !== 'boolean' ||
     typeof value.humanEdited !== 'boolean' ||
-    !nullableNumber(value.updatedAt)
+    !nullableNumber(value.updatedAt) ||
+    !(value.effectiveConfidence === undefined || Number.isFinite(value.effectiveConfidence))
   )
     return invalid();
   return {
@@ -96,6 +97,7 @@ function parseFact(value: unknown): BrainManagedFact {
     flagConflict: value.flagConflict,
     humanEdited: value.humanEdited,
     updatedAt: value.updatedAt,
+    ...(value.effectiveConfidence === undefined ? {} : { effectiveConfidence: value.effectiveConfidence as number }),
   };
 }
 

@@ -110,11 +110,11 @@ describe('BrainManager', () => {
   it('shows a gestor only the facts of managed areas: no areas, people or log', async () => {
     mocks.me.mockResolvedValue({
       areas: [
-        { id: 2, name: 'Obras', level: 'gestor', primary: true },
-        { id: 3, name: 'Financeiro', level: 'colaborador', primary: false },
+        { id: '2', name: 'Obras', level: 'gestor', primary: true },
+        { id: '3', name: 'Financeiro', level: 'colaborador', primary: false },
       ],
       isDirector: false,
-      manages: [2],
+      manages: ['2'],
     });
     mount('manager');
     expect(await screen.findByText('Fato número 7')).toBeTruthy();
@@ -124,6 +124,14 @@ describe('BrainManager', () => {
     expect(mocks.areas).not.toHaveBeenCalled();
     expect(mocks.log).not.toHaveBeenCalled();
     expect(mocks.list).not.toHaveBeenCalled();
+    // The author is not shown to a gestor (no employee list), neither a name nor "ex-funcionário".
+    expect(screen.queryByText(/ex-funcionário/)).toBeNull();
+    expect(screen.getByTestId('brain-fact-7').textContent).not.toMatch(/Origem: [^\d]*Ana/);
+    expect(screen.getByTestId('brain-fact-7').textContent).toContain('Origem: ');
+    // Only the managed area is offered in the area filter.
+    fireEvent.click(screen.getAllByRole('combobox')[0]);
+    expect(await screen.findByRole('option', { name: 'Obras' })).toBeTruthy();
+    expect(screen.queryByRole('option', { name: 'Financeiro' })).toBeNull();
   });
 
   it('disables promote to Geral for high-risk facts and promotes a low one', async () => {

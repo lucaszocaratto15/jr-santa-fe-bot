@@ -405,3 +405,14 @@ test('daily curator budget of 0 is honored', async (t) => {
   const { store } = await startBrain(t, { dailyCuratorCalls: 0 });
   assert.equal(store.budget.take('2026-10-30'), false);
 });
+
+test('/me manages never lists Geral or the fallback area for a non-owner', async (t) => {
+  const { call, store, areas } = await startBrain(t);
+  member(store, 'gil', areas.compras, 'gestor');
+  member(store, 'gil', areas.general, 'gestor', false);
+  const me = (await call('/me', { user: 'gil' })).body;
+  assert.deepEqual(me.manages, [areas.compras]);
+  assert.ok(me.areas.some((a) => a.id === areas.general));
+  const ownerManages = (await call('/me')).body.manages;
+  assert.ok(ownerManages.includes(areas.general));
+});
