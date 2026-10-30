@@ -1027,6 +1027,15 @@
         "forbidden": "Você não tem permissão para isso.",
         "notFound": "Este item não existe mais."
       }
+    },
+    "brain": {
+      "activity": {
+        "running": "正在查询公司大脑…",
+        "doneOne": "已查询公司大脑 · {{count}} 条事实",
+        "done": "已查询公司大脑 · {{count}} 条事实",
+        "doneNone": "已查询公司大脑 · 未找到内容",
+        "unavailable": "大脑暂不可用"
+      }
     }
   }
 }

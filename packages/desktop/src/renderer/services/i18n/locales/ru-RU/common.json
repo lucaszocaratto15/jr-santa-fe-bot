@@ -1029,6 +1029,15 @@
         "forbidden": "Você não tem permissão para isso.",
         "notFound": "Este item não existe mais."
       }
+    },
+    "brain": {
+      "activity": {
+        "running": "Обращение к мозгу компании…",
+        "doneOne": "Обращение к мозгу компании · {{count}} факт",
+        "done": "Обращение к мозгу компании · фактов: {{count}}",
+        "doneNone": "Обращение к мозгу компании · ничего не найдено",
+        "unavailable": "Мозг недоступен"
+      }
     }
   }
 }

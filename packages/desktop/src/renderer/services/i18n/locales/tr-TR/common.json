@@ -1027,6 +1027,15 @@
         "forbidden": "Você não tem permissão para isso.",
         "notFound": "Este item não existe mais."
       }
+    },
+    "brain": {
+      "activity": {
+        "running": "Şirket beynine danışılıyor…",
+        "doneOne": "Şirket beynine danışıldı · {{count}} bilgi",
+        "done": "Şirket beynine danışıldı · {{count}} bilgi",
+        "doneNone": "Şirket beynine danışıldı · bir şey bulunamadı",
+        "unavailable": "Beyin kullanılamıyor"
+      }
     }
   }
 }

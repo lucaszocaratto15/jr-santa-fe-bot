@@ -9,6 +9,8 @@ import { getAcpImageFileName } from '@/common/chat/acpToolCallOutput';
 import type { NormalizedToolCall, NormalizedToolStatus, ToolMessage } from '@/common/chat/normalizeToolCall';
 import { normalizeToolMessages, summarizeToolProgress } from '@/common/chat/normalizeToolCall';
 import { getToolDescriptionPayload, localizeToolName } from '../acp/toolPresentation';
+import BrainSearchActivity from './BrainSearchActivity/BrainSearchActivity';
+import { isBrainSearchTool } from './BrainSearchActivity/parseBrainSearch';
 import LocalImageView from '@/renderer/components/media/LocalImageView';
 import { downloadFileFromPath } from '@/renderer/utils/file/download';
 import './MessageToolGroupSummary.css';
@@ -154,6 +156,8 @@ const MessageToolGroupSummary: React.FC<{ messages: ToolMessage[] }> = ({ messag
   const tools = useMemo(() => normalizeToolMessages(messages), [messages]);
   const { doneCount, current } = summarizeToolProgress(tools);
   const count = current ? doneCount : tools.length;
+  // Brain lookups get their own animation; their generic rows stay in the expanded list.
+  const brainCalls = tools.filter((item) => isBrainSearchTool(item.name));
 
   return (
     <div className='tool-group-summary'>
@@ -172,7 +176,10 @@ const MessageToolGroupSummary: React.FC<{ messages: ToolMessage[] }> = ({ messag
           ))}
         </div>
       )}
-      {current && (
+      {brainCalls.map((item) => (
+        <BrainSearchActivity key={item.key} status={item.status} output={item.output} />
+      ))}
+      {current && !isBrainSearchTool(current.name) && (
         <div className='tool-group-summary__live' data-testid='tool-group-live-step'>
           <Spin size={12} />
           <span className='truncate'>{localizeToolName(current.name, t)}…</span>

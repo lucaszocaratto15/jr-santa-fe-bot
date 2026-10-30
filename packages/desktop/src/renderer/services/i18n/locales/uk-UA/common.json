@@ -1030,6 +1030,15 @@
         "forbidden": "Você não tem permissão para isso.",
         "notFound": "Este item não existe mais."
       }
+    },
+    "brain": {
+      "activity": {
+        "running": "Звернення до мозку компанії…",
+        "doneOne": "Звернення до мозку компанії · {{count}} факт",
+        "done": "Звернення до мозку компанії · фактів: {{count}}",
+        "doneNone": "Звернення до мозку компанії · нічого не знайдено",
+        "unavailable": "Мозок недоступний"
+      }
     }
   }
 }

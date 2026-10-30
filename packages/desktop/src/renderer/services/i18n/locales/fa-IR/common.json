@@ -1027,6 +1027,15 @@
         "forbidden": "Você não tem permissão para isso.",
         "notFound": "Este item não existe mais."
       }
+    },
+    "brain": {
+      "activity": {
+        "running": "در حال مراجعه به مغز شرکت…",
+        "doneOne": "مراجعه به مغز شرکت · {{count}} واقعیت",
+        "done": "مراجعه به مغز شرکت · {{count}} واقعیت",
+        "doneNone": "مراجعه به مغز شرکت · چیزی پیدا نشد",
+        "unavailable": "مغز در دسترس نیست"
+      }
     }
   }
 }

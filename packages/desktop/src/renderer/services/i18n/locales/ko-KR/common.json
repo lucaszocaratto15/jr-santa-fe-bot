@@ -1027,6 +1027,15 @@
         "forbidden": "Você não tem permissão para isso.",
         "notFound": "Este item não existe mais."
       }
+    },
+    "brain": {
+      "activity": {
+        "running": "회사 두뇌를 조회하는 중…",
+        "doneOne": "회사 두뇌 조회 · 사실 {{count}}건",
+        "done": "회사 두뇌 조회 · 사실 {{count}}건",
+        "doneNone": "회사 두뇌 조회 · 찾은 내용 없음",
+        "unavailable": "두뇌를 사용할 수 없음"
+      }
     }
   }
 }

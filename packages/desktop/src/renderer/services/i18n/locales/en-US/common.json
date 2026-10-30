@@ -1027,6 +1027,15 @@
         "forbidden": "You do not have permission for this.",
         "notFound": "This item no longer exists."
       }
+    },
+    "brain": {
+      "activity": {
+        "running": "Consulting the company brain…",
+        "doneOne": "Consulted the company brain · {{count}} fact",
+        "done": "Consulted the company brain · {{count}} facts",
+        "doneNone": "Consulted the company brain · nothing found",
+        "unavailable": "Brain unavailable"
+      }
     }
   }
 }

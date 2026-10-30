@@ -1027,6 +1027,15 @@
         "forbidden": "Você não tem permissão para isso.",
         "notFound": "Este item não existe mais."
       }
+    },
+    "brain": {
+      "activity": {
+        "running": "Consultando o cérebro da empresa…",
+        "doneOne": "Consultou o cérebro da empresa · {{count}} fato",
+        "done": "Consultou o cérebro da empresa · {{count}} fatos",
+        "doneNone": "Consultou o cérebro da empresa · nada encontrado",
+        "unavailable": "Cérebro indisponível"
+      }
     }
   }
 }

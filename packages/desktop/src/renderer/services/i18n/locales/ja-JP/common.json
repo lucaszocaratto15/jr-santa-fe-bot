@@ -1027,6 +1027,15 @@
         "forbidden": "Você não tem permissão para isso.",
         "notFound": "Este item não existe mais."
       }
+    },
+    "brain": {
+      "activity": {
+        "running": "会社の頭脳を参照しています…",
+        "doneOne": "会社の頭脳を参照 · {{count}}件",
+        "done": "会社の頭脳を参照 · {{count}}件",
+        "doneNone": "会社の頭脳を参照 · 該当なし",
+        "unavailable": "頭脳は利用できません"
+      }
     }
   }
 }

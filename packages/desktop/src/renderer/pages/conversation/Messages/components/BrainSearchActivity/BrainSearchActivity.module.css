@@ -1,0 +1,92 @@
+.root {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.svg {
+  flex-shrink: 0;
+  width: 120px;
+  height: 64px;
+  overflow: visible;
+}
+
+.dot {
+  fill: var(--primary);
+  opacity: 0.75;
+}
+
+.link {
+  stroke: var(--text-secondary);
+  stroke-width: 1;
+  stroke-dasharray: 2 4;
+  opacity: 0.35;
+}
+
+.conversation {
+  fill: none;
+  stroke: var(--text-secondary);
+  stroke-width: 1.4;
+}
+
+.bot {
+  fill: var(--primary);
+  stroke: var(--bg-base);
+  stroke-width: 1.5;
+}
+
+.label {
+  min-width: 0;
+}
+
+/* Looping animation only while the lookup is pending (class set by the component). */
+.animated .dot {
+  animation: converge 7s ease-in-out infinite;
+  animation-delay: var(--delay);
+}
+
+.animated .bot {
+  animation: fetch 7s ease-in-out infinite;
+}
+
+@keyframes converge {
+  0% {
+    opacity: 0;
+    transform: translate(var(--from-x), var(--from-y));
+  }
+  35%,
+  88% {
+    opacity: 0.75;
+    transform: translate(0, 0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(0, 0);
+  }
+}
+
+/* Bot: conversation -> brain -> conversation, waiting while the brain forms. */
+@keyframes fetch {
+  0%,
+  30% {
+    transform: translate(0, 0);
+  }
+  52%,
+  60% {
+    transform: translate(42px, 0);
+  }
+  82%,
+  100% {
+    transform: translate(0, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animated .dot,
+  .animated .bot {
+    animation: none;
+  }
+}
