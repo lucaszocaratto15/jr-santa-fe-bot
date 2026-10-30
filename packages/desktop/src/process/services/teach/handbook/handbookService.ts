@@ -46,6 +46,7 @@ import {
   weeklyIndicators,
 } from './draftBuilder';
 import { activityFlowchart, roleFlowchart } from './flowchart';
+import { scrubText } from './scrub';
 
 export const HANDBOOK_DIRNAME = 'jr-handbook';
 const MAX_SHOT_BYTES = 300 * 1024;
@@ -66,8 +67,13 @@ const STOP_SYNC_RE = /(^|\W)(unavailable|no_role|forbidden)$/;
 
 type PublishedEntry = {
   itemId: string;
-  /** Hash of the source the item was published from (not of the employee's edit). */
+  /**
+   * Identity of the source the item was published from (never the employee's edit): the full
+   * content hash for taught tasks, the normalized title / week for observed items.
+   */
   hash: string;
+  /** Full content hash of the source at the last publish; observed items refresh silently when it moves. */
+  contentHash?: string;
   kind: HandbookKind;
   source: HandbookSource;
   title: string;
@@ -79,6 +85,10 @@ type HandbookState = {
   published: Record<string, PublishedEntry>;
   /** Hidden items: key → source hash at the time. Hidden until the hash changes. */
   dismissed: Record<string, string>;
+  /** Items the server refused for good (not offline/no role): skipped until their content changes. */
+  failed?: Record<string, { hash: string; failedAt: number }>;
+  /** Role of the last successful read, so the Manual opens offline. */
+  role?: { key: string; title: string } | null;
   /**
    * Set when an Aprender revoke could not reach the server. Retried at startup, when the
    * login is restored, every sync interval while set, and on the next drafts/mine call.
@@ -134,6 +144,16 @@ export type HandbookService = {
 
 type SourceDraft = Omit<HandbookDraft, 'hash' | 'publishedItemId' | 'status'> & { shotsDir: string | null };
 
+/** Stable identity of a source: edits and hiding follow it, not the content that drifts between batches. */
+const identityOf = (source: Pick<SourceDraft, 'key' | 'kind' | 'source' | 'body' | 'shots'>): string => {
+  if (source.source === 'taught') return draftHash(source.body, source.shots);
+  return draftHash(
+    { id: source.kind === 'indicators' ? (source.body as HandbookIndicatorsBody).weekStart : source.key },
+    []
+  );
+};
+const contentOf = (source: Pick<SourceDraft, 'body' | 'shots'>): string => draftHash(source.body, source.shots);
+
 const emptyState = (): HandbookState => ({ published: {}, dismissed: {} });
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -151,7 +171,9 @@ export function withFlowcharts(payload: HandbookPayload): HandbookView {
 }
 
 const FREQUENCIES = new Set<HandbookFrequency>(['daily', 'weekly', 'occasional']);
-const clip = (value: unknown, max: number): string => (typeof value === 'string' ? value.trim().slice(0, max) : '');
+/** Trim, scrub secrets and personal identifiers (see scrub.ts), then cap the length. */
+const clip = (value: unknown, max: number): string =>
+  typeof value === 'string' ? scrubText(value.trim()).slice(0, max) : '';
 const nonNegative = (value: unknown): number =>
   typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.round(value * 10) / 10 : 0;
 
@@ -183,7 +205,7 @@ function sanitizeActivity(edited: unknown, source: HandbookActivityBody): Handbo
       .map((item) => clip(item, 300))
       .filter(Boolean),
     ...(source.skillName ? { skillName: source.skillName } : {}),
-    ...(source.lessons?.length ? { lessons: source.lessons } : {}),
+    ...(source.lessons?.length ? { lessons: source.lessons.map((lesson) => clip(lesson, 2000)).filter(Boolean) } : {}),
   };
 }
 
@@ -381,7 +403,7 @@ export function createHandbookService(deps: HandbookServiceDeps): HandbookServic
   ): Promise<void> => {
     const state = await loadState();
     const itemId = state.published[source.key]?.itemId ?? randomUUID();
-    const hash = draftHash(source.body, source.shots);
+    const hash = identityOf(source);
     let body: object;
     const media: Array<{ id: string; base64: string }> = [];
     let activity: HandbookActivityBody | null = null;
@@ -412,6 +434,7 @@ export function createHandbookService(deps: HandbookServiceDeps): HandbookServic
     const entry: PublishedEntry = {
       itemId,
       hash,
+      contentHash: contentOf(source),
       kind: source.kind,
       source: source.source,
       title: titleOf(source),
@@ -423,23 +446,42 @@ export function createHandbookService(deps: HandbookServiceDeps): HandbookServic
     await updateState((next) => {
       next.published[source.key] = entry;
       delete next.dismissed[source.key];
+      if (next.failed) delete next.failed[source.key];
     });
   };
 
   const runSync = async (notify: boolean): Promise<number> => {
     let count = 0;
     try {
-      const state = await loadState();
       for (const source of await sources()) {
-        const hash = draftHash(source.body, source.shots);
-        if (state.published[source.key]?.hash === hash || state.dismissed[source.key] === hash) continue;
+        // State is re-read per item: a hide or an edit made meanwhile wins over this sync.
+        // eslint-disable-next-line no-await-in-loop
+        const state = await loadState();
+        if (source.source === 'learn' && state.pendingWithdrawLearn) continue;
+        const identity = identityOf(source);
+        const content = contentOf(source);
+        const entry = state.published[source.key];
+        if (state.dismissed[source.key] === identity) continue;
+        if (state.failed?.[source.key]?.hash === content) continue;
+        const isNew = entry?.hash !== identity;
+        // Same identity: only an unedited observed item refreshes (silently); an edit is never overwritten.
+        if (!isNew && (entry.contentHash === content || entry.edited)) continue;
         try {
+          // The employee's edit survives a source change; only lessons, skill name and screenshots come from the source.
           // eslint-disable-next-line no-await-in-loop -- one upload at a time
-          await publishSource(source, source.body, source.shots, { edited: false });
-          count += 1;
+          await (isNew && entry?.edited
+            ? publishSource(source, entry.edited, entry.keepShots ?? source.shots, { edited: true })
+            : publishSource(source, source.body, source.shots, { edited: false }));
+          if (isNew) count += 1;
         } catch (error) {
-          // Offline / no role / no permission: stop and retry next sync. Anything else only skips the item.
-          if (STOP_SYNC_RE.test((error instanceof Error ? error.message : String(error)).trim())) break;
+          const message = (error instanceof Error ? error.message : String(error)).trim();
+          // Offline / no role / no permission: stop and retry next sync.
+          if (STOP_SYNC_RE.test(message)) break;
+          // Anything else is permanent for this content: skip it until the source changes.
+          // eslint-disable-next-line no-await-in-loop
+          await updateState((next) => {
+            next.failed = { ...next.failed, [source.key]: { hash: content, failedAt: now() } };
+          }).catch(() => {});
         }
       }
     } catch {
@@ -463,13 +505,24 @@ export function createHandbookService(deps: HandbookServiceDeps): HandbookServic
     async drafts() {
       await retryPendingWithdraw();
       const state = await loadState();
-      const payload = await deps.client.mine();
+      let role = state.role ?? null;
+      try {
+        role = (await deps.client.mine()).role;
+        if (JSON.stringify(role) !== JSON.stringify(state.role ?? null)) {
+          await updateState((next) => {
+            next.role = role;
+          });
+        }
+      } catch (error) {
+        // Offline: the Manual still opens from local state once a role was seen.
+        if (!state.role) throw error;
+      }
       const bySource = new Map((await sources()).map((source) => [source.key, source]));
       const published: HandbookPublished[] = Object.entries(state.published).map(([key, entry]) => {
         const source = bySource.get(key);
-        const hash = source ? draftHash(source.body, source.shots) : entry.hash;
+        const hash = source ? identityOf(source) : entry.hash;
         const { shotsDir: _dir, ...rest } = source ?? ({} as SourceDraft);
-        const edited = entry.edited && entry.hash === hash ? entry.edited : null;
+        const edited = entry.edited ?? null;
         return {
           key,
           itemId: entry.itemId,
@@ -481,11 +534,11 @@ export function createHandbookService(deps: HandbookServiceDeps): HandbookServic
       const hidden: HandbookHidden[] = [];
       for (const [key, hiddenHash] of Object.entries(state.dismissed)) {
         const source = bySource.get(key);
-        if (source && draftHash(source.body, source.shots) === hiddenHash) {
+        if (source && identityOf(source) === hiddenHash) {
           hidden.push({ key, kind: source.kind, title: titleOf(source) });
         }
       }
-      return { role: payload.role, published, hidden };
+      return { role, published, hidden };
     },
 
     async publish(key, edited, keepShots) {
@@ -498,7 +551,7 @@ export function createHandbookService(deps: HandbookServiceDeps): HandbookServic
       const entry = state.published[key];
       const source = (await sources()).find((draft) => draft.key === key);
       if (!entry && !source) return;
-      const hash = source ? draftHash(source.body, source.shots) : (entry?.hash ?? '');
+      const hash = source ? identityOf(source) : (entry?.hash ?? '');
       if (entry) await deps.client.remove(entry.itemId);
       await updateState((next) => {
         delete next.published[key];
@@ -515,6 +568,10 @@ export function createHandbookService(deps: HandbookServiceDeps): HandbookServic
     },
 
     async withdraw(itemId) {
+      // Withdrawing a known item is hiding it, so the next sync does not publish it again.
+      const state = await loadState();
+      const key = Object.entries(state.published).find(([, entry]) => entry.itemId === itemId)?.[0];
+      if (key) return this.hide(key);
       await deps.client.remove(itemId);
       await updateState((state) => {
         for (const [key, entry] of Object.entries(state.published)) {
