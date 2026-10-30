@@ -74,4 +74,12 @@ describe('DataNoticeModal', () => {
       expect(Object.keys((readCommon(lang).jr as { dataNotice: object }).dataNotice).sort()).toEqual(keys);
     }
   });
+
+  it('says what is kept: extracted facts and short quotes of up to 120 characters, not "never"', () => {
+    for (const lang of ['pt-BR', 'en-US']) {
+      const body = (readCommon(lang).jr as { dataNotice: { retentionBody: string } }).dataNotice.retentionBody;
+      expect(body).toContain('120');
+      expect(body).not.toMatch(/nunca ficam guardados|never stored/u);
+    }
+  });
 });

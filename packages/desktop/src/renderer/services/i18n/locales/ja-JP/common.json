@@ -913,7 +913,7 @@
       "blockedTitle": "O que fica de fora",
       "blockedBody": "Removemos os valores do seu Cofre antes do envio, e o servidor descarta fatos com CPF, CNPJ, cartão, chave de acesso ou e-mail.",
       "retentionTitle": "Por quanto tempo",
-      "retentionBody": "As amostras de tela são apagadas em 48 horas. Os trechos de conversa nunca ficam guardados no servidor: só os fatos extraídos deles.",
+      "retentionBody": "As amostras de tela são apagadas em 48 horas. Os trechos de conversa não ficam guardados no servidor: só os fatos extraídos deles e, junto de cada fato, uma citação curta da conversa (até 120 caracteres).",
       "providerTitle": "Quem processa",
       "providerBody": "O processamento usa o provedor de IA da empresa (MiniMax), pelo servidor da empresa. Nada vai direto do seu computador para o provedor.",
       "pauseTitle": "Pausar o Aprender",

@@ -913,7 +913,7 @@
       "blockedTitle": "What is left out",
       "blockedBody": "We remove the values in your vault before sending, and the server discards facts containing a tax ID, card number, access key or e-mail address.",
       "retentionTitle": "How long it is kept",
-      "retentionBody": "Screen samples are deleted after 48 hours. Conversation stretches are never stored on the server: only the facts extracted from them are.",
+      "retentionBody": "Screen samples are deleted after 48 hours. Conversation stretches are not stored on the server: only the facts extracted from them are kept, each with a short quote from the conversation (up to 120 characters).",
       "providerTitle": "Who processes it",
       "providerBody": "Processing uses the company's AI provider (MiniMax), through the company server. Nothing goes straight from your computer to the provider.",
       "pauseTitle": "Pausing Aprender",
