@@ -179,7 +179,7 @@ export function createModelProxy({
           typeof body !== 'object' ||
           !Array.isArray(body.messages) ||
           body.messages.length === 0 ||
-          body.messages.length > 1000 ||
+          body.messages.length > 10000 ||
           (body.model !== undefined && body.model !== model) ||
           (body.stream !== undefined && typeof body.stream !== 'boolean') ||
           (body.stream_options !== undefined &&

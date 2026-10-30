@@ -16,6 +16,14 @@ export type ReplyQuote = {
   position: 'left' | 'right' | 'center' | 'pop';
 };
 
+export type SendBoxSendRequest = {
+  text: string;
+  conversationId: string;
+  /** Set by the send box that handles the request; still false means nobody took it. */
+  claimed: boolean;
+  onResult: (ok: boolean) => void;
+};
+
 interface EventTypes {
   // The 2nd arg is the target conversation id: only the send box whose
   // conversation matches consumes the event (team renders one send box per
@@ -42,6 +50,13 @@ interface EventTypes {
   ];
   // 填充输入框事件 / Fill sendbox input event
   'sendbox.fill': [string]; // prompt text to fill
+  /**
+   * Send text as a normal user message from the send box of `request.conversationId`,
+   * through the same path as pressing Enter; queued while the agent is busy. The send box
+   * that takes it sets `claimed` synchronously and later reports through `onResult`.
+   * Used by the teach cards for the draft prompt and "Testar agora".
+   */
+  'sendbox.send': [SendBoxSendRequest];
   'sendbox.reply': [ReplyQuote]; // reply/quote a message
   'sendbox.reply.clear': void; // clear reply quote
   /**
@@ -60,6 +75,8 @@ interface EventTypes {
    * the send box of that conversation may react.
    */
   'sendbox.mention.session': [{ id: string; name: string }, string | undefined];
+  /** Opens the JR settings overlay on a tab; `autoConsent` also opens the "Aprender" term modal. */
+  'jr.settings.open': [{ tab: 'learn'; autoConsent?: boolean }];
 }
 
 export const emitter = new EventEmitter<EventTypes>();

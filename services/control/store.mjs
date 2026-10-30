@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypt
 import { chmodSync, mkdirSync } from 'node:fs';
 import { dirname, isAbsolute } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { createHandbookStore, migrateHandbook } from './handbook.mjs';
 import { httpError } from './validation.mjs';
 
 const DAY = 86_400_000;
@@ -9,7 +10,12 @@ const ACCESS_TIME_ZONE = 'America/Sao_Paulo';
 const hash = (value) => createHash('sha256').update(value).digest();
 const keyHash = (value) => hash(value).toString('hex');
 const iso = (value) => (value === null || value === undefined ? null : new Date(value).toISOString());
-const publicUser = (row) => ({ id: row.id, name: row.name, role: row.id === 'owner' ? 'admin' : row.role });
+const publicUser = (row) => ({
+  id: row.id,
+  name: row.name,
+  role: row.id === 'owner' ? 'admin' : row.role,
+  title: row.title ?? null,
+});
 
 function optionalEmail(value) {
   if (value == null) return null;
@@ -176,6 +182,7 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
   ]) {
     if (!userColumns.has(name)) db.exec(`ALTER TABLE users ADD COLUMN ${name} ${type}`);
   }
+  migrateHandbook(db);
   db.prepare("INSERT OR IGNORE INTO users (id,name,role,created_at) VALUES ('owner',?,'admin',?)").run(
     OWNER_PROFILE_NAME,
     now()
@@ -364,6 +371,16 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
         return policy;
       });
     },
+    setTitle(id, value) {
+      const title = optionalTitle(value);
+      return transaction(() => {
+        const user = db.prepare("SELECT * FROM users WHERE id = ? AND role = 'employee'").get(id);
+        if (!user) throw httpError(404, 'not_found');
+        db.prepare('UPDATE users SET title = ? WHERE id = ?').run(title, id);
+        return { title };
+      });
+    },
+    handbook: createHandbookStore(db, now, httpError),
     tokenPolicy(userId) {
       if (!TOKEN_LIMITS_ENFORCED) return null;
       const row = db.prepare('SELECT token_limit FROM users WHERE id = ?').get(userId);

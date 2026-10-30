@@ -47,6 +47,9 @@ export const BROWSER_SESSION_PARTITION = 'persist:aionui-browser';
  */
 export const BUILTIN_BROWSER_MCP_NAME = 'aionui-browser';
 
+/** Name of the built-in MCP server that lets the agent use the vault and submit taught-task drafts. */
+export const BUILTIN_TEACH_MCP_NAME = 'jr-teach';
+
 // ===== 文件处理相关常量 =====
 
 /** 临时文件时间戳分隔符 */

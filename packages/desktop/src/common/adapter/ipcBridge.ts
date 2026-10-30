@@ -197,8 +197,37 @@ export const jr = {
       { tokenLimit: number | null; accessStart: string | null; accessEnd: string | null },
       { employeeId: string; tokenLimit: number | null; accessStart: string | null; accessEnd: string | null }
     >('jr-admin-update-policy'),
+    setTitle: bridge.buildProvider<{ title: string | null }, { employeeId: string; title: string | null }>(
+      'jr-admin-set-title'
+    ),
+  },
+  /**
+   * "Manual da função". Only the employee approves (publish = approve); admins only read.
+   * Images cross as data URLs; the JR token stays in main. Errors are HandbookError codes.
+   */
+  handbook: {
+    mine: bridge.buildProvider<HandbookView, void>('jr-handbook-mine'),
+    drafts: bridge.buildProvider<HandbookDraftsResult, void>('jr-handbook-drafts'),
+    publish: bridge.buildProvider<void, { key: string; body: HandbookDraftBody; keepShots: number[] }>(
+      'jr-handbook-publish'
+    ),
+    dismiss: bridge.buildProvider<void, { key: string }>('jr-handbook-dismiss'),
+    withdraw: bridge.buildProvider<void, { itemId: string }>('jr-handbook-withdraw'),
+    media: bridge.buildProvider<string, { id: string }>('jr-handbook-media'),
+    /** A local screenshot of a draft, for the review editor. */
+    draftShot: bridge.buildProvider<string, { key: string; shot: number }>('jr-handbook-draft-shot'),
+    /** Mermaid of an activity being edited. */
+    preview: bridge.buildProvider<string, { body: HandbookActivityBody }>('jr-handbook-preview'),
+    adminRoles: bridge.buildProvider<HandbookRoleSummary[], void>('jr-handbook-admin-roles'),
+    adminRole: bridge.buildProvider<HandbookView, { key: string }>('jr-handbook-admin-role'),
   },
 };
+
+type HandbookView = import('@/common/types/agent/handbookTypes').HandbookView;
+type HandbookDraftsResult = import('@/common/types/agent/handbookTypes').HandbookDraftsResult;
+type HandbookDraftBody = import('@/common/types/agent/handbookTypes').HandbookDraftBody;
+type HandbookActivityBody = import('@/common/types/agent/handbookTypes').HandbookActivityBody;
+type HandbookRoleSummary = import('@/common/types/agent/handbookTypes').HandbookRoleSummary;
 
 // ---------------------------------------------------------------------------
 // Assistants — routed to /api/assistants/*
@@ -1539,6 +1568,20 @@ export const theme = {
 };
 
 // ---------------------------------------------------------------------------
+// Vault — local encrypted credentials. No channel ever returns a secret.
+// ---------------------------------------------------------------------------
+
+export type VaultItemPublic = import('@/common/types/agent/teachTypes').VaultItemPublic;
+export type VaultUpsert = import('@/common/types/agent/teachTypes').VaultUpsert;
+
+export const vault = {
+  available: bridge.buildProvider<boolean, void>('vault:available'),
+  list: bridge.buildProvider<VaultItemPublic[], void>('vault:list'),
+  upsert: bridge.buildProvider<VaultItemPublic, VaultUpsert>('vault:upsert'),
+  remove: bridge.buildProvider<void, { id: string }>('vault:remove'),
+};
+
+// ---------------------------------------------------------------------------
 // System Settings — routed to /api/settings/* unless they need Electron-native side effects.
 // ---------------------------------------------------------------------------
 
@@ -2541,4 +2584,93 @@ export const sidebar = {
   deleteArchivedProject: httpDelete<import('@/common/types/sidebar').ArchiveDeleteResult, { project_id: string }>(
     (p) => `/api/sidebar/archived/project/${encodeURIComponent(p.project_id)}`
   ),
+};
+
+export type SecureRequest = import('@/common/types/agent/teachTypes').SecureRequest;
+export type SecureResponse = import('@/common/types/agent/teachTypes').SecureResponse;
+export type SecureRespondResult = import('@/common/types/agent/teachTypes').SecureRespondResult;
+export type TeachDraft = import('@/common/types/agent/teachTypes').TeachDraft;
+export type TeachStateEvent = import('@/common/types/agent/teachTypes').TeachStateEvent;
+export type TeachStopResult = import('@/common/types/agent/teachTypes').TeachStopResult;
+export type TeachDraftEvent = import('@/common/types/agent/teachTypes').TeachDraftEvent;
+export type TeachSaveDraftInput = import('@/common/types/agent/teachTypes').TeachSaveDraftInput;
+export type TeachDraftRejectedEvent = import('@/common/types/agent/teachTypes').TeachDraftRejectedEvent;
+export type TaughtTaskContent = import('@/common/types/agent/teachTypes').TaughtTaskContent;
+export type TaughtTaskErrorCode = import('@/common/types/agent/teachTypes').TaughtTaskErrorCode;
+
+export const teach = {
+  openTab: bridge.buildEmitter<{ url: string; openerWebContentsId: number }>('teach:open-tab'),
+  downloaded: bridge.buildEmitter<{ fileName: string; path: string; origin: string }>('teach:downloaded'),
+  /** Main → renderer: show a secure input card. Carries no value. */
+  secureRequest: bridge.buildEmitter<SecureRequest>('teach:secure-request'),
+  /** Main → renderer: drop the card of a request that expired unanswered. */
+  secureExpired: bridge.buildEmitter<{ id: string }>('teach:secure-expired'),
+  /** Renderer → main: the typed value goes straight to the filler; only `saved` comes back. */
+  secureRespond: bridge.buildProvider<SecureRespondResult, SecureResponse>('teach:secure-respond'),
+  /** Renderer → main: pending requests (no values) so a freshly mounted host can resync. */
+  secureListPending: bridge.buildProvider<SecureRequest[], void>('teach:secure-list-pending'),
+  /** False when the CDP bridge is off: the Ensinar button is hidden. */
+  available: bridge.buildProvider<boolean, void>('teach:available'),
+  start: bridge.buildProvider<{ id: string }, { description: string }>('teach:start'),
+  pause: bridge.buildProvider<void, void>('teach:pause'),
+  resume: bridge.buildProvider<void, void>('teach:resume'),
+  /** Stops recording; the result carries the draft prompt the renderer sends to the bot. */
+  stop: bridge.buildProvider<TeachStopResult, void>('teach:stop'),
+  /** Drops the active or awaiting recording and its raw dir (also used after a save). */
+  discard: bridge.buildProvider<void, void>('teach:discard'),
+  /** Main → renderer: recorder state, ticking every second while recording. */
+  state: bridge.buildEmitter<TeachStateEvent>('teach:state'),
+  /** Main → renderer: a validated draft from `teach_submit_draft`, for the review card. */
+  draft: bridge.buildEmitter<TeachDraftEvent>('teach:draft'),
+  /** Main → renderer: the bot's draft was refused (code only, no draft content). */
+  draftRejected: bridge.buildEmitter<TeachDraftRejectedEvent>('teach:draft-rejected'),
+  /** Writes the reviewed SKILL.md; `skillPath` is the skill directory for `fs.importSkill`. */
+  saveDraft: bridge.buildProvider<{ skillPath: string }, TeachSaveDraftInput>('teach:save-draft'),
+  /** "Assumir" / "Devolver ao bot": locks the agent out of the in-app browser. */
+  takeOver: bridge.buildProvider<void, { on: boolean }>('teach:take-over'),
+  /** Current take-over state, read by the toolbar on mount. */
+  takeOverState: bridge.buildProvider<{ on: boolean }, void>('teach:take-over-state'),
+  /** "Minhas tarefas" → Editar: a taught task's description and SKILL.md body (no secrets). */
+  readTask: bridge.buildProvider<TaughtTaskContent, { name: string }>('teach:read-task'),
+  /** Rewrites a taught task's SKILL.md; rejects with a {@link TaughtTaskErrorCode}. */
+  saveTask: bridge.buildProvider<void, TaughtTaskContent>('teach:save-task'),
+  /** Main → renderer: show the "Manual da função" card of an activity (from `handbook_show`). */
+  /** `roleKey` only when an admin views another role's activity (read-only). */
+  showHandbook: bridge.buildEmitter<{ activityId: string; roleKey?: string }>('teach:show-handbook'),
+};
+
+// ---------------------------------------------------------------------------
+// Aprender com seu trabalho — state, exclusions and insights only. No channel returns raw samples.
+// ---------------------------------------------------------------------------
+
+export type LearnState = import('@/common/types/agent/learnTypes').LearnState;
+export type LearnExclusion = import('@/common/types/agent/learnTypes').LearnExclusion;
+export type LearnInsightBatch = import('@/common/types/agent/learnTypes').LearnInsightBatch;
+export type LearnSuggestion = import('@/common/types/agent/learnTypes').LearnSuggestion;
+export type LearnGenerateResult = import('@/common/types/agent/learnTypes').LearnGenerateResult;
+
+export const learn = {
+  state: bridge.buildProvider<LearnState, void>('learn:state'),
+  /** Main → renderer: every state change (status, pause, raw hours, sampler error). */
+  stateChanged: bridge.buildEmitter<LearnState>('learn:state-changed'),
+  /** Records the LGPD accept; main refuses any version other than LEARN_TERM_VERSION. */
+  accept: bridge.buildProvider<LearnState, { termVersion: string }>('learn:accept'),
+  /** Re-enables after "Desligar" when the stored accept is for the current term. */
+  turnOn: bridge.buildProvider<LearnState, void>('learn:turn-on'),
+  /** `minutes: null` pauses until resumed. */
+  pause: bridge.buildProvider<LearnState, { minutes: number | null }>('learn:pause'),
+  resume: bridge.buildProvider<LearnState, void>('learn:resume'),
+  turnOff: bridge.buildProvider<LearnState, void>('learn:turn-off'),
+  /** Wipes raw samples and insights, then records the revoke. */
+  revoke: bridge.buildProvider<LearnState, void>('learn:revoke'),
+  getExclusions: bridge.buildProvider<LearnExclusion[], void>('learn:get-exclusions'),
+  setExclusions: bridge.buildProvider<LearnExclusion[], LearnExclusion[]>('learn:set-exclusions'),
+  /** "Restaurar padrão": defaults live in main, so the renderer asks for them back. */
+  restoreDefaultExclusions: bridge.buildProvider<LearnExclusion[], void>('learn:restore-default-exclusions'),
+  listInsights: bridge.buildProvider<LearnInsightBatch[], void>('learn:list-insights'),
+  deleteInsight: bridge.buildProvider<void, { id: string }>('learn:delete-insight'),
+  generateNow: bridge.buildProvider<LearnGenerateResult, void>('learn:generate-now'),
+  wipeSamples: bridge.buildProvider<LearnState, void>('learn:wipe-samples'),
+  /** macOS only: opens System Settings → Privacy → Screen Recording. */
+  openScreenRecordingSettings: bridge.buildProvider<void, void>('learn:open-screen-recording-settings'),
 };

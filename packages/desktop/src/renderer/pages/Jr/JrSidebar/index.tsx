@@ -13,10 +13,10 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { LinkOne, Peoples, Plus, Search } from '@icon-park/react';
+import { Peoples, Plus, Pushpin, Search, SettingTwo } from '@icon-park/react';
 import { useAuth } from '@renderer/hooks/context/AuthContext';
 import { loadLatestConversationMessages } from '@renderer/utils/chat/messagePagination';
-import React, { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import React, { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -43,6 +43,8 @@ import JrSettingsModal, { type SettingsTab } from './SettingsModal';
 import { initialsFromName, sidebarProfile } from './sidebarProfile';
 import { readSidebarLayout, writeSidebarLayout } from './preferences';
 import styles from './JrSidebar.module.css';
+import { useTaughtRunWatcher } from './Teach/useTaughtRunWatcher';
+import { useLearnSettingsRequests } from '@renderer/hooks/agent/useLearnState';
 
 const JrConnections = lazy(() => import('../Connections'));
 const JrBotTeamDialog = lazy(() => import('../JrBotTeamDialog'));
@@ -97,7 +99,7 @@ const BotRow: React.FC<{
         onClick={onOpen}
       >
         <span className={styles.avatar}>
-          <JrCharacter appearance={bot.appearance} size={48} />
+          <JrCharacter appearance={bot.appearance} size={40} />
         </span>
         <span className={styles.botCopy}>
           <span className={styles.botName}>{bot.name}</span>
@@ -123,6 +125,12 @@ const PinZone: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       className={`${styles.pinned} ${isOver ? styles.pinOver : ''}`}
       aria-label={t('common.jr.look.pinnedBots')}
     >
+      {!empty && (
+        <p className={styles.pinnedLabel}>
+          <Pushpin size={11} />
+          {t('common.jr.look.pinnedBots')}
+        </p>
+      )}
       {children}
       {active && empty ? <div className={styles.pinDrop} /> : null}
     </div>
@@ -133,10 +141,17 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
+  useTaughtRunWatcher();
   const { state, logout } = useJrAccess();
   const { user } = useAuth();
   const [connectionsOpen, setConnectionsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
+  const [settingsAutoConsent, setSettingsAutoConsent] = useState(false);
+  const openLearnSettings = useCallback((autoConsent: boolean) => {
+    setSettingsAutoConsent(autoConsent);
+    setSettingsTab('learn');
+  }, []);
+  useLearnSettingsRequests(openLearnSettings);
   const [teamDialogOpen, setTeamDialogOpen] = useState(false);
   const [botToDelete, setBotToDelete] = useState<JrBot | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -265,7 +280,7 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
       />
       <Button
         type='text'
-        className={styles.iconButton}
+        className={`${styles.iconButton} ${styles.softIcon}`}
         aria-label={t('common.jr.newBot')}
         icon={<Plus size={18} />}
         onClick={() => open('/guid?create=1')}
@@ -353,7 +368,9 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
               <section aria-label={t('common.jr.teamChats')}>
                 <span className={styles.teamLabel}>{t('common.jr.teamChats')}</span>
                 <Button type='text' long className={styles.botRow} onClick={() => setTeamDialogOpen(true)}>
-                  <Peoples size={18} />
+                  <span className={styles.newTeamMark} aria-hidden='true'>
+                    <Peoples size={13} />
+                  </span>
                   <span className={styles.botName}>{t('common.jr.teamChat')}</span>
                 </Button>
                 {jrTeams.map((team) => (
@@ -365,7 +382,16 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
                     onClick={() => open(`/team/${team.id}`)}
                     title={team.name}
                   >
-                    <Peoples size={18} />
+                    <span className={styles.avatarStack} aria-hidden='true'>
+                      {team.assistants.slice(0, 3).map((assistant) => {
+                        const member = botList.find((bot) => bot.id === assistant.assistant_id);
+                        return (
+                          <span key={assistant.assistant_id} className={styles.avatarStackItem}>
+                            <JrCharacter appearance={member?.appearance} size={20} still />
+                          </span>
+                        );
+                      })}
+                    </span>
                     <span className={styles.botName}>{team.name}</span>
                   </Button>
                 ))}
@@ -386,11 +412,13 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
                   void navigate('/admin');
                 }
                 if (key === 'settings') setSettingsTab('general');
+                if (key === 'connections') setConnectionsOpen(true);
                 if (key === 'sign-out') void logout();
               }}
             >
               {isJrAdmin(state.user) && <Menu.Item key='admin'>{t('common.jr.access.adminTitle')}</Menu.Item>}
               <Menu.Item key='settings'>{t('common.settings')}</Menu.Item>
+              <Menu.Item key='connections'>{t('common.jr.mcp.title')}</Menu.Item>
               <Menu.Item key='sign-out'>{t('common.jr.access.signOut')}</Menu.Item>
             </Menu>
           }
@@ -407,9 +435,10 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
         <Button
           type='text'
           className={styles.iconButton}
-          aria-label={t('common.jr.mcp.title')}
-          icon={<LinkOne size={18} />}
-          onClick={() => setConnectionsOpen(true)}
+          aria-label={t('common.settings')}
+          title={t('common.settings')}
+          icon={<SettingTwo size={17} />}
+          onClick={() => setSettingsTab('general')}
         />
       </div>
       <Modal
@@ -432,7 +461,20 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
         <p>{t('common.jr.deleteBotHint')}</p>
         {deleteFailed && <Alert type='error' content={t('common.jr.saveError')} />}
       </Modal>
-      {settingsTab && <JrSettingsModal tab={settingsTab} onTab={setSettingsTab} onClose={() => setSettingsTab(null)} />}
+      {settingsTab && (
+        <JrSettingsModal
+          tab={settingsTab}
+          autoConsent={settingsTab === 'learn' && settingsAutoConsent}
+          onTab={(tab) => {
+            setSettingsAutoConsent(false);
+            setSettingsTab(tab);
+          }}
+          onClose={() => {
+            setSettingsAutoConsent(false);
+            setSettingsTab(null);
+          }}
+        />
+      )}
       {connectionsOpen && (
         <Suspense fallback={<Spin size={16} aria-label={t('common.loading')} />}>
           <JrConnections onClose={() => setConnectionsOpen(false)} />

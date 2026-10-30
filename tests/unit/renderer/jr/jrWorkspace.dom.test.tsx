@@ -28,7 +28,10 @@ vi.mock('swr', () => ({
   mutate: vi.fn(),
 }));
 vi.mock('@/common', () => ({
-  ipcBridge: { conversation: { listChanged: { on: () => () => {} } } },
+  ipcBridge: {
+    conversation: { listChanged: { on: () => () => {} }, artifactStream: { on: () => () => {} } },
+    learn: { state: { invoke: async () => null }, stateChanged: { on: () => () => {} } },
+  },
 }));
 vi.mock('@/renderer/pages/Jr/jrBots', () => ({
   listJrBots: vi.fn(),
@@ -61,7 +64,7 @@ vi.mock('@/renderer/pages/conversation/GroupedHistory/ConversationSearchPopover'
     renderTrigger: (props: { onClick: () => void; isActive: boolean }) => React.ReactNode;
   }) => renderTrigger({ onClick: mocks.search, isActive: false }),
 }));
-vi.mock('@/renderer/utils/emitter', () => ({ emitter: { emit: vi.fn() } }));
+vi.mock('@/renderer/utils/emitter', () => ({ emitter: { emit: vi.fn() }, useAddEventListener: () => {} }));
 
 import JrWorkspace from '@/renderer/pages/Jr';
 import JrSidebar from '@/renderer/pages/Jr/JrSidebar';
@@ -224,7 +227,10 @@ it('opens and closes connections over the current chat without navigation', asyn
       <main data-testid='current-chat'>Mensagem atual</main>
     </>
   );
-  fireEvent.click(screen.getByRole('button', { name: 'common.jr.mcp.title' }));
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: /Lucas/ }));
+  });
+  fireEvent.click(await screen.findByText('common.jr.mcp.title'));
   expect(await screen.findByRole('dialog', { name: 'common.jr.mcp.title' })).toBeInTheDocument();
   expect(screen.getByTestId('current-chat')).toHaveTextContent('Mensagem atual');
   expect(mocks.navigate).not.toHaveBeenCalled();

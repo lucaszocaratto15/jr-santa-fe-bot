@@ -62,6 +62,7 @@ vi.mock('@/common', () => ({
     };
     return {
       fileStream: { contentUpdate: { on: () => () => {} } },
+      teach: { openTab: { on: vi.fn(() => vi.fn()) } },
       preview: { open: { on: () => () => {} } },
       shell: { openFile: { invoke: async () => undefined } },
       excelPreview: officePreview,

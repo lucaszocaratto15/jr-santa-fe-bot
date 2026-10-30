@@ -23,7 +23,7 @@ export type JrSessionStore = {
   read: () => Promise<JrStoredSession | null>;
   write: (session: JrStoredSession) => Promise<void>;
 };
-type OsEncryption = {
+export type OsEncryption = {
   isEncryptionAvailable: () => boolean;
   getSelectedStorageBackend?: () => string;
   encryptString: (text: string) => Buffer;
@@ -139,7 +139,8 @@ function parseUser(value: unknown): JrAccessUser {
   // a stored role label drifted away from the exact word "admin".
   const role = value.id === 'owner' ? 'admin' : accessRole(value.role);
   if (!role) return fail('JR_ACCESS_INVALID_RESPONSE');
-  return { id: value.id, name: value.name, role };
+  // Older control servers send no title; the field is left out then (treated as no cargo).
+  return { id: value.id, name: value.name, role, ...('title' in value ? { title: listedTitle(value.title) } : {}) };
 }
 
 /** Resolve the explicitly configured control service; insecure HTTP is test-only. */
@@ -289,7 +290,7 @@ export class JrAccessController {
       ...init,
       headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       redirect: 'error',
-      signal: AbortSignal.timeout(10000),
+      signal: init.signal ?? AbortSignal.timeout(10000),
     });
   }
   private async clearToken() {
@@ -563,7 +564,7 @@ export class JrAccessController {
           publicError === 'JR_ACCESS_STORAGE_UNAVAILABLE' ? 'storage' : null
         );
       }
-      if (publicError !== 'JR_ACCESS_UNAVAILABLE') throw new Error(publicError);
+      if (publicError !== 'JR_ACCESS_UNAVAILABLE') throw new Error(publicError, { cause: error });
       return fail('JR_ACCESS_UNAVAILABLE');
     } finally {
       this.authenticating = false;
@@ -636,7 +637,11 @@ export class JrAccessController {
       }
       return fail('JR_ACCESS_FORBIDDEN');
     }
-    if (response.status === 409) return fail('JR_ACCESS_EMPLOYEE_REVOKED');
+    if (response.status === 409) {
+      if ((await responseCode(response)) === 'no_role') return fail('JR_HANDBOOK_NO_ROLE');
+      return fail('JR_ACCESS_EMPLOYEE_REVOKED');
+    }
+    if (response.status === 413) return fail('JR_HANDBOOK_TOO_LARGE');
     if (!response.ok) return fail('JR_ACCESS_UNAVAILABLE');
     let value: unknown;
     try {
@@ -646,6 +651,27 @@ export class JrAccessController {
     }
     if (epoch !== this.generation || token !== this.saved?.token) return fail('JR_ACCESS_REQUIRED');
     return value;
+  }
+  /**
+   * Authenticated JSON call to the control service for main-process clients (handbook).
+   * Admin paths (`/admin/...`) always require an administrator, like `authorized`.
+   * Pilot mode and a missing service URL fail with JR_ACCESS_UNCONFIGURED.
+   */
+  async call(path: string, init: RequestInit = {}, admin = false): Promise<unknown> {
+    if (this.options.pilot || !this.options.url) return fail('JR_ACCESS_UNCONFIGURED');
+    if (!path.startsWith('/') || path.includes('..')) return fail('JR_ACCESS_INVALID_REQUEST');
+    return this.authorized(path, init, admin || path.startsWith('/admin/'));
+  }
+  async setEmployeeTitle(input: { employeeId: string; title: string | null }): Promise<{ title: string | null }> {
+    if (!validId(input?.employeeId)) return fail('JR_ACCESS_INVALID_EMPLOYEE');
+    const title = inviteTitle(input.title);
+    const value = await this.authorized(
+      `/admin/employees/${encodeURIComponent(input.employeeId)}/title`,
+      { method: 'POST', body: JSON.stringify({ title }) },
+      true
+    );
+    if (!record(value) || listedTitle(value.title) !== title) return fail('JR_ACCESS_INVALID_RESPONSE');
+    return { title };
   }
   async personalUsage(): Promise<JrConnectionStatus> {
     return parseJrConnectionStatus(await this.authorized('/usage'));

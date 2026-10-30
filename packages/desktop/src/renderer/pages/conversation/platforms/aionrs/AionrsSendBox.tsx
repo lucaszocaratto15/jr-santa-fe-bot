@@ -12,6 +12,7 @@ import SendBox from '@/renderer/components/chat/SendBox';
 import ThoughtDisplay from '@/renderer/components/chat/ThoughtDisplay';
 import FileAttachButton from '@/renderer/components/media/FileAttachButton';
 import FilePreview from '@/renderer/components/media/FilePreview';
+import TeachChatButton from './TeachChatButton';
 import HorizontalFileList from '@/renderer/components/media/HorizontalFileList';
 import { useConversationContextSafe } from '@/renderer/hooks/context/ConversationContext';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
@@ -37,7 +38,7 @@ import { allSupportedExts } from '@/renderer/services/FileService';
 import type { SessionRef } from '@/common/adapter/ipcBridge';
 import CrossSessionDisabledBanner from '@/renderer/components/chat/CrossSessionDisabledBanner';
 import { useCrossSessionMessageEnabled } from '@/renderer/hooks/chat/useCrossSessionMessageEnabled';
-import { emitter, useAddEventListener } from '@/renderer/utils/emitter';
+import { emitter, useAddEventListener, type SendBoxSendRequest } from '@/renderer/utils/emitter';
 import { getJrBot } from '@/renderer/pages/Jr/jrBots';
 import useSWR from 'swr';
 import { type ChatFileRef, isChatFileRef, uploadFileRef } from '@/common/types/chatFile';
@@ -367,6 +368,25 @@ const AionrsSendBox: React.FC<{
     await executeCommand({ input: message, files: filesToSend, sessions });
   };
 
+  // Programmatic sends (teach cards) take the same path as Enter; queued while busy.
+  // executeCommand already shows its own failure toast; the result goes back to the caller.
+  useAddEventListener(
+    'sendbox.send',
+    (request: SendBoxSendRequest) => {
+      if (request.conversationId !== conversation_id) return;
+      request.claimed = true;
+      if (isBusy) {
+        request.onResult(Boolean(enqueue({ input: request.text, files: [] })));
+        return;
+      }
+      executeCommand({ input: request.text, files: [] }).then(
+        () => request.onResult(true),
+        () => request.onResult(false)
+      );
+    },
+    [conversation_id, isBusy, enqueue, executeCommand]
+  );
+
   const [interrupting, setInterrupting] = useState(false);
   const hasComposerDraft = content.trim().length > 0 || uploadFile.length > 0 || atPath.length > 0;
 
@@ -580,11 +600,14 @@ const AionrsSendBox: React.FC<{
         defaultMultiLine={!isMobile}
         lockMultiLine={!isMobile}
         tools={
-          <FileAttachButton
-            openFileSelector={openFileSelector}
-            onLocalFilesAdded={handleFilesAdded}
-            loadedMcpStatuses={loadedMcpStatuses}
-          />
+          <>
+            <FileAttachButton
+              openFileSelector={openFileSelector}
+              onLocalFilesAdded={handleFilesAdded}
+              loadedMcpStatuses={loadedMcpStatuses}
+            />
+            <TeachChatButton />
+          </>
         }
         prefix={
           <>

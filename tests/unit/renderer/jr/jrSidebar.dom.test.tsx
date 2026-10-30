@@ -32,9 +32,10 @@ vi.mock('swr', () => ({
 }));
 vi.mock('@/common', () => ({
   ipcBridge: {
-    conversation: { listChanged: { on: () => () => {} } },
+    conversation: { listChanged: { on: () => () => {} }, artifactStream: { on: () => () => {} } },
     team: { list: { invoke: vi.fn() } },
     database: { getConversationMessages: { invoke: mocks.messages } },
+    learn: { state: { invoke: async () => null }, stateChanged: { on: () => () => {} } },
   },
 }));
 vi.mock('@/renderer/pages/Jr/jrBots', () => ({
@@ -99,7 +100,7 @@ describe('JrSidebar rows', () => {
     render(<JrSidebar />);
     expect(await screen.findByText('Sent 1 archive')).toBeInTheDocument();
     const compras = screen.getByRole('button', { name: 'Compras' });
-    expect(compras.querySelector('img')).toHaveAttribute('width', '48');
+    expect(compras.querySelector('img')).toHaveAttribute('width', '40');
     expect(screen.getByRole('button', { name: 'Vendas' })).toBeInTheDocument();
     expect(within(screen.getByLabelText('common.jr.look.pinnedBots')).queryByRole('button')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'jr-workspaces 1' })).not.toBeInTheDocument();

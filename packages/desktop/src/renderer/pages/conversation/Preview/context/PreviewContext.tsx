@@ -1291,6 +1291,11 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
   }, [openPreview]);
 
+  // Popups / target=_blank from the in-app browser arrive here as new browser tabs.
+  useEffect(() => {
+    return ipcBridge.teach.openTab.on(({ url }) => openBrowserTab(url));
+  }, [openBrowserTab]);
+
   /**
    * 跟踪 Agent 对应用内浏览器的操作，并驱动两件事：
    * 1. tab 上的活动角标（持续显示，用户随时知道浏览器不是自己在动）

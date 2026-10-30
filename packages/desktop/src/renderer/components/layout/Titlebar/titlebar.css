@@ -285,3 +285,33 @@
   background-color: #c10f1f;
   color: #fff;
 }
+
+/* "Aprender" 🧠 indicator: clickable inside the drag region, dimmed while paused. */
+.app-titlebar__learn {
+  -webkit-app-region: no-drag;
+  color: var(--text-primary);
+}
+
+.app-titlebar__learn-icon {
+  position: relative;
+  display: inline-flex;
+}
+
+.app-titlebar__learn-dot {
+  position: absolute;
+  top: 0;
+  right: -1px;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: rgb(var(--success-6));
+}
+
+.app-titlebar__theme {
+  -webkit-app-region: no-drag;
+  color: var(--color-text-2);
+}
+
+.app-titlebar__learn--paused {
+  opacity: var(--learn-paused-opacity, 0.45);
+}

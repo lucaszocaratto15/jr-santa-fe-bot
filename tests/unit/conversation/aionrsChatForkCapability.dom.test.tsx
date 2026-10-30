@@ -12,7 +12,8 @@
 
 import React from 'react';
 import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
+import { configService } from '@/common/config/configService';
 
 // Probe replaces the heavy MessageList: it renders whatever forkCapability
 // value reaches ConversationContext, so assertions read the real context.
@@ -70,6 +71,12 @@ vi.mock('@renderer/pages/conversation/Messages/artifacts', () => ({
 
 import AionrsChat from '@renderer/pages/conversation/platforms/aionrs/AionrsChat';
 import type { AionrsModelSelection } from '@renderer/pages/conversation/platforms/aionrs/useAionrsModelSelection';
+
+// The theme and font hooks start a settings fetch at module load and log when it fails.
+// Let those logs land before the worker closes, or Vitest reports an unhandled teardown error.
+afterAll(async () => {
+  await configService.whenReady().catch(() => {});
+});
 
 const renderChat = (forkCapability?: { at_turn: boolean }) =>
   render(

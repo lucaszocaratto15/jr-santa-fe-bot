@@ -105,7 +105,13 @@ export type JrUsageSnapshot = {
 export type JrUsageDay = { date: string; tokens: number; requests: number };
 export type JrUsagePeak = { days: number; tokens: number; startedAt: string | null };
 
-export type JrAccessUser = { id: string; name: string; role: 'admin' | 'employee' };
+export type JrAccessUser = {
+  id: string;
+  name: string;
+  role: 'admin' | 'employee';
+  /** Job title ("cargo"). Null when unset; absent when an older control server omits it. */
+  title?: string | null;
+};
 
 /** The seeded owner is the administrator even if a stored role label drifted. */
 export function isJrAdmin(user: { id?: string; role?: string } | null | undefined): boolean {

@@ -14,6 +14,7 @@ vi.mock('@/common', () => ({
     fileStream: {
       contentUpdate: { on: vi.fn(() => vi.fn()) },
     },
+    teach: { openTab: { on: vi.fn(() => vi.fn()) } },
     preview: {
       open: { on: vi.fn(() => vi.fn()) },
     },

@@ -8,6 +8,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Left, Right, Refresh, Loading } from '@icon-park/react';
 import { ipcBridge } from '@/common';
+import { BROWSER_SESSION_PARTITION } from '@/common/config/constants';
 import { InternalNavTracker, shouldResetHistoryForUrlProp } from './webviewHistory';
 
 export interface WebviewHostProps {
@@ -42,6 +43,8 @@ export interface WebviewHostProps {
    * which keeps existing embedded consumers behaving exactly as before.
    */
   resolveUrlInput?: (raw: string) => string | null;
+  /** Extra controls rendered at the end of the navigation bar */
+  navBarExtra?: React.ReactNode;
 }
 
 const MIN_ZOOM_FACTOR = 0.75;
@@ -70,6 +73,7 @@ const WebviewHost: React.FC<WebviewHostProps> = ({
   onTitleChange,
   onFaviconChange,
   resolveUrlInput,
+  navBarExtra,
 }) => {
   const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -609,7 +613,8 @@ const WebviewHost: React.FC<WebviewHostProps> = ({
    * directly reachable by untrusted pages.
    */
   const webviewAttrs: Record<string, string> = {
-    allowpopups: 'false',
+    // Popups are routed to new tabs by the main process (setWindowOpenHandler) for the in-app browser only.
+    allowpopups: partition === BROWSER_SESSION_PARTITION ? 'true' : 'false',
     webpreferences: 'contextIsolation=yes, nodeIntegration=no, nativeWindowOpen=no',
   };
   if (partition) {
@@ -765,6 +770,7 @@ const WebviewHost: React.FC<WebviewHostProps> = ({
               placeholder={t('preview.browser.addressPlaceholder')}
             />
           </form>
+          {navBarExtra}
         </div>
       )}
 
