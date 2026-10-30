@@ -805,7 +805,9 @@
           "whatsapp": "WhatsApp",
           "mail": "Personal e-mail"
         },
-        "empty": "Nothing excluded."
+        "empty": "Nothing excluded.",
+        "tooShort": "Use at least {{count}} characters.",
+        "tooMany": "Limit of {{count}} custom rules reached."
       },
       "data": {
         "title": "Your data",

@@ -29,6 +29,9 @@ export type LearnSettings = {
 };
 
 const MAX_PATTERN = 200;
+/** Custom rules shorter than this (or beyond MAX_CUSTOM_RULES) would let a rule like "a" blank out Aprender. */
+export const MIN_CUSTOM_PATTERN = 3;
+export const MAX_CUSTOM_RULES = 20;
 
 export const defaultLearnSettings = (): LearnSettingsData => ({
   pauseDay: null,
@@ -50,6 +53,7 @@ export function sanitizeExclusions(value: unknown): LearnExclusion[] {
   if (!Array.isArray(value)) return [];
   const seen = new Set<string>();
   const rules: LearnExclusion[] = [];
+  let custom = 0;
   for (const item of value) {
     if (!record(item)) continue;
     const { id, kind, pattern, builtin } = item;
@@ -58,8 +62,14 @@ export function sanitizeExclusions(value: unknown): LearnExclusion[] {
     if (typeof pattern !== 'string') continue;
     const trimmed = pattern.trim().slice(0, MAX_PATTERN);
     if (!trimmed) continue;
+    // `builtin` only counts for the shipped defaults; anything else is a custom rule.
+    const isBuiltin = builtin === true && DEFAULT_EXCLUSIONS.some((rule) => rule.id === id);
+    if (!isBuiltin) {
+      if (trimmed.length < MIN_CUSTOM_PATTERN || custom >= MAX_CUSTOM_RULES) continue;
+      custom += 1;
+    }
     seen.add(id);
-    rules.push({ id, kind, pattern: trimmed, builtin: builtin === true });
+    rules.push({ id, kind, pattern: trimmed, builtin: isBuiltin });
   }
   return rules;
 }

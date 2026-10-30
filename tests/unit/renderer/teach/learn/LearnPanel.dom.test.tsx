@@ -199,6 +199,14 @@ describe('LearnPanel', () => {
     expect(await screen.findByText('Bancos')).toBeInTheDocument();
   });
 
+  it('refuses a custom exclusion shorter than 3 characters and says why', async () => {
+    renderPanel(active);
+    fireEvent.change(await screen.findByPlaceholderText('Ex.: meubanco.com.br'), { target: { value: 'ab' } });
+    expect(screen.getByText('Use pelo menos 3 caracteres.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Adicionar' })).toBeDisabled();
+    expect(learn.setExclusions.invoke).not.toHaveBeenCalled();
+  });
+
   it('adds a custom exclusion', async () => {
     learn.setExclusions.invoke.mockImplementation(async (rules: LearnExclusion[]) => rules);
     renderPanel(active);

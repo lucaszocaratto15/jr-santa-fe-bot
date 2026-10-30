@@ -12,7 +12,7 @@ import {
   Lock,
   SettingTwo,
 } from '@icon-park/react';
-import React, { useContext, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -23,7 +23,7 @@ import { listJrBots, startJrConversation } from '@renderer/pages/Jr/jrBots';
 import { queueConversationIntent } from '@renderer/pages/conversation/Preview/browser/TeachCards/teachStore';
 import { isMacOS } from '@/renderer/utils/platform';
 import { ipcBridge } from '@/common';
-import { JrAccessContext } from '@renderer/pages/Jr/Access/context';
+import { useJrAccess, type JrAccessContextValue } from '@renderer/pages/Jr/Access/context';
 import BrainManager from '@renderer/pages/Jr/Brain/BrainManager';
 import { ComputerPanel, GeneralPanel, UpdatesPanel } from './panels';
 import LearnPanel from './Learn/LearnPanel';
@@ -85,7 +85,13 @@ const JrSettingsModal: React.FC<{
   const [params] = useSearchParams();
   const bots = useSWR(tab === 'learn' ? JR_BOTS_KEY : null, listJrBots);
   // Without the company access provider nobody is a manager: the tab stays hidden.
-  const access = useContext(JrAccessContext);
+  let access: JrAccessContextValue | null = null;
+  try {
+    // eslint-disable-next-line react-hooks/rules-of-hooks -- the hook only throws when the provider is missing; the call order never changes.
+    access = useJrAccess();
+  } catch {
+    access = null;
+  }
   // The owner manages the brain from the admin page; an area manager gets this tab. Hidden on any error.
   const me = useSWR(access ? 'jr.brain.me' : null, () => ipcBridge.brain.me.invoke(), {
     shouldRetryOnError: false,

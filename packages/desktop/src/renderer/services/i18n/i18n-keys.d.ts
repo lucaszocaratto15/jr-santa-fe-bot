@@ -603,6 +603,8 @@ export type I18nKey =
   | 'common.jr.learn.exclusions.remove'
   | 'common.jr.learn.exclusions.restore'
   | 'common.jr.learn.exclusions.title'
+  | 'common.jr.learn.exclusions.tooMany'
+  | 'common.jr.learn.exclusions.tooShort'
   | 'common.jr.learn.insights.delete'
   | 'common.jr.learn.insights.emptyHint'
   | 'common.jr.learn.insights.emptyTitle'

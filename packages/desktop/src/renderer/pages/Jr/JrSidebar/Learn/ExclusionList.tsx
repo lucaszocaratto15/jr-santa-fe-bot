@@ -5,6 +5,10 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import styles from '../JrSidebar.module.css';
 
+// Mirrors MIN_CUSTOM_PATTERN / MAX_CUSTOM_RULES in main (learnSettings.ts), which enforces them.
+const MIN_PATTERN = 3;
+const MAX_CUSTOM = 20;
+
 /** Builtin rule ids are `<group>-…`; the defaults are shown and removed as three groups. */
 const GROUPS = ['bank', 'whatsapp', 'mail'] as const;
 type Group = (typeof GROUPS)[number];
@@ -26,9 +30,12 @@ const ExclusionList: React.FC<ExclusionListProps> = ({ rules, onChange, onRestor
   const groups = GROUPS.filter((group) => rules.some((rule) => groupOf(rule) === group));
   const custom = rules.filter((rule) => groupOf(rule) === null);
 
+  const tooShort = pattern.trim().length > 0 && pattern.trim().length < MIN_PATTERN;
+  const full = custom.length >= MAX_CUSTOM;
+
   const add = () => {
     const value = pattern.trim();
-    if (!value) return;
+    if (value.length < MIN_PATTERN || custom.length >= MAX_CUSTOM) return;
     const id = `user-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     onChange([...rules, { id, kind, pattern: value, builtin: false }]);
     setPattern('');
@@ -88,7 +95,7 @@ const ExclusionList: React.FC<ExclusionListProps> = ({ rules, onChange, onRestor
           shape='round'
           size='small'
           icon={<Plus theme='outline' size={14} />}
-          disabled={!pattern.trim()}
+          disabled={!pattern.trim() || tooShort || full}
           onClick={add}
         >
           {t('common.jr.learn.exclusions.add')}
@@ -99,6 +106,13 @@ const ExclusionList: React.FC<ExclusionListProps> = ({ rules, onChange, onRestor
           </Button>
         )}
       </div>
+      {(tooShort || full) && (
+        <p className={`${styles.muted} mt-8px`}>
+          {t(full ? 'common.jr.learn.exclusions.tooMany' : 'common.jr.learn.exclusions.tooShort', {
+            count: full ? MAX_CUSTOM : MIN_PATTERN,
+          })}
+        </p>
+      )}
     </div>
   );
 };

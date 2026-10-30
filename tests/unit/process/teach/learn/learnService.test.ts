@@ -120,6 +120,37 @@ describe('always on', () => {
   });
 });
 
+describe('login gate', () => {
+  it('samples nothing while logged out, starts when a user appears, stops on logout', async () => {
+    let user: { id: string; name: string } | null = null;
+    const h = harness({ currentUser: () => user });
+    await h.service.init();
+    await h.ticks(3);
+    expect(h.spawn).not.toHaveBeenCalled();
+    expect(await exists(join(root, 'samples'))).toBe(false);
+    user = { id: 'u1', name: 'Ana' };
+    await h.ticks(2);
+    expect(await stored()).toHaveLength(2);
+    user = null;
+    await h.ticks(2);
+    expect(await stored()).toHaveLength(2);
+    expect(h.children[0].kill).toHaveBeenCalled();
+  });
+
+  it('the daily insights run also waits for a login', async () => {
+    let user: { id: string; name: string } | null = null;
+    const h = harness({ currentUser: () => user });
+    await h.service.init();
+    await seedSamples(150, T0 + 3_600_000);
+    h.clock.now = T0 + 5 * 3_600_000;
+    await h.service.hourly();
+    expect(h.request).not.toHaveBeenCalled();
+    user = { id: 'u1', name: 'Ana' };
+    await h.service.hourly();
+    expect(h.request).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('collection', () => {
   it('records the foreground sample from the child', async () => {
     const h = harness();
@@ -362,6 +393,16 @@ describe('daily pause', () => {
     expect(h.service.state().activeSince).toBeNull();
     h.clock.now += 60_000;
     expect((await h.service.resume()).activeSince).toBe(T0 + 60_000);
+  });
+
+  it('concurrent pause calls cannot extend the pause', async () => {
+    const h = harness();
+    await h.service.init();
+    const first = h.service.pause();
+    h.clock.now += 5 * 60_000;
+    const second = h.service.pause();
+    await Promise.all([first, second]);
+    expect(h.service.state().pausedUntil).toBe(T0 + 15 * 60_000);
   });
 
   it('wipeSamples deletes raw samples but keeps insights, and Aprender keeps running', async () => {

@@ -81,10 +81,6 @@ export type LearnService = {
   dispose(): void;
 };
 
-export const LEARN_ERRORS = {
-  unavailable: 'LEARN_UNAVAILABLE',
-} as const;
-
 const pad = (n: number) => String(n).padStart(2, '0');
 
 const localDay = (t: number): string => {
@@ -210,6 +206,11 @@ export function createLearnService(deps: LearnServiceDeps): LearnService {
 
   const collect = async (gen: number): Promise<void> => {
     if (deriveStatus() !== 'active') return;
+    // Only an employee who is logged in is observed.
+    if (!deps.currentUser()) {
+      stopSampler();
+      return;
+    }
     if (deps.isLocked() || deps.idleSeconds() >= LEARN_IDLE_SKIP_S) return;
     let sample: Omit<LearnSample, 't'>;
     if (deps.jrFocused()) {
@@ -278,7 +279,7 @@ export function createLearnService(deps: LearnServiceDeps): LearnService {
   };
 
   const dailyCheck = async () => {
-    if (!data || deriveStatus() === 'unavailable') return;
+    if (!data || deriveStatus() === 'unavailable' || !deps.currentUser()) return;
     const now = deps.now();
     if (data.lastSummaryAt !== null && now - data.lastSummaryAt < DAY_MS) return;
     const day = localDay(now);
@@ -308,8 +309,9 @@ export function createLearnService(deps: LearnServiceDeps): LearnService {
       const today = localDay(deps.now());
       // One per local day; the control is hidden afterwards, so a refused call says nothing.
       if (deriveStatus() !== 'active' || data!.pauseDay === today) return computeState();
-      await write({ pauseDay: today });
+      // Set before the write is awaited, so a concurrent call sees the pause and cannot extend it.
       pausedUntil = deps.now() + PAUSE_MINUTES * 60_000;
+      await write({ pauseDay: today });
       return publish();
     },
 

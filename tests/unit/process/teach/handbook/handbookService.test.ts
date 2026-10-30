@@ -562,7 +562,7 @@ describe('handbook service stable identity, edit reapply, scrubbing and failures
     expect(root.published.length).toBe(afterEdit + 1);
     expect(onPublished).not.toHaveBeenCalled();
     const kept = (await service.drafts()).published.find((item) => item.key === learnKey);
-    expect((kept?.draft?.body as HandbookActivityBody).title).toBe('Minha conferência');
+    expect((kept!.draft!.body as HandbookActivityBody).title).toBe('Minha conferência');
     // Hidden stays hidden across a counts-only change.
     await service.hide(learnKey);
     root.current.list = [batch('b1', 30, 3), batch('b2', 45, 4), batch('b3', 10, 1)];

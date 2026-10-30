@@ -19,8 +19,9 @@ export const HANDBOOK_DRAFTS_KEY = 'jr.handbook.drafts';
 export function useHandbookUpdatedNotice(): void {
   const { t } = useTranslation();
   useEffect(
+    // No bridge (older main, WebUI, partial test mocks): nothing to listen to.
     () =>
-      ipcBridge.jr.handbook.updated.on(() => {
+      ipcBridge.jr?.handbook?.updated?.on(() => {
         Message.info(t('common.jr.handbook.updatedNotice'));
         void mutate(HANDBOOK_DRAFTS_KEY);
       }),

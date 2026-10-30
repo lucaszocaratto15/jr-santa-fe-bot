@@ -27,13 +27,6 @@ export const setTrayMainWindow = (win: BrowserWindow): void => {
 
 export const getCloseToTrayEnabled = (): boolean => closeToTrayEnabled;
 
-/** The tray icon exists (its menu carries the 🧠 status while "Aprender" is on). */
-export const hasTray = (): boolean => tray !== null;
-
-/** The main window, which has the 🧠 in its titlebar, is shown and not minimized. */
-export const isMainWindowOnScreen = (): boolean =>
-  Boolean(mainWindowRef && !mainWindowRef.isDestroyed() && mainWindowRef.isVisible() && !mainWindowRef.isMinimized());
-
 export const setCloseToTrayEnabled = (enabled: boolean): void => {
   closeToTrayEnabled = enabled;
 };
