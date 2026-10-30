@@ -729,3 +729,12 @@ describe('deleting a bot', () => {
     expect(mocks.remove).not.toHaveBeenCalled();
   });
 });
+
+describe('instructionWithLearning general lessons', () => {
+  it('appends the lessons section only when there are general lessons', async () => {
+    const { instructionWithLearning } = await import('@/renderer/pages/Jr/jrBots');
+    expect(instructionWithLearning('X', '', '- a')).toContain('## Lições aprendidas com você\n- a');
+    expect(instructionWithLearning('X', '')).toBe('X');
+    expect(instructionWithLearning('X', 'L', '- a')).toContain('## Aprendizados deste bot\nL');
+  });
+});

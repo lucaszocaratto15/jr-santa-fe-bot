@@ -9,6 +9,8 @@ import { getSecureInputBroker, getTeachServices, getTeachSession } from '../regi
 import { getSkillsDir } from '@process/utils/initStorage';
 import { TEACH_ERRORS } from '../recording/teachSession';
 import { readTaughtTask, writeTaughtTask } from '../recording/taskSkillFile';
+import { activeLessonsFor } from '../lessons/lessonRuntime';
+import { stripTaskLessons, withTaskLessons } from '../lessons/lessonInjection';
 
 const requireVault = () => {
   const services = getTeachServices();
@@ -61,6 +63,14 @@ export function initTeachBridge(): void {
   ipcBridge.teach.saveDraft.provider(async (input) => requireSession().saveDraft(input));
   ipcBridge.teach.takeOver.provider(async ({ on }) => requireSession().takeOver(on));
   ipcBridge.teach.takeOverState.provider(async () => getTeachSession()?.takeOverState() ?? { on: false });
-  ipcBridge.teach.readTask.provider(async ({ name }) => readTaughtTask(await userSkillsDir(), name));
-  ipcBridge.teach.saveTask.provider(async (input) => writeTaughtTask(await userSkillsDir(), input));
+  ipcBridge.teach.readTask.provider(async ({ name }) => {
+    const task = await readTaughtTask(await userSkillsDir(), name);
+    return { ...task, body: stripTaskLessons(task.body) };
+  });
+  ipcBridge.teach.saveTask.provider(async (input) =>
+    writeTaughtTask(await userSkillsDir(), {
+      ...input,
+      body: withTaskLessons(input.body, await activeLessonsFor(input.name)),
+    })
+  );
 }

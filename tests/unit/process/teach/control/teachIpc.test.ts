@@ -46,6 +46,11 @@ vi.mock('@process/services/teach/recording/taskSkillFile', () => ({
   writeTaughtTask: vi.fn(async () => {}),
 }));
 
+const { activeLessonsFor } = vi.hoisted(() => ({
+  activeLessonsFor: vi.fn(async (_skill: string): Promise<unknown[]> => []),
+}));
+vi.mock('@process/services/teach/lessons/lessonRuntime', () => ({ activeLessonsFor }));
+
 import { ipcBridge } from '@/common';
 import { initSecureInputBridge, initTeachBridge, initVaultBridge } from '@process/services/teach/control/teachIpc';
 import { readTaughtTask, writeTaughtTask } from '@process/services/teach/recording/taskSkillFile';
@@ -160,13 +165,13 @@ describe('teachIpc', () => {
         builtin_skills_dir: '/b',
       });
       await handlers.saveTask(task);
-      expect(writeTaughtTask).toHaveBeenCalledWith('/backend/skills', task);
+      expect(writeTaughtTask).toHaveBeenCalledWith('/backend/skills', { ...task, body: task.body.trimEnd() });
     });
 
     it('saveTask falls back to getSkillsDir() when the backend paths are unavailable', async () => {
       vi.mocked(ipcBridge.fs.getSkillPaths.invoke).mockRejectedValue(new Error('offline'));
       await handlers.saveTask(task);
-      expect(writeTaughtTask).toHaveBeenCalledWith('/local/skills', task);
+      expect(writeTaughtTask).toHaveBeenCalledWith('/local/skills', { ...task, body: task.body.trimEnd() });
     });
 
     it('readTask forwards the name and returns the content', async () => {
@@ -177,6 +182,22 @@ describe('teachIpc', () => {
         body: 'b',
       });
       expect(readTaughtTask).toHaveBeenCalledWith('/local/skills', 'jr-tarefa-nfs');
+    });
+
+    it('saveTask appends the active lessons of that task and readTask hides them', async () => {
+      vi.mocked(ipcBridge.fs.getSkillPaths.invoke).mockRejectedValue(new Error('offline'));
+      activeLessonsFor.mockResolvedValueOnce([
+        { active: true, text: 'Conferir o total', scope: { kind: 'task', skill: task.name } },
+      ]);
+      await handlers.saveTask(task);
+      expect(activeLessonsFor).toHaveBeenCalledWith('jr-tarefa-nfs');
+      expect(vi.mocked(writeTaughtTask).mock.calls.at(-1)?.[1].body).toContain('## Lições\n- Conferir o total');
+      vi.mocked(readTaughtTask).mockResolvedValueOnce({
+        name: 'jr-tarefa-nfs',
+        description: 'd',
+        body: 'b\n\n## Lições\n- x',
+      });
+      expect(await handlers.readTask({ name: 'jr-tarefa-nfs' })).toMatchObject({ body: 'b' });
     });
 
     it('saveTask surfaces the write error code', async () => {

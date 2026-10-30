@@ -37,13 +37,14 @@ export type JrBot = JrBotInput & {
   section?: string;
 };
 
-function instructionWithLearning(instructions: string, learning: string): string {
-  return learning ? `${instructions.trim()}\n\n## Aprendizados deste bot\n${learning}` : instructions;
+export function instructionWithLearning(instructions: string, learning: string, generalLessons = ''): string {
+  const withLearning = learning ? `${instructions.trim()}\n\n## Aprendizados deste bot\n${learning}` : instructions;
+  return generalLessons ? `${withLearning.trim()}\n\n## Lições aprendidas com você\n${generalLessons}` : withLearning;
 }
 
-function instructionWithMemory(instructions: string, learning: string): string {
+function instructionWithMemory(instructions: string, learning: string, generalLessons = ''): string {
   return [
-    instructionWithLearning(instructions, learning),
+    instructionWithLearning(instructions, learning, generalLessons),
     '## Memória entre conversas deste bot',
     'Use a memória persistente do projeto AionRS para guardar decisões, preferências, procedimentos e pendências úteis em conversas futuras. Consulte-a ao retomar um assunto. Não salve credenciais, dados pessoais sensíveis ou documentos completos. Só confirme que algo foi memorizado depois de gravar a informação.',
   ].join('\n\n');
