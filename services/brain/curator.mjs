@@ -7,7 +7,9 @@ const MODEL_TIMEOUT_MS = 60_000;
 const TOOL_TEXT_MAX = 500;
 const MESSAGE_TEXT_MAX = 2000;
 const QUOTE_MIN = 8;
-const QUOTE_STORE_MAX = 300;
+const QUOTE_STORE_MAX = 120;
+const SOURCE_OVERLAP = 0.6;
+const TOKEN_MIN = 4;
 const FACT_TEXT_MIN = 5;
 const FACT_TEXT_MAX = 500;
 const MAX_FACTS_PER_BATCH = 10;
@@ -16,7 +18,7 @@ const DUPLICATE_SCORE = 0.85;
 const RELATED_SCORE = 0.6;
 const KINDS = new Set(['fato', 'decisao', 'procedimento', 'contato', 'status']);
 const HIGH_RISK =
-  /r\$|\bvalor(?:es)?\b|\bcontrat|\bsalari|\bprec[oa]s?\b|\d\s*%|\bcnpj\b|\bdesconto|\bpagament|\bdiretor/u;
+  /r\$|\bvalor(?:es)?\b|\bcontrat|\bsalari|\bprec[oa]s?\b|\d\s*%|\bcnpj\b|\bdesconto|\bpagament|\bdiretor|\breais\b|\bcustos?\b|\borcament|\bfaturament|\bclientes?\b/u;
 
 const SYSTEM_PROMPT = `Você é o curador de memória da empresa. Recebe um trecho de conversa entre um funcionário e o assistente dele e extrai fatos duradouros e úteis para toda a empresa.
 
@@ -102,6 +104,7 @@ export function createCurator({
   modelKey,
   model,
   now = Date.now,
+  timeoutMs = MODEL_TIMEOUT_MS,
   log = () => {},
 }) {
   const queue = [];
@@ -120,7 +123,7 @@ export function createCurator({
           { role: 'user', content: prompt },
         ],
       }),
-      signal: AbortSignal.timeout(MODEL_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (!response.ok) throw new Error(`model_http_${response.status}`);
     const body = await response.json();
@@ -165,7 +168,11 @@ export function createCurator({
       store.log.add({ userId: identity.userId, action: 'curator_bump', factId: match.fact.id });
       return;
     }
-    if (match && match.score >= RELATED_SCORE) {
+    // A stronger or human-edited fact is never replaced by the curator; keep both and flag.
+    const protectedFact =
+      match &&
+      (match.fact.confidence > fact.confidence || (match.fact.updatedBy && match.fact.updatedBy !== 'curator'));
+    if (match && match.score >= RELATED_SCORE && !protectedFact) {
       const id = store.facts.supersede(match.fact.id, fact);
       store.log.add({ userId: identity.userId, action: 'curator_supersede', factId: id });
       return;
@@ -176,15 +183,24 @@ export function createCurator({
     );
     const id = store.facts.insert(fact);
     store.log.add({ userId: identity.userId, action: 'curator_insert', factId: id });
-    if (other && other.score >= RELATED_SCORE) {
+    const rival =
+      protectedFact && match.score >= RELATED_SCORE ? match : other && other.score >= RELATED_SCORE ? other : null;
+    if (rival) {
       store.facts.flagConflict(id);
-      store.facts.flagConflict(other.fact.id);
+      store.facts.flagConflict(rival.fact.id);
     }
   }
 
   function accept(identity, payload, raw) {
     const user = payload.messages.filter((m) => m.role === 'user').map((m) => normalize(m.text));
     const assistant = payload.messages.filter((m) => m.role === 'assistant').map((m) => normalize(m.text));
+    // Tool text is never a match target. The fact must be supported by the one message holding the quote.
+    const supports = (message, text) => {
+      const tokens = [...words(text)].filter((word) => word.length >= TOKEN_MIN);
+      if (!tokens.length) return false;
+      const present = words(message);
+      return tokens.filter((word) => present.has(word)).length / tokens.length >= SOURCE_OVERLAP;
+    };
     for (const item of raw.slice(0, MAX_FACTS_PER_BATCH)) {
       try {
         const text = typeof item?.text === 'string' ? item.text.trim() : '';
@@ -193,12 +209,10 @@ export function createCurator({
         const wanted = normalize(quote);
         if (wanted.length < QUOTE_MIN) continue;
         // Provenance comes from where the quote really is, not from what the model claims.
-        const sourceKind = user.some((m) => m.includes(wanted))
-          ? 'usuario_afirmou'
-          : assistant.some((m) => m.includes(wanted))
-            ? 'bot_concluiu'
-            : null;
-        if (!sourceKind) continue;
+        const userHit = user.find((m) => m.includes(wanted));
+        const source = userHit ?? assistant.find((m) => m.includes(wanted));
+        if (source === undefined || !supports(source, text)) continue;
+        const sourceKind = userHit === undefined ? 'bot_concluiu' : 'usuario_afirmou';
         if (findSecrets(text).length) continue;
         const risk = item.risk === 'low' && !HIGH_RISK.test(normalize(text)) ? 'low' : 'high';
         const kind = KINDS.has(normalize(item.kind)) ? normalize(item.kind) : 'fato';
@@ -227,9 +241,7 @@ export function createCurator({
     try {
       content = await callModel(buildPrompt(payload.bot, payload.messages));
     } catch (error) {
-      log(
-        `curator: model call failed (${error?.name === 'TimeoutError' ? 'timeout' : (error?.message ?? 'error')}), batch dropped`
-      );
+      log(`curator: model call failed (${error?.name === 'TimeoutError' ? 'timeout' : 'error'}), batch dropped`);
       return;
     }
     const facts = parseModelFacts(content);
