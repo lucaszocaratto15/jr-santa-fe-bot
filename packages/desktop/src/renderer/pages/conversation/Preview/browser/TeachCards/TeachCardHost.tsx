@@ -14,6 +14,7 @@ import HandbookCard from './HandbookCard';
 import { closeHandbookCard, startHandbookCards, useHandbookCard } from './handbookCardStore';
 import ReviewCard from './ReviewCard';
 import SecureCard from './SecureCard';
+import { useLessonOffer } from './useLessonOffer';
 import {
   openDescribe,
   registerTeachHost,
@@ -43,6 +44,8 @@ const TeachCardHost: React.FC<TeachCardHostProps> = ({ conversationId }) => {
   // "Manual da função" card asked for by this conversation's bot (handbook_show).
   const handbook = useHandbookCard(conversationId);
   useEffect(() => startHandbookCards(), []);
+  // Single mount point per conversation for the "Lições" offer trigger.
+  useLessonOffer(conversationId);
   useEffect(() => {
     void resyncSecureRequests();
   }, []);
