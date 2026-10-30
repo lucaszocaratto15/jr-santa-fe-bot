@@ -13,6 +13,7 @@ import { showNotification } from '@process/bridge/notificationBridge';
 import { getJrAccessController } from '@process/services/jr/auth';
 import i18n from '@process/services/i18n';
 import { getCdpBridgeHandle } from '@process/utils/cdpBridgeRegistry';
+import { getBrainService } from '../../brain/brainIpc';
 import { getHandbookService, getTeachServices, setSecureInputBroker, setTeachSession } from '../registry';
 import { activeLessonsFor } from '../lessons/lessonRuntime';
 import { createTeachSession, TAUGHT_SHOTS_DIRNAME, TAUGHT_TASKS_DIRNAME } from '../recording/teachSession';
@@ -116,6 +117,7 @@ export function createMainTeachDeps(): TeachHandlerDeps {
     broker,
     submitDraft: (markdown) => session.submitDraft(markdown),
     handbook: getHandbookService,
+    brain: getBrainService,
     showHandbook: (request) => ipcBridge.teach.showHandbook.emit(request),
     isAdmin: () => {
       try {

@@ -20,6 +20,8 @@ export const TEACH_TOOL_NAMES = [
   'teach_submit_draft',
   'handbook_lookup',
   'handbook_show',
+  'brain_search',
+  'brain_wrong',
 ] as const;
 
 export type TeachToolName = (typeof TEACH_TOOL_NAMES)[number];

@@ -136,6 +136,9 @@ export function startBrainService(userDataDir: string, call: BrainCall): BrainSe
   return service;
 }
 
+/** The registered brain service; null without a JR access controller. */
+export const getBrainService = (): BrainService | null => service;
+
 /** A restored login resends the queue and a pending acknowledgement right away. */
 export function onBrainAccessChanged(status: string, userId?: string): void {
   if (status !== 'authenticated') return;

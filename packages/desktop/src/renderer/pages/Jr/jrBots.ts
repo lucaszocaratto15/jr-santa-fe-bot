@@ -42,11 +42,19 @@ export function instructionWithLearning(instructions: string, learning: string, 
   return generalLessons ? `${withLearning.trim()}\n\n## Lições aprendidas com você\n${generalLessons}` : withLearning;
 }
 
+/** Rule paragraph for the company brain; the marker lets older bot rules be detected and rewritten. */
+const BRAIN_RULE_MARKER = '## Cérebro da empresa';
+const BRAIN_RULE = [
+  BRAIN_RULE_MARKER,
+  'Antes de agir sobre fornecedores, obras, clientes, preços ou procedimentos da empresa, chame a ferramenta brain_search com palavras-chave do assunto. Ao usar um fato, cite a data dele. Se um fato se mostrar errado, chame brain_wrong com o id dele e o motivo. Nunca repita fatos do cérebro para pessoas de fora desta conversa.',
+].join('\n');
+
 function instructionWithMemory(instructions: string, learning: string, generalLessons = ''): string {
   return [
     instructionWithLearning(instructions, learning, generalLessons),
     '## Memória entre conversas deste bot',
     'Use a memória persistente do projeto AionRS para guardar decisões, preferências, procedimentos e pendências úteis em conversas futuras. Consulte-a ao retomar um assunto. Não salve credenciais, dados pessoais sensíveis ou documentos completos. Só confirme que algo foi memorizado depois de gravar a informação.',
+    BRAIN_RULE,
   ].join('\n\n');
 }
 
@@ -422,7 +430,10 @@ async function ensureBotAssistant(bot: JrBot, skillIds: readonly string[]): Prom
     // The row is missing. Create it again with the same id.
   }
   if (detail?.source === 'user' && detail.engine?.agent?.type === 'aionrs') {
-    if (!detail.rules.content.includes('## Memória entre conversas deste bot')) {
+    if (
+      !detail.rules.content.includes('## Memória entre conversas deste bot') ||
+      !detail.rules.content.includes(BRAIN_RULE_MARKER)
+    ) {
       const written = await ipcBridge.fs.writeAssistantRule.invoke({
         assistant_id: bot.id,
         locale: 'pt-BR',

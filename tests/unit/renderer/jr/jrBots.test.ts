@@ -157,6 +157,9 @@ describe('JR bot persistence', () => {
       content: expect.stringContaining(input.instructions),
     });
     expect(mocks.writeRules.mock.calls[0][0].content).toContain('## Memória entre conversas deste bot');
+    expect(mocks.writeRules.mock.calls[0][0].content).toContain('## Cérebro da empresa');
+    expect(mocks.writeRules.mock.calls[0][0].content).toContain('brain_search');
+    expect(mocks.writeRules.mock.calls[0][0].content).toContain('brain_wrong');
     expect(mocks.writeSetting).toHaveBeenCalledWith('jr.botWorkspaces', {
       'jr-bot': {
         workspace: input.workspace,
@@ -735,6 +738,7 @@ describe('instructionWithLearning general lessons', () => {
     const { instructionWithLearning } = await import('@/renderer/pages/Jr/jrBots');
     expect(instructionWithLearning('X', '', '- a')).toContain('## Lições aprendidas com você\n- a');
     expect(instructionWithLearning('X', '')).toBe('X');
+    expect(instructionWithLearning('X', 'L', '- a')).not.toContain('Cérebro da empresa');
     expect(instructionWithLearning('X', 'L', '- a')).toContain('## Aprendizados deste bot\nL');
   });
 });

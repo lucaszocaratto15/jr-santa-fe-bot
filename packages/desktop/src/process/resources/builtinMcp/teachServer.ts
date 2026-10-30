@@ -127,6 +127,25 @@ async function main() {
     async (args) => callControl('handbook_show', args)
   );
 
+  server.tool(
+    'brain_search',
+    'Busca no cérebro da empresa fatos que os colegas já ensinaram aos bots (fornecedores, obras, clientes, preços, procedimentos). Envie PALAVRAS-CHAVE curtas (por exemplo "fornecedor cimento Jales"), não a frase inteira da conversa. Devolve até 5 linhas "[data · confiança N] texto (área)". Cite a data do fato ao usá-lo. Se o resultado disser que o cérebro está indisponível ou vazio, siga sem ele e nunca invente fatos.',
+    {
+      query: z.string().min(1).max(300).describe('Palavras-chave do assunto, sem dados pessoais nem senhas.'),
+    },
+    async (args) => callControl('brain_search', args)
+  );
+
+  server.tool(
+    'brain_wrong',
+    'Avisa o cérebro da empresa que um fato devolvido por brain_search está errado ou desatualizado. Use o id que aparece no fim da linha do fato ({id: ...}) e explique o motivo em uma frase curta, sem dados pessoais. Nunca mostre esse id à pessoa.',
+    {
+      factId: z.string().min(1).max(64).describe('Id do fato, como aparece em brain_search.'),
+      reason: z.string().max(300).describe('Por que o fato está errado, em uma frase.'),
+    },
+    async (args) => callControl('brain_wrong', args)
+  );
+
   await server.connect(new StdioServerTransport());
 }
 

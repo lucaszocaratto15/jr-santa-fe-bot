@@ -317,3 +317,61 @@ describe('handbook tools', () => {
     });
   });
 });
+
+describe('brain tools', () => {
+  const fact = (over: Record<string, unknown> = {}) => ({
+    id: 'f1',
+    text: 'Cimento Jales vem da Cia Norte',
+    area: 'Compras',
+    risk: 'low' as const,
+    date: '2026-09-12',
+    confidence: 7,
+    erpRef: null,
+    ...over,
+  });
+  const build = (brain: unknown) =>
+    buildTeachHandlers({ ...makeDeps(), brain: () => brain } as unknown as Parameters<typeof buildTeachHandlers>[0]);
+
+  it('brain_search formats one line per fact with date, confidence and area', async () => {
+    const search = vi.fn(async () => [fact(), fact({ id: 'f2', text: 'Outro', area: null, date: null })]);
+    const result = (await build({ search, feedback: vi.fn() }).brain_search({ query: ' cimento jales ' })) as {
+      ok: boolean;
+      result: string;
+    };
+    expect(search).toHaveBeenCalledWith('cimento jales');
+    expect(result.ok).toBe(true);
+    expect(result.result.split('\n')).toEqual([
+      '- [2026-09-12 · confiança 7] Cimento Jales vem da Cia Norte (Compras) {id: f1}',
+      '- [sem data · confiança 7] Outro {id: f2}',
+    ]);
+  });
+
+  it('brain_search says so when nothing is found', async () => {
+    const result = await build({ search: async () => [], feedback: vi.fn() }).brain_search({ query: 'x' });
+    expect(result).toEqual({ ok: true, result: 'O cérebro não tem nada sobre isso.' });
+  });
+
+  it('brain_search is friendly and never throws when the brain is down or missing', async () => {
+    const text = 'Cérebro indisponível agora; siga sem ele.';
+    const failing = build({ search: vi.fn().mockRejectedValue(new Error('unavailable')), feedback: vi.fn() });
+    expect(await failing.brain_search({ query: 'x' })).toEqual({ ok: true, result: text });
+    expect(await build(null).brain_search({ query: 'x' })).toEqual({ ok: true, result: text });
+  });
+
+  it('brain_search rejects a missing query', async () => {
+    expect(await build(null).brain_search({})).toEqual({ ok: false, error: 'pedido inválido' });
+  });
+
+  it('brain_wrong sends the vote and survives a failure', async () => {
+    const feedback = vi.fn(async () => ({ suspended: false }));
+    const ok = await build({ search: vi.fn(), feedback }).brain_wrong({ factId: 'f1', reason: 'mudou de fornecedor' });
+    expect(feedback).toHaveBeenCalledWith('f1', 'mudou de fornecedor');
+    expect(ok).toEqual({ ok: true, result: 'Registrado. O cérebro vai rever essa informação.' });
+    const down = build({ search: vi.fn(), feedback: vi.fn().mockRejectedValue(new Error('x')) });
+    expect(await down.brain_wrong({ factId: 'f1', reason: 'r' })).toEqual({
+      ok: true,
+      result: 'Cérebro indisponível agora; siga sem ele.',
+    });
+    expect(await down.brain_wrong({ reason: 'r' })).toEqual({ ok: false, error: 'pedido inválido' });
+  });
+});

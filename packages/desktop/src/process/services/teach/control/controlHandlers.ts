@@ -4,11 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { BrainFact } from '@/common/types/agent/brainTypes';
 import type { HandbookService } from '../handbook/handbookService';
 import type { VaultStore } from '../vault/vault';
 import type { TeachHandlers } from './controlServer';
 import type { FillOptions, FillResult } from './secretFill';
 import { formatHandbookForBot, handbookEmptyText, HANDBOOK_UNAVAILABLE_TEXT } from './handbookForBot';
+import { BRAIN_UNAVAILABLE_TEXT, BRAIN_WRONG_RECORDED_TEXT, formatBrainFacts } from './brainForBot';
 import type { SecureInputBroker, SecureKind } from './secureInput';
 
 export type TeachHandlerDeps = {
@@ -24,6 +26,11 @@ export type TeachHandlerDeps = {
    * `roleKey` is set only for an admin viewing another role (read-only).
    */
   showHandbook(request: { activityId: string; roleKey?: string }): void;
+  /** Company brain (search and "errado" vote); null without a JR access controller. */
+  brain(): {
+    search(query: string): Promise<BrainFact[]>;
+    feedback(factId: string, reason?: string): Promise<unknown>;
+  } | null;
   /** Whether the signed-in JR user is an administrator (only admins may ask for another role). */
   isAdmin(): boolean;
 };
@@ -34,6 +41,7 @@ const SECURE_KINDS: ReadonlySet<unknown> = new Set<SecureKind>(['otp', 'password
 
 const MAX_QUERY = 300;
 const MAX_ROLE = 80;
+const MAX_REASON = 300;
 
 /** Same normalization as the control server's role key. */
 const roleKey = (title: string): string =>
@@ -143,6 +151,32 @@ export function buildTeachHandlers(deps: TeachHandlerDeps): TeachHandlers {
         return { ok: true, result: formatHandbookForBot(await service.mine(), text) };
       } catch {
         return { ok: false, error: HANDBOOK_UNAVAILABLE_TEXT };
+      }
+    },
+
+    brain_search: async (body) => {
+      const query = field(body, 'query');
+      if (typeof query !== 'string' || query.trim() === '') return INVALID;
+      try {
+        const brain = deps.brain();
+        if (!brain) return { ok: true, result: BRAIN_UNAVAILABLE_TEXT };
+        return { ok: true, result: formatBrainFacts(await brain.search(query.trim().slice(0, MAX_QUERY))) };
+      } catch {
+        return { ok: true, result: BRAIN_UNAVAILABLE_TEXT };
+      }
+    },
+
+    brain_wrong: async (body) => {
+      const factId = field(body, 'factId');
+      const reason = field(body, 'reason');
+      if (typeof factId !== 'string' || factId === '' || typeof reason !== 'string') return INVALID;
+      try {
+        const brain = deps.brain();
+        if (!brain) return { ok: true, result: BRAIN_UNAVAILABLE_TEXT };
+        await brain.feedback(factId, reason.trim().slice(0, MAX_REASON) || undefined);
+        return { ok: true, result: BRAIN_WRONG_RECORDED_TEXT };
+      } catch {
+        return { ok: true, result: BRAIN_UNAVAILABLE_TEXT };
       }
     },
 
