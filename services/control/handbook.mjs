@@ -301,7 +301,8 @@ export function createHandbookStore(db, now, httpError) {
  * What a non-admin caller may read besides their own role, from the brain's `/peers` (user ids that share an
  * area with the caller, plus the caller's level in each shared area). Titles come from the control users
  * table. Returns role key -> `{ indicators }`; brain off, down or malformed gives an empty map, so the
- * caller falls back to their own role only.
+ * caller falls back to their own role only. Indicators are owner-only (owner decision 2026-10-30: with one
+ * person in a role they are that person's time), so peers never unlock them.
  */
 async function peerRoles(store, session, brainPeers) {
   const roles = new Map();
@@ -317,10 +318,7 @@ async function peerRoles(store, session, brainPeers) {
   for (const peer of peers) {
     const key = keys.get(peer.userId);
     if (!key) continue;
-    const manages = peer.areas.some((area) => area?.level === 'gestor');
-    const entry = roles.get(key) ?? { indicators: false };
-    entry.indicators ||= manages;
-    roles.set(key, entry);
+    roles.set(key, { indicators: false });
   }
   return roles;
 }
@@ -366,9 +364,7 @@ export async function handleHandbook({
   }
   if (!path.startsWith('/handbook/')) return false;
   if (request.method === 'GET' && path === '/handbook/mine') {
-    const own = store.ownRoleKey(userId);
-    const indicators = isOwner || (own !== null && (await peerRoles(store, session, brainPeers)).get(own)?.indicators);
-    json(response, 200, store.mine(userId, Boolean(indicators)));
+    json(response, 200, store.mine(userId, isOwner));
     return true;
   }
   if (request.method === 'POST' && path === '/handbook/items') {
@@ -409,7 +405,7 @@ export async function handleHandbook({
       json(response, 200, store.forRole(key));
       return true;
     }
-    // Own role is always readable; indicators follow the area rule for every role, own included.
+    // Own role is always readable; indicators are owner-only.
     const visible = await peerRoles(store, session, brainPeers);
     const allowed = visible.get(key) ?? (key === store.ownRoleKey(userId) ? { indicators: false } : null);
     if (!allowed) throw httpError(403, 'forbidden');

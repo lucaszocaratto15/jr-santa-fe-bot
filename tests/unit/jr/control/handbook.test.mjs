@@ -419,12 +419,13 @@ test('a hung brain only delays handbook reads by the 2 s /peers timeout, then fa
   assert.ok(elapsed >= 1500 && elapsed < 3500, `elapsed ${elapsed}`);
 });
 
-test('gestor of the shared area sees the indicators of the peers role', async (t) => {
+test('a gestor of the shared area reads the peers role but never its indicators (owner-only)', async (t) => {
   const { app, frota1, state, peers } = await areaSetup(t);
   state.peersOf[frota1.id] = peers('gestor');
   const payload = await (await app.request(roleUrl('frota'), { token: frota1.token })).json();
-  assert.equal(payload.indicators.contributors, 1);
-  assert.equal(payload.indicators.activities[0].timesPerWeek, 3);
+  assert.equal('indicators' in payload, false);
+  assert.equal(payload.indicatorsHidden, true);
+  assert.ok(payload.items.length > 0);
   const financeiro = await app.request(roleUrl('financeiro'), { token: frota1.token });
   assert.equal(financeiro.status, 403);
 });
@@ -475,7 +476,7 @@ test('without a brain configured an employee reads only their own role', async (
   assert.equal((await app.request(roleUrl('financeiro'), { token: a.token })).status, 403);
 });
 
-test('/handbook/mine: indicators only for the owner or a gestor of a shared area with the role', async (t) => {
+test('/handbook/mine: indicators only for the owner', async (t) => {
   const { app, owner, frota1, state, peers, frota2 } = await areaSetup(t);
   state.peersOf[frota2.id] = [{ userId: frota1.id, areas: [{ areaId: 1, level: 'colaborador' }] }];
   const colab = await (await app.request('/handbook/mine', { token: frota2.token })).json();
@@ -484,7 +485,8 @@ test('/handbook/mine: indicators only for the owner or a gestor of a shared area
   assert.equal(colab.items.length, 1);
   state.peersOf[frota2.id] = [{ userId: frota1.id, areas: [{ areaId: 1, level: 'gestor' }] }];
   const gestor = await (await app.request('/handbook/mine', { token: frota2.token })).json();
-  assert.equal(gestor.indicators.contributors, 1);
+  assert.equal('indicators' in gestor, false);
+  assert.equal(gestor.indicatorsHidden, true);
   assert.equal(peers('gestor').length, 1);
   const ownerMine = await (await app.request('/handbook/mine', { token: owner.token })).json();
   assert.equal(ownerMine.indicatorsHidden, undefined);
