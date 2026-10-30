@@ -83,17 +83,12 @@ export function createLessonsHandlers(deps: LessonsIpcDeps) {
         deps.secrets(),
         deps.installedSkills(),
       ]);
-      const proposals = await deps.extract({
-        messages,
-        installedSkills,
-        existing,
-        secrets,
-        connection: deps.connection(),
-      });
-      if (proposals.length > 0) {
-        await store.bump('offered');
-        await store.markOffered(conversationId, upToMessageId);
-      }
+      const connection = deps.connection();
+      const proposals = await deps.extract({ messages, installedSkills, existing, secrets, connection });
+      // A request was made: consume the stretch even when nothing came back, so later turns
+      // do not pay for the same extraction again. Without a connection nothing ran.
+      if (connection) await store.markOffered(conversationId, upToMessageId);
+      if (proposals.length > 0) await store.bump('offered');
       return { proposals, upToMessageId };
     },
 

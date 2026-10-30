@@ -44,7 +44,7 @@ function setup(overrides: Partial<LessonsIpcDeps> = {}, stored: Lesson[] = []) {
     extract: vi.fn(async () => []),
     installedSkills: async () => ['jr-tarefa-a'],
     secrets: async () => [],
-    connection: () => null,
+    connection: () => ({ url: 'http://relay', token: 't' }) as unknown as ReturnType<LessonsIpcDeps['connection']>,
     syncTask: vi.fn(async () => {}),
     emitChanged: vi.fn(),
     ...overrides,
@@ -58,12 +58,18 @@ const messages = [
 ];
 
 describe('lessons IPC handlers', () => {
-  it('does not mark offered nor count an offer when extraction is empty', async () => {
+  it('marks the stretch offered but does not count an offer when extraction is empty', async () => {
     const { handlers, store } = setup();
     const result = await handlers.extract({ conversationId: 'c', messages });
     expect(result).toEqual({ proposals: [], upToMessageId: 'm2' });
-    expect(store.markOffered).not.toHaveBeenCalled();
+    expect(store.markOffered).toHaveBeenCalledWith('c', 'm2');
     expect(store.bump).not.toHaveBeenCalled();
+  });
+
+  it('does not consume the stretch when there is no connection', async () => {
+    const { handlers, store } = setup({ connection: () => null });
+    await handlers.extract({ conversationId: 'c', messages });
+    expect(store.markOffered).not.toHaveBeenCalled();
   });
 
   it('counts the offer and marks it when proposals exist', async () => {

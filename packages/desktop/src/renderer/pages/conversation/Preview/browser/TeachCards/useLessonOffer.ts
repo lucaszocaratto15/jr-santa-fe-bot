@@ -25,7 +25,7 @@ const clip = (text: string): string => (text.length > TOOL_TEXT_MAX ? text.slice
 const toolSummary = (message: TMessage): string => {
   if (message.type === 'tool_call') {
     const { name, output, error } = message.content;
-    return clip([name, error ?? output].filter(Boolean).join(': '));
+    return clip([name, error || output].filter(Boolean).join(': '));
   }
   if (message.type === 'tool_group') {
     return clip(
