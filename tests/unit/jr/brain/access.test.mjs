@@ -68,6 +68,15 @@ test('findSecrets catches PII and credentials', () => {
   assert.ok(findSecrets('a8f3k29dj4l1m7q0z5x8c3v6b2n9m4k1p').includes('token'));
 });
 
+test('findSecrets catches a password stated in a sentence, not plain talk about passwords', () => {
+  assert.deepEqual(findSecrets('a senha do ERP é Ab12cd'), ['password']);
+  assert.deepEqual(findSecrets('A senha do wifi e jrsantafe2024.'), ['password']);
+  assert.deepEqual(findSecrets('o token da API é Xk9!pq'), ['password']);
+  assert.deepEqual(findSecrets('chave do cofre: 7788'), ['password']);
+  assert.deepEqual(findSecrets('A senha do ERP é trocada todo mês'), []);
+  assert.deepEqual(findSecrets('A senha e o login ficam com o TI'), []);
+});
+
 test('findSecrets leaves ordinary work facts alone', () => {
   assert.deepEqual(findSecrets('Fornecedor X passou a cobrar frete de R$ 1.200 em 2026'), []);
   assert.deepEqual(findSecrets('Obra 123 tem 4111 m2 de area e 12 funcionarios'), []);

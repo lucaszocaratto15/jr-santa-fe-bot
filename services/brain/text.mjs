@@ -16,6 +16,16 @@ const KNOWN_TOKEN =
   /\b(?:sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|xox[abprs]-[A-Za-z0-9-]{10,})/u;
 const LONG_RUN = /[A-Za-z0-9_+/=-]{32,}/gu;
 const PASSWORD = /\b(?:senha|password|passwd|pwd|token|api[ _-]?key|secret|segredo)\s*[:=]\s*\S+/iu;
+// "a senha do ERP é Ab12cd": a credential word, up to four words, then é/e/:/= and a password-like value.
+const PASSWORD_PHRASE =
+  /\b(?:senha|password|passwd|token|chave)\b(?:\s+[^\s:=]+){0,4}?(?:\s+(?:e|eh|is)\s+|\s*[:=]\s*)(\S{4,})/giu;
+
+/** A value reads as a password when it has a digit, a symbol, or a capital after the first letter. */
+function passwordLike(raw) {
+  const value = raw.replace(/[.,;!?)]+$/u, '');
+  if (value.length < 4) return false;
+  return /\d/u.test(value) || /[^\p{L}\p{N}]/u.test(value) || (/\p{Ll}/u.test(value) && /\p{Lu}/u.test(value.slice(1)));
+}
 
 function luhn(digits) {
   let sum = 0;
@@ -48,7 +58,8 @@ export function findSecrets(text) {
   if (EMAIL.test(value)) found.add('email');
   if (KNOWN_TOKEN.test(value) || [...value.matchAll(LONG_RUN)].some((match) => looksLikeToken(match[0])))
     found.add('token');
-  if (PASSWORD.test(value)) found.add('password');
+  if (PASSWORD.test(value) || [...value.matchAll(PASSWORD_PHRASE)].some((match) => passwordLike(match[1])))
+    found.add('password');
   return [...found];
 }
 

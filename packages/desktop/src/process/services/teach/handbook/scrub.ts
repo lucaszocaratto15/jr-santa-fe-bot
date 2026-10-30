@@ -7,7 +7,7 @@
 /**
  * Removes secrets and personal identifiers from handbook text before it is published. The patterns
  * mirror `services/brain/text.mjs` `findSecrets` (CPF, CNPJ, cards with Luhn, e-mail, token-like runs,
- * `senha:` / `password:`); matches become `[removido]`. Pure.
+ * `senha:` / `password:`, "a senha do ERP é Ab12cd"); matches become `[removido]`. Pure.
  */
 
 export const SCRUBBED = '[removido]';
@@ -20,6 +20,16 @@ const KNOWN_TOKEN =
   /\b(?:sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|xox[abprs]-[A-Za-z0-9-]{10,})/gu;
 const LONG_RUN = /[A-Za-z0-9_+/=-]{32,}/gu;
 const PASSWORD = /\b(?:senha|password|passwd|pwd|token|api[ _-]?key|secret|segredo)\s*[:=]\s*\S+/giu;
+// "a senha do ERP é Ab12cd": a credential word, up to four words, then é/e/:/= and a password-like value.
+const PASSWORD_PHRASE =
+  /\b(?:senha|password|passwd|token|chave)\b(?:\s+[^\s:=]+){0,4}?(?:\s+(?:é|e|eh|is)\s+|\s*[:=]\s*)(\S{4,})/giu;
+
+/** A value reads as a password when it has a digit, a symbol, or a capital after the first letter. */
+function passwordLike(raw: string): boolean {
+  const value = raw.replace(/[.,;!?)]+$/u, '');
+  if (value.length < 4) return false;
+  return /\d/u.test(value) || /[^\p{L}\p{N}]/u.test(value) || (/\p{Ll}/u.test(value) && /\p{Lu}/u.test(value.slice(1)));
+}
 
 function luhn(digits: string): boolean {
   let sum = 0;
@@ -36,6 +46,7 @@ function luhn(digits: string): boolean {
 
 export function scrubText(text: string): string {
   return text
+    .replace(PASSWORD_PHRASE, (match: string, value: string) => (passwordLike(value) ? SCRUBBED : match))
     .replace(PASSWORD, SCRUBBED)
     .replace(EMAIL, SCRUBBED)
     .replace(KNOWN_TOKEN, SCRUBBED)
