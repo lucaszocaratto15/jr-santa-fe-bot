@@ -135,14 +135,14 @@
   }
 }
 .primary:global(.arco-btn) {
-  background: var(--jr-accent) !important;
-  border-color: var(--jr-accent) !important;
-  color: var(--jr-on-accent) !important;
+  background: var(--jr-brand) !important;
+  border-color: var(--jr-brand) !important;
+  color: var(--jr-on-brand) !important;
 }
 .primary:global(.arco-btn:not(.arco-btn-disabled):hover) {
-  background: color-mix(in srgb, var(--jr-accent) 86%, white) !important;
-  border-color: color-mix(in srgb, var(--jr-accent) 86%, white) !important;
-  color: var(--jr-on-accent) !important;
+  background: var(--jr-brand-hover) !important;
+  border-color: var(--jr-brand-hover) !important;
+  color: var(--jr-on-brand) !important;
 }
 .admin {
   height: 100%;
@@ -284,6 +284,9 @@
   gap: 4px;
 }
 .soft:global(.arco-btn) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   border: 0;
   background: var(--bg-hover);
   color: var(--color-text-1);
@@ -481,14 +484,24 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  min-width: 0;
+  min-width: 200px;
 }
 .personName {
   display: block;
-  overflow: hidden;
   font-weight: 500;
   color: var(--color-text-1);
-  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.expandIcon {
+  display: inline-flex;
+  color: var(--color-text-3);
+  transition: transform 160ms ease-out;
+}
+.expandIconOpen {
+  transform: rotate(180deg);
+}
+.usageTable :global(.arco-table-expand-icon-cell) {
+  width: 36px;
 }
 .personMeta {
   display: block;

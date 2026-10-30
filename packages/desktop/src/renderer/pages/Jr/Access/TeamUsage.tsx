@@ -1,5 +1,6 @@
 import type { JrAdminEmployee } from '@/common/config/clientSettings';
 import { Radio, Table } from '@arco-design/web-react';
+import { Down } from '@icon-park/react';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import UsageDailyBars from '../JrSidebar/Usage/UsageDailyBars';
@@ -108,7 +109,15 @@ const TeamUsage: React.FC<{ people: JrAdminEmployee[]; self?: JrAdminEmployee }>
         border={false}
         tableLayoutFixed={false}
         scroll={{ x: 680 }}
-        expandProps={{ expandRowByClick: true, width: 36 }}
+        expandProps={{
+          expandRowByClick: true,
+          width: 36,
+          icon: ({ expanded }: { expanded?: boolean }) => (
+            <span className={`${styles.expandIcon} ${expanded ? styles.expandIconOpen : ''}`}>
+              <Down theme='outline' size={14} />
+            </span>
+          ),
+        }}
         expandedRowRender={(row: Row) => <UsageDailyBars daily={row.period.daily} />}
         columns={[
           {
@@ -119,7 +128,7 @@ const TeamUsage: React.FC<{ people: JrAdminEmployee[]; self?: JrAdminEmployee }>
                 <span className={styles.avatar} aria-hidden='true'>
                   {initials(row.name)}
                 </span>
-                <span className='min-w-0'>
+                <span>
                   <span className={styles.personName}>{row.name}</span>
                   <span className={styles.personMeta}>
                     {t('common.jr.usageStats.requestsCount', { count: row.period.requests ?? 0 })}
