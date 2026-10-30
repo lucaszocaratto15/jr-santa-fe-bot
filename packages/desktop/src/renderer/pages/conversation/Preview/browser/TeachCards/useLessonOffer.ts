@@ -11,7 +11,7 @@ import type { TMessage } from '@/common/chat/chatLib';
 import type { TranscriptMessage } from '@/common/types/agent/lessonTypes';
 import { loadLatestConversationMessages } from '@renderer/utils/chat/messagePagination';
 import { getLessonCard, showLessonCard } from './lessonCardStore';
-import { shouldOffer, type TriggerMessage } from './lessonTrigger';
+import { shouldOffer, stretchAfter, type TriggerMessage } from './lessonTrigger';
 
 const MESSAGE_LIMIT = 200;
 const TOOL_TEXT_MAX = 500;
@@ -74,11 +74,13 @@ export function useLessonOffer(conversationId: string): void {
             limit: MESSAGE_LIMIT,
             contentMode: 'compact',
           });
-          const transcript = toTranscript(page.items);
           const lastOffered = await ipcBridge.teach.lessonsLastOffered.invoke({ conversationId });
-          const chat = transcript.filter((m): m is TriggerMessage => m.role !== 'tool');
-          if (!shouldOffer(chat, lastOffered, isTurnOk(event))) return;
-          const result = await ipcBridge.teach.lessonsExtract.invoke({ conversationId, messages: transcript });
+          // Cut on the full transcript: the stored marker may be the id of a tool message.
+          const stretch = stretchAfter(toTranscript(page.items), lastOffered);
+          const chat = stretch.filter((m): m is TriggerMessage => m.role !== 'tool');
+          if (!shouldOffer(chat, null, isTurnOk(event))) return;
+          // Only the stretch goes out: lessons and their quotes come from this correction alone.
+          const result = await ipcBridge.teach.lessonsExtract.invoke({ conversationId, messages: stretch });
           if (result.proposals.length > 0) {
             showLessonCard(conversationId, result.proposals, result.upToMessageId);
           }

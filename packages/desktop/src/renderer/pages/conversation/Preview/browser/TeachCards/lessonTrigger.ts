@@ -40,7 +40,7 @@ const startsWithApproval = (text: string): boolean => {
 };
 
 /** Messages after `lastOfferedId` (all of them when it is null or no longer in the list). */
-export function stretchAfter(messages: TriggerMessage[], lastOfferedId: string | null): TriggerMessage[] {
+export function stretchAfter<T extends { id: string }>(messages: T[], lastOfferedId: string | null): T[] {
   if (!lastOfferedId) return messages;
   const index = messages.findIndex((message) => message.id === lastOfferedId);
   return index === -1 ? messages : messages.slice(index + 1);
