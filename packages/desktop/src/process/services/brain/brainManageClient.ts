@@ -66,7 +66,7 @@ function parseFact(value: unknown): BrainManagedFact {
     typeof value.text !== 'string' ||
     !nullableText(value.sourceQuote) ||
     (value.sourceKind !== 'usuario_afirmou' && value.sourceKind !== 'bot_concluiu') ||
-    typeof value.authorUserId !== 'string' ||
+    !nullableText(value.authorUserId ?? null) ||
     !nullableText(value.authorBot) ||
     !nullableText(value.erpRef) ||
     !Number.isFinite(value.createdAt) ||
@@ -87,7 +87,7 @@ function parseFact(value: unknown): BrainManagedFact {
     text: value.text,
     sourceQuote: value.sourceQuote,
     sourceKind: value.sourceKind,
-    authorUserId: value.authorUserId,
+    authorUserId: (value.authorUserId ?? null) as string | null,
     authorBot: value.authorBot,
     erpRef: value.erpRef,
     createdAt: value.createdAt as number,

@@ -319,6 +319,29 @@ test('manager listing is limited to managed areas and filters', async (t) => {
   assert.equal((await call(`/manage/facts/${suspended}/history`, { user: 'hal' })).status, 404);
 });
 
+test('gestores get facts without author and conversation; the owner gets both; the quote stays', async (t) => {
+  const { call, store, areas, fact } = await startBrain(t);
+  member(store, 'gil', areas.compras, 'gestor');
+  const id = fact(areas.compras, 'Compras usa o portal novo', {
+    sourceQuote: 'usa o portal novo',
+    conversationRef: 'abc123',
+  });
+  const [seen] = (await call('/manage/facts', { user: 'gil' })).body.facts;
+  assert.equal(seen.sourceQuote, 'usa o portal novo');
+  assert.equal('authorUserId' in seen, false);
+  assert.equal('conversationRef' in seen, false);
+  const [history] = (await call(`/manage/facts/${id}/history`, { user: 'gil' })).body.history;
+  assert.equal('authorUserId' in history, false);
+  assert.equal('conversationRef' in history, false);
+  const patched = (await call(`/manage/facts/${id}`, { method: 'PATCH', user: 'gil', body: { active: true } })).body
+    .fact;
+  assert.equal('authorUserId' in patched, false);
+  assert.equal('conversationRef' in patched, false);
+  const [owner] = (await call('/manage/facts', { user: 'owner' })).body.facts;
+  assert.equal(owner.authorUserId, 'ana');
+  assert.equal(owner.conversationRef, 'abc123');
+});
+
 test('x-jr-role owner/admin on a non-owner id grants nothing', async (t) => {
   const { call, areas, fact } = await startBrain(t);
   const id = fact(areas.compras, 'Fato de compras', { risk: 'high' });

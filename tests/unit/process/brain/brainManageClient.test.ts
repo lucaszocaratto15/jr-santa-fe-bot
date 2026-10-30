@@ -39,6 +39,14 @@ describe('brainManageClient', () => {
     await expect(client({}).manage.facts({})).rejects.toThrow('unavailable');
   });
 
+  it('accepts gestor rows without author and conversation as authorUserId null', async () => {
+    const { authorUserId: _author, ...gestorRow } = row;
+    const [fact] = await client({ facts: [gestorRow] }).manage.facts({});
+    expect(fact.authorUserId).toBeNull();
+    expect(fact.sourceQuote).toBe('trecho');
+    await expect(client({ facts: [{ ...row, authorUserId: 5 }] }).manage.facts({})).rejects.toThrow('unavailable');
+  });
+
   it('patches a fact with a JSON body and returns the updated fact', async () => {
     const { call, manage } = client({ fact: { ...row, text: 'novo' } });
     expect((await manage.updateFact(7, { text: 'novo' })).text).toBe('novo');

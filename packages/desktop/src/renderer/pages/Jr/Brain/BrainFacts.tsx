@@ -68,7 +68,8 @@ const BrainFacts: React.FC<Props> = ({ areas, people }) => {
   };
 
   const author = (fact: BrainManagedFact): string | null => {
-    if (!people) return null;
+    // Gestores do not get the author: only the owner does.
+    if (!people || fact.authorUserId === null) return null;
     return people.get(fact.authorUserId) ?? t('common.jr.brainManage.exEmployee');
   };
 

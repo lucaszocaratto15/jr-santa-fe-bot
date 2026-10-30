@@ -232,6 +232,13 @@ export function createBrainServer({
 
   // ---- manager routes ----
 
+  /** Gestores see the quote but not who said it nor which conversation; only the owner sees both. */
+  const forManager = (ctx, fact) => {
+    if (ctx.identity.userId === OWNER) return fact;
+    const { authorUserId: _author, conversationRef: _conversation, ...rest } = fact;
+    return rest;
+  };
+
   const listFacts = (url, response, ctx) => {
     const managed = ctx.managed();
     if (!managed.all && managed.low.size === 0) throw fail(403, 'forbidden');
@@ -252,7 +259,7 @@ export function createBrainServer({
     if (params.get('q')) filters.q = params.get('q').slice(0, 200);
     const facts = store.facts.listForManager(managed, filters);
     ctx.logHigh(facts);
-    json(response, 200, { facts });
+    json(response, 200, { facts: facts.map((fact) => forManager(ctx, fact)) });
   };
 
   const patchFact = async (request, response, ctx, id) => {
@@ -303,7 +310,7 @@ export function createBrainServer({
     const updated = store.facts.update(id, patch, ctx.identity.userId);
     store.log.add({ userId: ctx.identity.userId, action: 'update_fact', factId: id });
     ctx.logHigh([updated]);
-    json(response, 200, { fact: updated });
+    json(response, 200, { fact: forManager(ctx, updated) });
   };
 
   const factHistory = (response, ctx, id) => {
@@ -311,7 +318,7 @@ export function createBrainServer({
     if (!current || !ctx.can(current.areaId)) throw fail(404, 'fact_not_found');
     const history = store.facts.history(id, ctx.managed());
     ctx.logHigh(history);
-    json(response, 200, { history });
+    json(response, 200, { history: history.map((fact) => forManager(ctx, fact)) });
   };
 
   const areasRoute = async (request, response, ctx, id) => {

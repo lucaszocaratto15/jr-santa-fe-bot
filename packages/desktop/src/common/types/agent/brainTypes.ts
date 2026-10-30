@@ -62,7 +62,8 @@ export type BrainManagedFact = {
   text: string;
   sourceQuote: string | null;
   sourceKind: 'usuario_afirmou' | 'bot_concluiu';
-  authorUserId: string;
+  /** Only the owner gets the author; gestores get null. */
+  authorUserId: string | null;
   authorBot: string | null;
   erpRef: string | null;
   /** Epoch milliseconds. */
