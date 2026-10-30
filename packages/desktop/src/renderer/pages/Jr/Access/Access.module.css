@@ -149,7 +149,7 @@
   min-height: 0;
   overflow: auto;
   box-sizing: border-box;
-  max-width: 920px;
+  width: 100%;
   margin: 0 auto;
   padding: 48px 40px 96px;
   display: flex;
