@@ -11,7 +11,7 @@ try {
     databasePath: resolve(process.env.BRAIN_DB_PATH ?? './data/brain.sqlite'),
     secret: process.env.BRAIN_SECRET,
     curator,
-    ...(calls ? { dailyCuratorCalls: Number(calls) } : {}),
+    ...(/^[0-9]+$/u.test(calls ?? '') ? { dailyCuratorCalls: Number(calls) } : {}),
   });
   const prune = setInterval(() => brain.store.log.prune(90), 86_400_000);
   prune.unref();

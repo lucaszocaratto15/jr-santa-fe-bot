@@ -305,3 +305,103 @@ test('manager listing is limited to managed areas and filters', async (t) => {
   assert.equal(history.body.history.length, 1);
   assert.equal((await call(`/manage/facts/${suspended}/history`, { user: 'hal' })).status, 404);
 });
+
+test('x-jr-role owner/admin on a non-owner id grants nothing', async (t) => {
+  const { call, areas, fact } = await startBrain(t);
+  const id = fact(areas.compras, 'Fato de compras', { risk: 'high' });
+  for (const role of ['owner', 'admin']) {
+    assert.equal((await call('/manage/facts', { user: 'eve', role })).status, 403);
+    assert.equal((await call('/manage/areas', { user: 'eve', role })).status, 403);
+    assert.equal((await call('/manage/log', { user: 'eve', role })).status, 403);
+    assert.equal(
+      (await call(`/manage/facts/${id}`, { user: 'eve', role, method: 'PATCH', body: { active: false } })).status,
+      404
+    );
+    const me = await call('/me', { user: 'eve', role });
+    assert.equal(me.body.isDirector, false);
+  }
+});
+
+test('colaborador gets 404 on history of a high fact', async (t) => {
+  const { call, store, areas, fact } = await startBrain(t);
+  member(store, 'col', areas.compras);
+  const id = fact(areas.compras, 'Fato alto', { risk: 'high' });
+  assert.equal((await call(`/manage/facts/${id}/history`, { user: 'col' })).status, 404);
+});
+
+test('a Geral gestor (non-owner) manages nothing in Geral', async (t) => {
+  const { call, store, areas, fact } = await startBrain(t);
+  member(store, 'gg', areas.general, 'gestor');
+  const id = fact(areas.general, 'Regra geral da empresa');
+  assert.equal(
+    (await call(`/manage/facts/${id}`, { user: 'gg', method: 'PATCH', body: { text: 'Regra nova geral' } })).status,
+    404
+  );
+  assert.equal((await call('/manage/facts', { user: 'gg' })).status, 403);
+  assert.equal(
+    (await call(`/manage/facts/${id}`, { method: 'PATCH', body: { text: 'Regra nova geral' } })).status,
+    200
+  );
+});
+
+test('manager filters apply before the 200 cap', async (t) => {
+  const { call, store, areas, fact } = await startBrain(t);
+  member(store, 'gil', areas.compras, 'gestor');
+  fact(areas.compras, 'Agulha no palheiro unica', { kind: 'regra' });
+  for (let i = 0; i < 210; i += 1) fact(areas.compras, `Fato comum numero ${i}`);
+  const q = await call('/manage/facts?q=agulha', { user: 'gil' });
+  assert.equal(q.body.facts.length, 1);
+  assert.equal((await call('/manage/facts?kind=regra', { user: 'gil' })).body.facts.length, 1);
+  assert.equal((await call('/manage/facts', { user: 'gil' })).body.facts.length, 200);
+  assert.equal((await call('/manage/facts?q=100%25', { user: 'gil' })).body.facts.length, 0);
+});
+
+test('read_high is logged for manager list, history and PATCH, deduped, non-owner only', async (t) => {
+  const { call, store, areas, fact } = await startBrain(t);
+  member(store, 'gil', areas.compras, 'gestor');
+  const id = fact(areas.compras, 'Contrato alto', { risk: 'high' });
+  fact(areas.compras, 'Fato baixo');
+  const reads = () => store.log.list().filter((entry) => entry.action === 'read_high');
+  await call('/manage/facts', { user: 'gil' });
+  assert.deepEqual(
+    reads().map((e) => [e.userId, e.factId]),
+    [['gil', id]]
+  );
+  await call(`/manage/facts/${id}/history`, { user: 'gil' });
+  assert.equal(reads().length, 2);
+  await call(`/manage/facts/${id}`, { user: 'gil', method: 'PATCH', body: { text: 'Contrato alto revisado' } });
+  assert.equal(reads().length, 3);
+  await call('/manage/facts');
+  await call('/search', { method: 'POST', body: { query: 'contrato' } });
+  assert.equal(reads().length, 3);
+});
+
+test('an async curator rejection is swallowed and the log view is capped newest first', async (t) => {
+  const curator = {
+    enqueue: async () => {
+      throw new Error('async boom');
+    },
+    drain: async () => {},
+  };
+  const { call, store } = await startBrain(t, { curator });
+  assert.equal(
+    (await call('/capture', { method: 'POST', body: { conversationRef: 'c', bot: 'b', messages: [] } })).status,
+    202
+  );
+  for (let i = 0; i < 1100; i += 1) store.log.add({ userId: 'u', action: 'x', factId: i });
+  const log = (await call('/manage/log')).body.log;
+  assert.equal(log.length, 1000);
+  assert.ok(log[0].id > log[1].id);
+});
+
+test('bad percent-encoding and invalid user ids give 400', async (t) => {
+  const { call } = await startBrain(t);
+  assert.equal((await call('/manage/authors/%E0%A4%A/facts', { method: 'DELETE' })).status, 400);
+  assert.equal((await call('/manage/authors/a%20b/facts', { method: 'DELETE' })).status, 400);
+  assert.equal((await call('/manage/members/%E0%A4%A', { method: 'PUT', body: { memberships: [] } })).status, 400);
+});
+
+test('daily curator budget of 0 is honored', async (t) => {
+  const { store } = await startBrain(t, { dailyCuratorCalls: 0 });
+  assert.equal(store.budget.take('2026-10-30'), false);
+});

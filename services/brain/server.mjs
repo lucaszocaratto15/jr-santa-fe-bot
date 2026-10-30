@@ -2,7 +2,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { createServer } from 'node:http';
 import { canManage, readScope } from './access.mjs';
 import { createBrainStore } from './store.mjs';
-import { findSecrets, normalize } from './text.mjs';
+import { findSecrets } from './text.mjs';
 
 const BODY_LIMIT = 256 * 1024;
 const SEARCH_MAX_FACTS = 5;
@@ -10,6 +10,8 @@ const SEARCH_MAX_CHARS = 1500;
 const MANAGER_MAX_FACTS = 200;
 const OWNER = 'owner';
 const FACT_TEXT_MAX = 2000;
+const LOG_MAX_ROWS = 1000;
+const USER_ID = /^[A-Za-z0-9._:@-]{1,128}$/u;
 
 const noopCurator = { enqueue() {}, drain: async () => {} };
 
@@ -58,7 +60,7 @@ function identityOf(request) {
   const userId = request.headers['x-jr-user-id'];
   const role = request.headers['x-jr-role'];
   const title = request.headers['x-jr-title'] ?? '';
-  if (typeof userId !== 'string' || !/^[A-Za-z0-9._:@-]{1,128}$/u.test(userId)) throw fail(400, 'invalid_identity');
+  if (typeof userId !== 'string' || !USER_ID.test(userId)) throw fail(400, 'invalid_identity');
   if (typeof role !== 'string' || !/^[a-z]{1,32}$/u.test(role)) throw fail(400, 'invalid_identity');
   return { userId, role, title: typeof title === 'string' ? title.slice(0, 200) : '' };
 }
@@ -76,8 +78,9 @@ export function createBrainServer({
   const store = createBrainStore(databasePath, {
     now,
     ...(companyId ? { companyId } : {}),
-    ...(dailyCuratorCalls ? { dailyCuratorCalls } : {}),
+    ...(Number.isInteger(dailyCuratorCalls) && dailyCuratorCalls >= 0 ? { dailyCuratorCalls } : {}),
   });
+  store.log.prune(90);
   const generalId = () => store.areas.list().find((area) => area.isGeneral).id;
 
   const context = (identity) => {
@@ -92,12 +95,21 @@ export function createBrainServer({
           : (() => {
               const ids = new Set(
                 memberships
-                  .filter((m) => m.level === 'gestor' && m.areaId !== store.areas.fallbackId())
+                  .filter(
+                    (m) => m.level === 'gestor' && m.areaId !== store.areas.fallbackId() && m.areaId !== generalId()
+                  )
                   .map((m) => m.areaId)
               );
               return { low: ids, high: ids };
             })(),
-      can: (areaId) => canManage(identity, memberships, areaId),
+      // Geral is managed by the owner only, whatever a stale membership says.
+      can: (areaId) =>
+        (identity.userId === OWNER || areaId !== generalId()) && canManage(identity, memberships, areaId),
+      logHigh(facts) {
+        if (identity.userId === OWNER) return;
+        for (const id of new Set(facts.filter((fact) => fact.risk === 'high').map((fact) => fact.id)))
+          store.log.add({ userId: identity.userId, action: 'read_high', factId: id });
+      },
     };
   };
 
@@ -121,9 +133,10 @@ export function createBrainServer({
     }
     // Raw text goes to the curator in memory only; it is never written here.
     try {
-      curator.enqueue(ctx.identity, { conversationRef, bot, messages: clean });
+      // Capture is best effort: a curator failure (sync or async) drops the batch silently.
+      Promise.resolve(curator.enqueue(ctx.identity, { conversationRef, bot, messages: clean })).catch(() => {});
     } catch {
-      // Capture is best effort: a curator failure drops the batch silently.
+      // dropped
     }
     json(response, 202, { accepted: true });
   };
@@ -138,10 +151,8 @@ export function createBrainServer({
         ? Math.min(body.maxChars, SEARCH_MAX_CHARS)
         : SEARCH_MAX_CHARS;
     const found = store.facts.search(ctx.scope, body.query, { limit, maxChars });
-    // Reads of high-risk facts are audited (who and which fact; never the query).
-    for (const fact of found) {
-      if (fact.risk === 'high') store.log.add({ userId: ctx.identity.userId, action: 'read_high', factId: fact.id });
-    }
+    // Reads of high-risk facts are audited for non-owners (who and which fact; never the query).
+    ctx.logHigh(found);
     json(response, 200, {
       facts: found.map((fact) => ({
         id: fact.id,
@@ -230,14 +241,11 @@ export function createBrainServer({
       if (!['low', 'high'].includes(params.get('risk'))) throw fail(400, 'invalid_request');
       filters.risk = params.get('risk');
     }
-    let facts = store.facts.listForManager(managed, filters);
-    if (params.has('kind')) facts = facts.filter((fact) => fact.kind === params.get('kind'));
-    if (params.has('suspended'))
-      facts = facts.filter((fact) => fact.suspended === (params.get('suspended') === 'true'));
-    if (params.get('q')) {
-      const q = normalize(params.get('q'));
-      facts = facts.filter((fact) => normalize(fact.text).includes(q));
-    }
+    if (params.has('kind')) filters.kind = params.get('kind');
+    if (params.has('suspended')) filters.suspended = params.get('suspended') === 'true';
+    if (params.get('q')) filters.q = params.get('q').slice(0, 200);
+    const facts = store.facts.listForManager(managed, filters);
+    ctx.logHigh(facts);
     json(response, 200, { facts });
   };
 
@@ -288,13 +296,16 @@ export function createBrainServer({
     }
     const updated = store.facts.update(id, patch, ctx.identity.userId);
     store.log.add({ userId: ctx.identity.userId, action: 'update_fact', factId: id });
+    ctx.logHigh([updated]);
     json(response, 200, { fact: updated });
   };
 
   const factHistory = (response, ctx, id) => {
     const current = store.facts.get(id);
     if (!current || !ctx.can(current.areaId)) throw fail(404, 'fact_not_found');
-    json(response, 200, { history: store.facts.history(id, ctx.managed()) });
+    const history = store.facts.history(id, ctx.managed());
+    ctx.logHigh(history);
+    json(response, 200, { history });
   };
 
   const areasRoute = async (request, response, ctx, id) => {
@@ -322,7 +333,7 @@ export function createBrainServer({
   const putMember = async (request, response, ctx, userId) => {
     requireOwner(ctx.identity);
     const body = await readJson(request);
-    if (!/^[A-Za-z0-9._:@-]{1,128}$/u.test(userId) || !Array.isArray(body.memberships) || body.memberships.length > 100)
+    if (!USER_ID.test(userId) || !Array.isArray(body.memberships) || body.memberships.length > 100)
       throw fail(400, 'invalid_request');
     const memberships = body.memberships.map((m) => {
       if (!m || !isId(m.areaId) || typeof m.level !== 'string') throw fail(400, 'invalid_request');
@@ -344,12 +355,21 @@ export function createBrainServer({
     }
     const area = /^\/manage\/areas(?:\/([0-9]{1,12}))?$/u.exec(path);
     if (area) return areasRoute(request, response, ctx, area[1] === undefined ? null : Number(area[1]));
+    const decode = (value) => {
+      try {
+        const decoded = decodeURIComponent(value);
+        if (!USER_ID.test(decoded)) throw new Error();
+        return decoded;
+      } catch {
+        throw fail(400, 'invalid_request');
+      }
+    };
     const member = /^\/manage\/members\/([^/]{1,128})$/u.exec(path);
-    if (member && method === 'PUT') return putMember(request, response, ctx, decodeURIComponent(member[1]));
+    if (member && method === 'PUT') return putMember(request, response, ctx, decode(member[1]));
     const author = /^\/manage\/authors\/([^/]{1,128})\/facts$/u.exec(path);
     if (author && method === 'DELETE') {
       requireOwner(ctx.identity);
-      const userId = decodeURIComponent(author[1]);
+      const userId = decode(author[1]);
       const deleted = store.facts.deleteByAuthor(userId);
       store.log.add({ userId: ctx.identity.userId, action: 'delete_author_facts' });
       return json(response, 200, { deleted });
@@ -357,7 +377,9 @@ export function createBrainServer({
     if (method === 'GET' && path === '/manage/log') {
       requireOwner(ctx.identity);
       const since = Number(url.searchParams.get('since') ?? 0);
-      return json(response, 200, { log: store.log.list({ since: Number.isFinite(since) ? since : 0 }) });
+      return json(response, 200, {
+        log: store.log.list({ since: Number.isFinite(since) ? since : 0, limit: LOG_MAX_ROWS }),
+      });
     }
     throw fail(404, 'not_found');
   };

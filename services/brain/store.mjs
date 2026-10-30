@@ -391,7 +391,7 @@ export function createBrainStore(dbPath, { now = Date.now, companyId = 'jr', dai
         db.prepare('UPDATE brain_facts SET flag_conflict = 1 WHERE company_id = ? AND id = ?').run(companyId, id);
       },
       /** Facts the scope can read, including suspended and inactive ones (not superseded). */
-      listForManager(scope, { areaId, risk, flaggedOnly = false, limit = 200 } = {}) {
+      listForManager(scope, { areaId, risk, kind, suspended, q, flaggedOnly = false, limit = 200 } = {}) {
         const filter = scopeFilter(scope);
         const clauses = [filter.sql, 'f.company_id = ?', 'f.superseded_by IS NULL'];
         const params = [...filter.params, companyId];
@@ -403,10 +403,22 @@ export function createBrainStore(dbPath, { now = Date.now, companyId = 'jr', dai
           clauses.push('f.risk = ?');
           params.push(risk);
         }
+        if (kind !== undefined) {
+          clauses.push('f.kind = ?');
+          params.push(kind);
+        }
+        if (suspended !== undefined) {
+          clauses.push('f.suspended = ?');
+          params.push(suspended ? 1 : 0);
+        }
+        if (q) {
+          clauses.push("f.text_norm LIKE ? ESCAPE '\\'");
+          params.push(`%${normalize(q).replace(/[\\%_]/gu, (c) => `\\${c}`)}%`);
+        }
         if (flaggedOnly) clauses.push('(f.flag_conflict = 1 OR f.suspended = 1)');
         return db
           .prepare(`SELECT f.* FROM brain_facts f WHERE ${clauses.join(' AND ')} ORDER BY f.id DESC LIMIT ?`)
-          .all(...params, limit)
+          .all(...params, Math.min(Math.max(1, limit), 200))
           .map((row) => factRow(row, effectiveConfidence(row)));
       },
       /** The supersession chain a fact belongs to, oldest first. */
@@ -470,10 +482,13 @@ export function createBrainStore(dbPath, { now = Date.now, companyId = 'jr', dai
           factId
         );
       },
-      list: ({ since = 0 } = {}) =>
+      /** Oldest first by default; with `limit`, the newest `limit` rows, newest first. */
+      list: ({ since = 0, limit } = {}) =>
         db
-          .prepare('SELECT * FROM brain_log WHERE company_id = ? AND at >= ? ORDER BY id')
-          .all(companyId, since)
+          .prepare(
+            `SELECT * FROM brain_log WHERE company_id = ? AND at >= ? ORDER BY id ${limit ? 'DESC LIMIT ?' : ''}`
+          )
+          .all(companyId, since, ...(limit ? [limit] : []))
           .map((row) => ({ id: row.id, at: row.at, userId: row.user_id, action: row.action, factId: row.fact_id })),
       prune: (days = 90) => Number(prune.run(companyId, now() - days * DAY).changes),
     },
