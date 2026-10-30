@@ -29,6 +29,7 @@ export type BrainService = {
   search(query: string): Promise<BrainFact[]>;
   feedback(factId: string, reason?: string): Promise<{ suspended: boolean }>;
   me(): Promise<BrainMe>;
+  manage: BrainClient['manage'];
   /** Sends what is queued and any acknowledgement the server has not received yet. */
   resume(): Promise<void>;
   /** Ties the persisted queue to the logged-in profile. */
@@ -115,6 +116,7 @@ export function createBrainService(deps: BrainServiceDeps): BrainService {
     search: (query) => deps.client.search(query),
     feedback: (factId, reason) => deps.client.feedback(factId, reason),
     me: () => deps.client.me(),
+    manage: deps.client.manage,
     bindProfile: (userId) => capture.bindProfile(userId),
     async resume() {
       await syncNotice(await readNotice());
@@ -171,4 +173,17 @@ export function initBrainBridge(): void {
   ipcBridge.brain.search.provider(async ({ query }) => required().search(query));
   ipcBridge.brain.feedback.provider(async ({ factId, reason }) => required().feedback(factId, reason));
   ipcBridge.brain.me.provider(async () => required().me());
+  const manage = ipcBridge.brain.manage;
+  manage.facts.provider(async (filters) => required().manage.facts(filters));
+  manage.updateFact.provider(async ({ id, patch }) => required().manage.updateFact(id, patch));
+  manage.history.provider(async ({ id }) => required().manage.history(id));
+  manage.areas.provider(async () => required().manage.areas());
+  manage.createArea.provider(async ({ name }) => required().manage.createArea(name));
+  manage.renameArea.provider(async ({ id, name }) => required().manage.renameArea(id, name));
+  manage.removeArea.provider(async ({ id }) => required().manage.removeArea(id));
+  manage.setMemberships.provider(async ({ userId, memberships }) =>
+    required().manage.setMemberships(userId, memberships)
+  );
+  manage.deleteAuthorFacts.provider(async ({ userId }) => required().manage.deleteAuthorFacts(userId));
+  manage.log.provider(async ({ since }) => required().manage.log(since));
 }

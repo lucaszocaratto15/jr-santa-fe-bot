@@ -1,5 +1,6 @@
 import { Button, Message } from '@arco-design/web-react';
 import {
+  Analysis,
   BookOpen,
   Bookmark,
   Brain,
@@ -21,6 +22,9 @@ import { JR_BOTS_KEY } from '@renderer/pages/Jr/index';
 import { listJrBots, startJrConversation } from '@renderer/pages/Jr/jrBots';
 import { queueConversationIntent } from '@renderer/pages/conversation/Preview/browser/TeachCards/teachStore';
 import { isMacOS } from '@/renderer/utils/platform';
+import { ipcBridge } from '@/common';
+import { useJrAccess } from '@renderer/pages/Jr/Access/context';
+import BrainManager from '@renderer/pages/Jr/Brain/BrainManager';
 import { ComputerPanel, GeneralPanel, UpdatesPanel } from './panels';
 import LearnPanel from './Learn/LearnPanel';
 import HandbookPanel from './Teach/HandbookPanel';
@@ -40,6 +44,7 @@ export const SETTINGS_TABS = [
   'lessons',
   'learn',
   'handbook',
+  'brain',
   'updates',
 ] as const;
 export type SettingsTab = (typeof SETTINGS_TABS)[number];
@@ -53,6 +58,7 @@ const TAB_LABEL = {
   lessons: 'common.jr.look.tabs.lessons',
   learn: 'common.jr.look.tabs.learn',
   handbook: 'common.jr.look.tabs.handbook',
+  brain: 'common.jr.look.tabs.brain',
   updates: 'common.jr.look.tabs.updates',
 } as const;
 
@@ -64,6 +70,7 @@ const tabIcon = (id: SettingsTab) => {
   if (id === 'lessons') return <Bookmark size={20} />;
   if (id === 'learn') return <Brain size={20} />;
   if (id === 'handbook') return <BookOpen size={20} />;
+  if (id === 'brain') return <Analysis size={20} />;
   if (id === 'updates') return <Download size={20} />;
   return <SettingTwo size={20} />;
 };
@@ -79,6 +86,11 @@ const JrSettingsModal: React.FC<{
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const bots = useSWR(tab === 'learn' ? JR_BOTS_KEY : null, listJrBots);
+  const { state } = useJrAccess();
+  // The owner manages the brain from the admin page; an area manager gets this tab. Hidden on any error.
+  const me = useSWR('jr.brain.me', () => ipcBridge.brain.me.invoke(), { shouldRetryOnError: false });
+  const showBrain = state.user?.id !== 'owner' && (me.data?.manages.length ?? 0) > 0;
+  const tabs = SETTINGS_TABS.filter((id) => id !== 'brain' || showBrain);
 
   /** "Ensinar esta tarefa": a new conversation of the active bot, browser on the url, Ensinar prefilled. */
   const teachSuggestion = async (suggestion: LearnSuggestion) => {
@@ -136,7 +148,7 @@ const JrSettingsModal: React.FC<{
           onClick={onClose}
         />
         <nav className={styles.nav} aria-label={t('common.jr.look.settingsNav')}>
-          {SETTINGS_TABS.map((id) => (
+          {tabs.map((id) => (
             <Button
               key={id}
               type='text'
@@ -161,6 +173,7 @@ const JrSettingsModal: React.FC<{
             <LearnPanel autoConsent={autoConsent} onTeach={(suggestion) => void teachSuggestion(suggestion)} />
           )}
           {tab === 'handbook' && <HandbookPanel />}
+          {tab === 'brain' && showBrain && <BrainManager mode='manager' />}
           {tab === 'updates' && <UpdatesPanel />}
         </div>
       </div>

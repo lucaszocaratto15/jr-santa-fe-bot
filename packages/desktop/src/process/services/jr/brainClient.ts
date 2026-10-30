@@ -10,6 +10,7 @@
  */
 
 import type { BrainCapturePayload, BrainFact, BrainMe } from '@/common/types/agent/brainTypes';
+import { createBrainManageClient, type BrainManageClient } from '@process/services/brain/brainManageClient';
 
 export type BrainCall = (path: string, init?: RequestInit, admin?: boolean) => Promise<unknown>;
 
@@ -20,8 +21,8 @@ export type BrainClient = {
   me(): Promise<BrainMe>;
   consent(termVersion: string): Promise<{ version: string | null; at: string | null }>;
   consentState(): Promise<{ version: string | null; at: string | null }>;
-  /** Manager routes (`/api/brain/manage/*`) arrive with the management screens. */
-  manage: Record<string, never>;
+  /** Manager routes (`/api/brain/manage/*`). */
+  manage: BrainManageClient;
 };
 
 const record = (value: unknown): value is Record<string, unknown> =>
@@ -49,21 +50,28 @@ function parseFact(value: unknown): BrainFact {
   return { id: value.id, text: value.text, area, risk: value.risk, date, confidence: value.confidence, erpRef };
 }
 
+/** The brain sends numeric area ids; the shared type keeps them as strings. */
+const areaIdText = (value: unknown): string | null =>
+  typeof value === 'string' && value ? value : Number.isInteger(value) ? String(value) : null;
+
 function parseMe(value: unknown): BrainMe {
   if (!record(value) || !Array.isArray(value.areas) || typeof value.isDirector !== 'boolean') return invalid();
-  if (!Array.isArray(value.manages) || !value.manages.every((id) => typeof id === 'string')) return invalid();
+  if (!Array.isArray(value.manages)) return invalid();
+  const manages = value.manages.map(areaIdText);
+  if (manages.some((id) => id === null)) return invalid();
   const areas = value.areas.map((entry): BrainMe['areas'][number] => {
+    const id = record(entry) ? areaIdText(entry.id) : null;
     if (
       !record(entry) ||
-      typeof entry.id !== 'string' ||
+      id === null ||
       (entry.level !== 'colaborador' && entry.level !== 'gestor') ||
       typeof entry.primary !== 'boolean' ||
       !nullableText(entry.name ?? null)
     )
       return invalid();
-    return { id: entry.id, name: (entry.name ?? null) as string | null, level: entry.level, primary: entry.primary };
+    return { id, name: (entry.name ?? null) as string | null, level: entry.level, primary: entry.primary };
   });
-  return { areas, isDirector: value.isDirector, manages: value.manages as string[] };
+  return { areas, isDirector: value.isDirector, manages: manages as string[] };
 }
 
 function parseConsent(value: unknown): { version: string | null; at: string | null } {
@@ -102,6 +110,6 @@ export function createBrainClient(call: BrainCall): BrainClient {
     async consentState() {
       return parseConsent(await call('/api/brain/consent'));
     },
-    manage: {},
+    manage: createBrainManageClient(call),
   };
 }

@@ -49,3 +49,68 @@ export type BrainMe = {
   isDirector: boolean;
   manages: string[];
 };
+
+/** Kinds the curator assigns to a fact. */
+export const BRAIN_FACT_KINDS = ['fato', 'decisao', 'procedimento', 'contato', 'status'] as const;
+
+/** A fact as the managers' screen sees it (`GET /manage/facts`): origin and review flags included. */
+export type BrainManagedFact = {
+  id: number;
+  areaId: number;
+  risk: 'low' | 'high';
+  kind: string;
+  text: string;
+  sourceQuote: string | null;
+  sourceKind: 'usuario_afirmou' | 'bot_concluiu';
+  authorUserId: string;
+  authorBot: string | null;
+  erpRef: string | null;
+  /** Epoch milliseconds. */
+  createdAt: number;
+  confidence: number;
+  active: boolean;
+  suspended: boolean;
+  flagConflict: boolean;
+  humanEdited: boolean;
+  updatedAt: number | null;
+};
+
+export type BrainFactFilters = {
+  areaId?: number;
+  risk?: 'low' | 'high';
+  kind?: string;
+  suspended?: boolean;
+  q?: string;
+};
+
+/** `general: true` promotes a low-risk fact to Geral. */
+export type BrainFactPatch = {
+  text?: string;
+  areaId?: number;
+  risk?: 'low' | 'high';
+  active?: boolean;
+  suspended?: boolean;
+  general?: true;
+};
+
+export type BrainAreaMember = { userId: string; level: 'colaborador' | 'gestor'; primary: boolean };
+
+export type BrainManagedArea = { id: number; name: string; isGeneral: boolean; members: BrainAreaMember[] };
+
+export type BrainMembership = { areaId: number; level: 'colaborador' | 'gestor'; primary: boolean };
+
+export type BrainLogEntry = {
+  id: number;
+  /** Epoch milliseconds. */
+  at: number;
+  userId: string;
+  action: string;
+  factId: number | null;
+};
+
+/** Errors of the manager routes, as the message of the IPC rejection. */
+export const BRAIN_MANAGE_ERRORS = ['BRAIN_REJECTED', 'BRAIN_CONFLICT', 'BRAIN_FORBIDDEN', 'BRAIN_NOT_FOUND'] as const;
+export type BrainManageError = (typeof BRAIN_MANAGE_ERRORS)[number];
+
+/** Owner-only protected areas by name (the brain seeds both). */
+export const BRAIN_FALLBACK_AREA_NAME = 'Sem área';

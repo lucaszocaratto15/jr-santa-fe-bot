@@ -2669,7 +2669,7 @@ export const teach = {
 };
 
 // ---------------------------------------------------------------------------
-// Cérebro da empresa — silent capture and the data notice. `manage.*` arrives with the management screens.
+// Cérebro da empresa — silent capture, the data notice and the managers' screen (`manage.*`).
 // ---------------------------------------------------------------------------
 
 export const brain = {
@@ -2692,6 +2692,34 @@ export const brain = {
   ),
   feedback: bridge.buildProvider<{ suspended: boolean }, { factId: string; reason?: string }>('brain:feedback'),
   me: bridge.buildProvider<import('@/common/types/agent/brainTypes').BrainMe, void>('brain:me'),
+  /** Managers' screen: facts of the managed areas for gestores; areas, people and the log for the owner. */
+  manage: {
+    facts: bridge.buildProvider<
+      import('@/common/types/agent/brainTypes').BrainManagedFact[],
+      import('@/common/types/agent/brainTypes').BrainFactFilters
+    >('brain:manage-facts'),
+    updateFact: bridge.buildProvider<
+      import('@/common/types/agent/brainTypes').BrainManagedFact,
+      { id: number; patch: import('@/common/types/agent/brainTypes').BrainFactPatch }
+    >('brain:manage-update-fact'),
+    history: bridge.buildProvider<import('@/common/types/agent/brainTypes').BrainManagedFact[], { id: number }>(
+      'brain:manage-history'
+    ),
+    areas: bridge.buildProvider<import('@/common/types/agent/brainTypes').BrainManagedArea[], void>(
+      'brain:manage-areas'
+    ),
+    createArea: bridge.buildProvider<{ id: number; name: string }, { name: string }>('brain:manage-create-area'),
+    renameArea: bridge.buildProvider<void, { id: number; name: string }>('brain:manage-rename-area'),
+    removeArea: bridge.buildProvider<void, { id: number }>('brain:manage-remove-area'),
+    setMemberships: bridge.buildProvider<
+      import('@/common/types/agent/brainTypes').BrainMembership[],
+      { userId: string; memberships: import('@/common/types/agent/brainTypes').BrainMembership[] }
+    >('brain:manage-set-memberships'),
+    deleteAuthorFacts: bridge.buildProvider<number, { userId: string }>('brain:manage-delete-author'),
+    log: bridge.buildProvider<import('@/common/types/agent/brainTypes').BrainLogEntry[], { since?: number }>(
+      'brain:manage-log'
+    ),
+  },
 };
 
 // ---------------------------------------------------------------------------

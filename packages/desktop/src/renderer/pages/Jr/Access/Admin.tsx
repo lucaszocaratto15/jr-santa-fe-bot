@@ -5,6 +5,7 @@ import { Computer, Copy, Edit, Key, Lock, PeopleMinus, Plus, Unlock } from '@ico
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import useSWR from 'swr';
+import BrainManager from '../Brain/BrainManager';
 import { isJrAdmin, useJrAccess } from './context';
 import styles from './Access.module.css';
 import HandbookAdmin from './HandbookAdmin';
@@ -298,6 +299,7 @@ const AdminContent: React.FC = () => {
         </>
       )}
       <HandbookAdmin />
+      {state.user?.id === 'owner' && <BrainManager mode='owner' />}
       <Modal
         visible={creating}
         title={t('common.jr.access.newEmployeeTitle')}

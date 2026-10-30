@@ -478,7 +478,8 @@
         "tasks": "My tasks",
         "learn": "Learn",
         "handbook": "Role handbook",
-        "lessons": "Lessons"
+        "lessons": "Lessons",
+        "brain": "Cérebro"
       },
       "generalTitle": "General",
       "account": "Account",
@@ -972,6 +973,113 @@
       "pauseBody": "Você pode pausar o Aprender por alguns minutos nas configurações dele, quando precisar de privacidade.",
       "button": "Li e entendi",
       "failed": "Não foi possível registrar agora. O aviso aparece de novo na próxima abertura."
+    },
+    "brainManage": {
+      "title": "Cérebro da empresa",
+      "subtitle": "Os fatos que os bots da empresa aprenderam. Revise, corrija e decida o que fica disponível para cada área.",
+      "loadFailed": "Não foi possível carregar o cérebro agora.",
+      "exEmployee": "ex-funcionário",
+      "facts": {
+        "title": "Fatos",
+        "searchPlaceholder": "Buscar nos fatos",
+        "areaLabel": "Área",
+        "riskLabel": "Risco",
+        "kindLabel": "Tipo",
+        "suspendedOnly": "Só suspensos",
+        "conflictOnly": "Só com conflito",
+        "empty": "Nenhum fato encontrado.",
+        "risk": {
+          "low": "Baixo risco",
+          "high": "Alto risco"
+        },
+        "kinds": {
+          "fato": "Fato",
+          "decisao": "Decisão",
+          "procedimento": "Procedimento",
+          "contato": "Contato",
+          "status": "Status"
+        },
+        "badges": {
+          "suspended": "Suspenso",
+          "inactive": "Desativado",
+          "conflict": "Conflito",
+          "edited": "Editado"
+        },
+        "confidence": "Confiança {{value}}",
+        "origin": "Origem: {{author}} em {{date}}",
+        "originNoAuthor": "Origem: {{date}}",
+        "quote": "“{{quote}}”",
+        "edit": "Editar fato",
+        "history": "Histórico do fato",
+        "active": "Fato ativo",
+        "unsuspend": "Reativar",
+        "promote": "Promover a Geral",
+        "promoteShort": "Geral",
+        "promoteHighHint": "Só fatos de baixo risco podem ir para Geral.",
+        "editTitle": "Editar fato",
+        "textLabel": "Texto do fato",
+        "editHint": "Dados sensíveis (CPF, CNPJ, cartão, chaves, e-mail) não são aceitos. Para tornar o fato visível a toda a empresa, use “Geral” na lista.",
+        "historyTitle": "Histórico do fato",
+        "historyEmpty": "Sem versões anteriores.",
+        "historyCurrent": "atual"
+      },
+      "areas": {
+        "title": "Áreas",
+        "newPlaceholder": "Nome da nova área",
+        "create": "Criar área",
+        "protected": "Área padrão",
+        "members": "{{count}} pessoa(s)",
+        "rename": "Renomear área",
+        "renameTitle": "Renomear área",
+        "remove": "Remover área",
+        "removeTitle": "Remover a área “{{name}}”?",
+        "removeBody": "Os fatos de “{{name}}” vão para “Sem área”, visível só para a diretoria, e as pessoas perdem esta área."
+      },
+      "people": {
+        "title": "Pessoas e áreas",
+        "empty": "Nenhuma pessoa cadastrada.",
+        "noAreas": "Sem áreas",
+        "edit": "Definir áreas de {{name}}",
+        "editTitle": "Áreas de {{name}}",
+        "noAreasYet": "Crie uma área para poder atribuí-la.",
+        "level": {
+          "colaborador": "Colaborador",
+          "gestor": "Gestor"
+        },
+        "levelLabel": "Nível em {{area}}",
+        "primary": "Principal"
+      },
+      "forget": {
+        "title": "Apagar fatos de uma pessoa",
+        "hint": "Remove do cérebro todos os fatos que a pessoa gerou, inclusive os de quem já saiu da empresa.",
+        "placeholder": "Escolha a pessoa",
+        "action": "Apagar fatos",
+        "confirmTitle": "Apagar todos os fatos de {{name}}?",
+        "confirmBody": "Esta ação não pode ser desfeita. Todos os fatos gerados por esta pessoa serão removidos do cérebro.",
+        "confirm": "Apagar",
+        "done": "{{count}} fato(s) apagado(s)."
+      },
+      "log": {
+        "title": "Registro de acesso",
+        "hint": "Últimos 90 dias: alterações em fatos e leituras de fatos de alto risco. A pergunta feita nunca é guardada.",
+        "empty": "Nada registrado nos últimos 90 dias.",
+        "more": "Mostrar mais",
+        "fact": "fato {{id}}",
+        "actions": {
+          "update_fact": "Fato alterado",
+          "suspend": "Fato suspenso",
+          "read_high": "Leitura de fato de alto risco",
+          "set_members": "Áreas de uma pessoa alteradas",
+          "delete_author_facts": "Fatos de uma pessoa apagados"
+        }
+      },
+      "errors": {
+        "generic": "Não foi possível concluir agora.",
+        "rejected": "O cérebro recusou a alteração: o texto pode conter dado sensível, ou um fato de alto risco não pode ir para Geral.",
+        "conflict": "Conflito: o item já existe, ou o fato faz parte de uma cadeia de versões e não pode mudar de área ou risco.",
+        "forbidden": "Você não tem permissão para isso.",
+        "notFound": "Este item não existe mais."
+      }
     }
   }
 }
