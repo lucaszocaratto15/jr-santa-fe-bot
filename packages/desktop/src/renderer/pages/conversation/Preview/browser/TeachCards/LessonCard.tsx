@@ -90,7 +90,7 @@ const LessonCard: React.FC<LessonCardProps> = ({ conversationId, proposals, upTo
     const accepted = keep
       ? proposals.flatMap((proposal, index) => {
           const row = rows[index];
-          if (!row.checked || !row.text.trim()) return [];
+          if (!row?.checked || !row.text.trim()) return [];
           const text = row.text.trim();
           const scope = toScope(row.scope);
           const edited = text !== proposal.text || row.scope !== scopeValue(proposal.scope);
@@ -131,6 +131,7 @@ const LessonCard: React.FC<LessonCardProps> = ({ conversationId, proposals, upTo
       </div>
       {proposals.map((proposal, index) => {
         const row = rows[index];
+        if (!row) return null;
         const oldText = proposal.updateId ? oldTexts[proposal.updateId] : undefined;
         return (
           <div key={`${index}-${proposal.sourceQuote}`} className={styles.lesson}>

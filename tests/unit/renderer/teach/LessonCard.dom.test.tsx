@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 
 vi.mock('react-i18next', () => ({
@@ -38,6 +38,9 @@ const proposals: LessonProposal[] = [
     updateId: 'old-1',
   },
 ];
+
+const optionNamed = (name: string) =>
+  Array.from(document.querySelectorAll('.arco-select-option')).find((el) => el.textContent === name);
 
 const mount = () => {
   showLessonCard('c1', proposals, 'm9');
@@ -99,5 +102,44 @@ describe('LessonCard', () => {
     fireEvent.click(screen.getByText('common.jr.teach.lessons.save'));
     expect(await screen.findByText('common.jr.teach.lessons.errors.limit_task')).toBeTruthy();
     expect(getLessonCard('c1')).not.toBeNull();
+  });
+
+  it('changing only the scope sends edited:true', async () => {
+    mount();
+    await waitFor(() => expect(listSkills).toHaveBeenCalled());
+    await act(async () => {});
+    fireEvent.click(
+      screen.getAllByRole('combobox')[0].closest('.arco-select-view') ?? screen.getAllByRole('combobox')[0]
+    );
+    await waitFor(() => expect(optionNamed('Baixar NFs')).toBeTruthy());
+    fireEvent.click(optionNamed('Baixar NFs')!);
+    fireEvent.click(screen.getByText('common.jr.teach.lessons.save'));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    const input = save.mock.calls[0][0] as {
+      accepted: Array<{ proposal: LessonProposal; edited: boolean }>;
+    };
+    expect(input.accepted[0]).toMatchObject({
+      edited: true,
+      proposal: { text: 'Sempre usar vírgula', scope: { kind: 'task', skill: 'jr-tarefa-nfs' } },
+    });
+  });
+
+  it('shows the secret message on a JR_LESSON_SECRET rejection', async () => {
+    save.mockImplementation(async () => {
+      throw new Error('JR_LESSON_SECRET');
+    });
+    mount();
+    fireEvent.click(screen.getByText('common.jr.teach.lessons.save'));
+    expect(await screen.findByText('common.jr.teach.lessons.errors.secret')).toBeTruthy();
+    expect(getLessonCard('c1')).not.toBeNull();
+  });
+
+  it('shows the generic message on an unknown error', async () => {
+    save.mockImplementation(async () => {
+      throw new Error('boom');
+    });
+    mount();
+    fireEvent.click(screen.getByText('common.jr.teach.lessons.save'));
+    expect(await screen.findByText('common.jr.teach.lessons.saveFailed')).toBeTruthy();
   });
 });

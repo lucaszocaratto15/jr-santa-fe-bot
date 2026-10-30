@@ -94,6 +94,7 @@ const TeachCardHost: React.FC<TeachCardHostProps> = ({ conversationId }) => {
     if (lessons) {
       return (
         <LessonCard
+          key={`${conversationId}:${lessons.upToMessageId}`}
           conversationId={conversationId}
           proposals={lessons.proposals}
           upToMessageId={lessons.upToMessageId}
