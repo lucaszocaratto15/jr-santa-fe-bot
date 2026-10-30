@@ -45,6 +45,7 @@ import { readSidebarLayout, writeSidebarLayout } from './preferences';
 import styles from './JrSidebar.module.css';
 import { useTaughtRunWatcher } from './Teach/useTaughtRunWatcher';
 import { useLessonRuleSync } from './Teach/useLessonRuleSync';
+import DataNoticeModal from './Brain/DataNoticeModal';
 import { useLearnSettingsRequests } from '@renderer/hooks/agent/useLearnState';
 
 const JrConnections = lazy(() => import('../Connections'));
@@ -463,6 +464,7 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
         <p>{t('common.jr.deleteBotHint')}</p>
         {deleteFailed && <Alert type='error' content={t('common.jr.saveError')} />}
       </Modal>
+      <DataNoticeModal />
       {settingsTab && (
         <JrSettingsModal
           tab={settingsTab}

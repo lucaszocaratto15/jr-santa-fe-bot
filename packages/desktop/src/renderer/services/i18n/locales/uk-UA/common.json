@@ -952,6 +952,26 @@
         "close": "Close",
         "loadFailed": "Could not open the role handbook."
       }
+    },
+    "dataNotice": {
+      "title": "Aviso de uso de dados",
+      "intro": "Antes de continuar, queremos que você saiba, de forma simples, como o JR Bot usa as informações do seu trabalho. Este é um aviso, não um pedido de autorização: ele vale para todos os colaboradores da empresa.",
+      "collectedTitle": "O que é coletado",
+      "collectedBody": "Trechos das suas conversas com os bots, para o cérebro da empresa; amostras da sua tela (aplicativo e título da janela), para o recurso Aprender; e as tarefas que você ensinar ao bot, para o Manual da função.",
+      "purposeTitle": "Para que serve",
+      "purposeBody": "Entender como o trabalho é feito para ajudar você: os bots passam a saber o que a empresa já sabe. Não serve para avaliar desempenho nem para controlar horário.",
+      "whoTitle": "Quem vê o quê",
+      "whoBody": "O que o cérebro aprende fica disponível por área e por nível: cada pessoa vê o conhecimento das suas áreas e o que for geral para a empresa. Informações sensíveis, como valores, contratos e dados de clientes, só aparecem para gestores da área e para a diretoria.",
+      "blockedTitle": "O que fica de fora",
+      "blockedBody": "Senhas, segredos e dados pessoais não são guardados. Os valores do seu cofre são removidos antes de qualquer envio, e o servidor recusa o que parecer CPF, CNPJ, cartão, chave de acesso ou e-mail.",
+      "retentionTitle": "Por quanto tempo",
+      "retentionBody": "As amostras de tela são apagadas em 48 horas. Os trechos de conversa nunca ficam guardados no servidor: só os fatos extraídos deles.",
+      "providerTitle": "Quem processa",
+      "providerBody": "O processamento usa o provedor de IA da empresa (MiniMax), pelo servidor da empresa. Nada vai direto do seu computador para o provedor.",
+      "pauseTitle": "Pausar o Aprender",
+      "pauseBody": "Você pode pausar o Aprender por alguns minutos nas configurações dele, quando precisar de privacidade.",
+      "button": "Li e entendi",
+      "failed": "Não foi possível registrar agora. O aviso aparece de novo na próxima abertura."
     }
   }
 }

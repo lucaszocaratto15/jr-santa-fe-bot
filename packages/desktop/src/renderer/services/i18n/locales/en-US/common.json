@@ -949,6 +949,26 @@
         "close": "Close",
         "loadFailed": "Could not open the role handbook."
       }
+    },
+    "dataNotice": {
+      "title": "Data use notice",
+      "intro": "Before you continue, here is a plain explanation of how JR Bot uses information from your work. This is a notice, not a request for permission: it applies to everyone at the company.",
+      "collectedTitle": "What is collected",
+      "collectedBody": "Stretches of your conversations with the bots, for the company brain; samples of your screen (application and window title), for the Aprender feature; and the tasks you teach the bot, for the Manual.",
+      "purposeTitle": "What it is for",
+      "purposeBody": "Understanding how the work is done so we can help you: the bots come to know what the company already knows. It is not used to evaluate performance or to track time.",
+      "whoTitle": "Who sees what",
+      "whoBody": "What the brain learns is shared by area and by level: each person sees the knowledge of their own areas and what is general for the company. Sensitive information, such as amounts, contracts and client data, is only shown to the managers of the area and to the directors.",
+      "blockedTitle": "What is left out",
+      "blockedBody": "Passwords, secrets and personal data are not stored. The values in your vault are removed before anything is sent, and the server rejects anything that looks like a tax ID, card number, access key or e-mail address.",
+      "retentionTitle": "How long it is kept",
+      "retentionBody": "Screen samples are deleted after 48 hours. Conversation stretches are never stored on the server: only the facts extracted from them are.",
+      "providerTitle": "Who processes it",
+      "providerBody": "Processing uses the company's AI provider (MiniMax), through the company server. Nothing goes straight from your computer to the provider.",
+      "pauseTitle": "Pausing Aprender",
+      "pauseBody": "You can pause Aprender for a few minutes in its settings when you need privacy.",
+      "button": "I have read and understood",
+      "failed": "Could not record this right now. The notice will show again the next time you open the app."
     }
   }
 }

@@ -72,7 +72,8 @@ export async function handleBrain({ request, response, session, config, readJson
   if (session.user.id === 'curator') throw httpError(403, 'forbidden');
   const query = queryAt === -1 ? '' : url.slice(queryAt);
   let body;
-  if (request.headers['content-type'] !== undefined) {
+  // The desktop client always sends a JSON content type, also on body-less GETs.
+  if (method !== 'GET' && request.headers['content-type'] !== undefined) {
     body = await readJson(request, BRAIN_BODY_LIMIT);
     reauth(request);
   }

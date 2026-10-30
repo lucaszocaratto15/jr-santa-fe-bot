@@ -16,6 +16,7 @@ import { useLessonCard } from './lessonCardStore';
 import { closeHandbookCard, startHandbookCards, useHandbookCard } from './handbookCardStore';
 import ReviewCard from './ReviewCard';
 import SecureCard from './SecureCard';
+import { useBrainCapture } from './useBrainCapture';
 import { useLessonOffer } from './useLessonOffer';
 import {
   openDescribe,
@@ -49,6 +50,8 @@ const TeachCardHost: React.FC<TeachCardHostProps> = ({ conversationId }) => {
   const lessons = useLessonCard(conversationId);
   // Single mount point per conversation for the "Lições" offer trigger.
   useLessonOffer(conversationId);
+  // Silent capture of the stretch for the company brain (no card, no state).
+  useBrainCapture(conversationId);
   useEffect(() => {
     void resyncSecureRequests();
   }, []);

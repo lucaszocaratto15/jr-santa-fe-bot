@@ -2669,6 +2669,32 @@ export const teach = {
 };
 
 // ---------------------------------------------------------------------------
+// Cérebro da empresa — silent capture and the data notice. `manage.*` arrives with the management screens.
+// ---------------------------------------------------------------------------
+
+export const brain = {
+  /** Notice state: which version was acknowledged. Nothing waits for it. */
+  consentState: bridge.buildProvider<import('@/common/types/agent/brainTypes').BrainNoticeState, void>(
+    'brain:consent-state'
+  ),
+  /** "Li e entendi": stores the acknowledgement locally and on the brain. */
+  accept: bridge.buildProvider<import('@/common/types/agent/brainTypes').BrainNoticeState, { termVersion: string }>(
+    'brain:accept'
+  ),
+  /** Hands a conversation stretch to main. Always resolves; failures are silent. */
+  captureStretch: bridge.buildProvider<void, import('@/common/types/agent/brainTypes').BrainCaptureInput>(
+    'brain:capture-stretch'
+  ),
+  /** Id of the last message already captured for the conversation. */
+  lastCaptured: bridge.buildProvider<string | null, { conversationId: string }>('brain:last-captured'),
+  search: bridge.buildProvider<import('@/common/types/agent/brainTypes').BrainFact[], { query: string }>(
+    'brain:search'
+  ),
+  feedback: bridge.buildProvider<{ suspended: boolean }, { factId: string; reason?: string }>('brain:feedback'),
+  me: bridge.buildProvider<import('@/common/types/agent/brainTypes').BrainMe, void>('brain:me'),
+};
+
+// ---------------------------------------------------------------------------
 // Aprender com seu trabalho — state, exclusions and insights only. No channel returns raw samples.
 // ---------------------------------------------------------------------------
 

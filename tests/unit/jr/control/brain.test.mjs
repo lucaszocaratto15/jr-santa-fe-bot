@@ -62,6 +62,16 @@ test('forwards method, path, query, body and the identity headers from the sessi
   assert.equal(call.headers['x-jr-role'], owner.user.role);
 });
 
+test('forwards a body-less GET even when the client sends a JSON content type', async (t) => {
+  const { brain, control, owner } = await setup(t, () => ({ status: 200, body: { areas: [] } }));
+  const response = await fetch(`${control.baseUrl}/api/brain/me`, {
+    headers: { authorization: `Bearer ${owner.token}`, 'content-type': 'application/json' },
+  });
+  assert.equal(response.status, 200);
+  assert.equal(brain.seen[0].method, 'GET');
+  assert.equal(brain.seen[0].url, '/me');
+});
+
 test('overwrites spoofed identity headers and forwards no other client header', async (t) => {
   const { brain, control, owner } = await setup(t);
   const employeeInvite = await control.invite(owner.token);
