@@ -204,11 +204,11 @@ test('a same-risk contradiction supersedes the old fact', async () => {
 
 test('a cross-risk similar fact keeps both and flags the conflict', async () => {
   const t = setup({
-    answer: say([{ text: 'Fornecedor Acme entrega em sete dias', quote: 'Acme entrega em sete', risk: 'low' }]),
+    answer: say([{ text: 'Fornecedor Acme entrega em sete dias', quote: 'Acme entrega em sete', risk: 'high' }]),
   });
   const old = t.store.facts.insert({
     areaId: t.frota,
-    risk: 'high',
+    risk: 'low',
     kind: 'fato',
     text: 'Fornecedor Acme entrega em cinco dias',
     sourceKind: 'usuario_afirmou',
@@ -414,4 +414,74 @@ test('source binding rejects polarity flips and padded injections but accepts fa
     t.all().map((f) => f.text),
     ['A Acme não entrega aos domingos']
   );
+});
+
+test('a restatement of a high fact by a gestor never becomes a low copy readable by colaboradores', async () => {
+  const t = setup({
+    answer: say([{ text: 'O pátio da Frota fecha às dezoito horas', quote: 'pátio da Frota fecha', risk: 'low' }]),
+  });
+  const compras = t.store.areas.create('Compras').id;
+  t.store.members.set('gil', [
+    { areaId: t.frota, level: 'gestor', primary: true },
+    { areaId: compras, level: 'colaborador', primary: false },
+  ]);
+  const high = t.store.facts.insert({
+    areaId: t.frota,
+    risk: 'high',
+    kind: 'fato',
+    text: 'O pátio da Frota fecha às dezoito horas',
+    sourceKind: 'usuario_afirmou',
+    authorUserId: 'owner',
+    confidence: 8,
+  });
+  const gil = { userId: 'gil', role: 'employee', title: 'Gestor' };
+  await t.run(convo('O pátio da Frota fecha às dezoito horas, lembra'), gil);
+  // Also with an area hint pointing at an area where the gestor is only colaborador.
+  t.state.answer = say([
+    {
+      text: 'O pátio da Frota fecha às dezoito horas',
+      quote: 'pátio da Frota fecha',
+      risk: 'low',
+      area_hint: 'Compras',
+    },
+  ]);
+  await t.run(convo('O pátio da Frota fecha às dezoito horas, lembra'), gil);
+  assert.deepEqual(
+    t.all().map((fact) => fact.id),
+    [high]
+  );
+  assert.equal(t.all(compras).length, 0);
+  const anaScope = { low: new Set([t.frota]), high: new Set() };
+  assert.deepEqual(t.store.facts.search(anaScope, 'pátio Frota fecha dezoito'), []);
+});
+
+test('a low candidate revising a high fact is forced to high in that fact area, or dropped if the author cannot write there', async () => {
+  const t = setup({
+    answer: say([{ text: 'Fornecedor Acme entrega em sete dias', quote: 'Acme entrega em sete', risk: 'low' }]),
+  });
+  const compras = t.store.areas.create('Compras').id;
+  const outside = t.store.facts.insert({
+    areaId: compras,
+    risk: 'high',
+    kind: 'fato',
+    text: 'Fornecedor Acme entrega em cinco dias',
+    sourceKind: 'usuario_afirmou',
+    authorUserId: 'owner',
+    confidence: 6,
+  });
+  await t.run(convo('Agora a Acme entrega em sete dias'));
+  assert.equal(t.all().length, 0);
+  assert.equal(t.all(compras).length, 1);
+  assert.equal(t.store.facts.get(outside).supersededBy, null);
+
+  t.store.members.set('ana', [
+    { areaId: t.frota, level: 'colaborador', primary: true },
+    { areaId: compras, level: 'colaborador', primary: false },
+  ]);
+  await t.run(convo('Agora a Acme entrega em sete dias'));
+  assert.equal(t.all().length, 0);
+  const [current] = t.all(compras);
+  assert.equal(current.risk, 'high');
+  assert.equal(current.text, 'Fornecedor Acme entrega em sete dias');
+  assert.equal(t.store.facts.get(outside).supersededBy, current.id);
 });

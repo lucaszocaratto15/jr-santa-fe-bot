@@ -166,7 +166,37 @@ export function createCurator({
     return (own.find((membership) => membership.primary) ?? own[0])?.areaId ?? store.areas.fallbackId();
   }
 
-  function storeFact(identity, conversationRef, bot, areaId, risk, candidate) {
+  /** Areas the curator may write for this author: owner any non-Geral area, others their non-Geral areas. */
+  function canWrite(userId, areaId) {
+    const area = store.areas.list().find((item) => item.id === areaId);
+    if (!area || area.isGeneral) return false;
+    if (userId === 'owner') return true;
+    return store.members.of(userId).some((membership) => membership.areaId === areaId);
+  }
+
+  /**
+   * A low candidate that restates or revises a high fact must never become a readable low copy.
+   * Returns null to drop it, or the area and risk to store it with.
+   */
+  function guardHigh(identity, areaId, risk, text) {
+    if (risk !== 'low') return { areaId, risk };
+    const candidates = store.areas
+      .list()
+      .filter((area) => !area.isGeneral)
+      .flatMap((area) => store.facts.similar(area.id, 'high', text));
+    const match = bestMatch(candidates, text);
+    if (!match || match.score < RELATED_SCORE) return { areaId, risk };
+    if (match.score >= DUPLICATE_SCORE || !canWrite(identity.userId, match.fact.areaId)) return null;
+    return { areaId: match.fact.areaId, risk: 'high' };
+  }
+
+  function storeFact(identity, conversationRef, bot, wantedAreaId, wantedRisk, candidate) {
+    const target = guardHigh(identity, wantedAreaId, wantedRisk, candidate.text);
+    if (!target) {
+      log('curator: restated high fact dropped');
+      return;
+    }
+    const { areaId, risk } = target;
     const sameRisk = store.facts.similar(areaId, risk, candidate.text);
     const match = bestMatch(sameRisk, candidate.text);
     const fact = {

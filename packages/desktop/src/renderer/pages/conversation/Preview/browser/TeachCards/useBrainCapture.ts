@@ -6,6 +6,7 @@
 
 import { useEffect } from 'react';
 import { ipcBridge } from '@/common';
+import type { TMessage } from '@/common/chat/chatLib';
 import { loadLatestConversationMessages } from '@renderer/utils/chat/messagePagination';
 import { stretchAfter } from './lessonTrigger';
 import { isTurnOk, toTranscript } from './useLessonOffer';
@@ -19,6 +20,29 @@ export const CAPTURE_MIN_CHARS = 300;
 export const CAPTURE_EVERY_TURNS = 3;
 /** Or ten minutes after the last turn. */
 export const CAPTURE_IDLE_MS = 10 * 60_000;
+
+/** `brain_search` / `brain_wrong`, bare or prefixed by the MCP server. */
+const BRAIN_TOOL = /^(?:.*(?:__|[:/.]))?brain_(?:search|wrong)$/i;
+const isBrainTool = (name: unknown): boolean => typeof name === 'string' && BRAIN_TOOL.test(name.trim());
+
+/**
+ * The bot's own brain lookups are never captured: their output is brain facts (possibly high risk)
+ * and must not come back as new material. Brain tools are removed from tool groups; a message left
+ * with no tool is dropped.
+ */
+export function withoutBrainLookups(items: TMessage[]): TMessage[] {
+  const out: TMessage[] = [];
+  for (const item of items) {
+    if (item.type === 'tool_call') {
+      if (!isBrainTool(item.content.name)) out.push(item);
+    } else if (item.type === 'tool_group') {
+      const tools = item.content.filter((tool) => !isBrainTool(tool.name));
+      if (tools.length === item.content.length) out.push(item);
+      else if (tools.length > 0) out.push({ ...item, content: tools });
+    } else out.push(item);
+  }
+  return out;
+}
 
 const inFlight = new Set<string>();
 const turnsSince = new Map<string, number>();
@@ -44,7 +68,7 @@ async function capture(conversationId: string, trigger: Trigger, force: boolean)
     });
     const last = await ipcBridge.brain.lastCaptured.invoke({ conversationId });
     // Cut on the full transcript: the stored marker may be the id of a tool message.
-    const stretch = stretchAfter(toTranscript(page.items, TOOL_TEXT_CAP), last);
+    const stretch = stretchAfter(toTranscript(withoutBrainLookups(page.items), TOOL_TEXT_CAP), last);
     const chat = stretch.filter((message) => message.role !== 'tool');
     if (!chat.some((message) => message.role === 'assistant')) return;
     const chars = chat.reduce((sum, message) => sum + message.text.length, 0);

@@ -103,4 +103,32 @@ describe('useBrainCapture', () => {
     await settle();
     expect(captureStretch).toHaveBeenCalledTimes(1);
   });
+
+  it('never sends the bot own brain lookups (brain_search, brain_wrong), keeping other tools', async () => {
+    const toolCall = (id: string, name: string) =>
+      ({ id, type: 'tool_call', content: { name, output: 'Fato alto: preço 10' } }) as unknown as TMessage;
+    const group = (id: string, names: string[]) =>
+      ({
+        id,
+        type: 'tool_group',
+        content: names.map((name) => ({ name, result_display: `${name} resultado` })),
+      }) as unknown as TMessage;
+    loadLatest.mockResolvedValue({
+      items: [
+        text('u1', 'right', 'x'.repeat(200)),
+        toolCall('t1', 'jr-teach__brain_search'),
+        toolCall('t2', 'brain_wrong'),
+        group('g1', ['mcp__jr-teach__brain_search', 'web_fetch']),
+        group('g2', ['brain_search']),
+        text('a1', 'left', 'y'.repeat(150)),
+      ],
+    });
+    renderHook(() => useBrainCapture('c1'));
+    turn();
+    await settle();
+    const sent = captureStretch.mock.calls[0][0].messages as Array<{ id: string; text?: string }>;
+    expect(sent.map((m) => m.id)).toEqual(['u1', 'g1', 'a1']);
+    expect(sent[1].text).not.toMatch(/brain_search/);
+    expect(sent[1].text).toMatch(/web_fetch/);
+  });
 });
