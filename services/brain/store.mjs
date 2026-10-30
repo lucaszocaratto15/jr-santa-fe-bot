@@ -1,6 +1,7 @@
 import { chmodSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { canRead } from './access.mjs';
 import { normalize } from './text.mjs';
 
 const DAY = 86_400_000;
@@ -96,7 +97,7 @@ export function createBrainStore(dbPath, { now = Date.now, companyId = 'jr', dai
       INSERT INTO brain_facts_fts (rowid, text_norm) VALUES (new.id, new.text_norm);
     END;
     CREATE TABLE IF NOT EXISTS brain_feedback (
-      fact_id INTEGER NOT NULL, user_id TEXT NOT NULL, vote TEXT NOT NULL, weight REAL NOT NULL, at INTEGER NOT NULL,
+      fact_id INTEGER NOT NULL, company_id TEXT NOT NULL, user_id TEXT NOT NULL, vote TEXT NOT NULL, weight REAL NOT NULL, at INTEGER NOT NULL,
       UNIQUE (fact_id, user_id)
     );
     CREATE TABLE IF NOT EXISTS brain_log (
@@ -146,11 +147,11 @@ export function createBrainStore(dbPath, { now = Date.now, companyId = 'jr', dai
   };
 
   const feedbackPenalty = db.prepare(
-    "SELECT COALESCE(SUM(weight), 0) AS penalty FROM brain_feedback WHERE fact_id = ? AND vote = 'errado'"
+    "SELECT COALESCE(SUM(weight), 0) AS penalty FROM brain_feedback WHERE company_id = ? AND fact_id = ? AND vote = 'errado'"
   );
   const effectiveConfidence = (row) => {
     const base = row.confidence * recencyFactor(now() - row.created_at);
-    return base - feedbackPenalty.get(row.id).penalty;
+    return base - feedbackPenalty.get(companyId, row.id).penalty;
   };
 
   /** SQL predicate and params restricting facts to what the scope may read. */
@@ -165,9 +166,31 @@ export function createBrainStore(dbPath, { now = Date.now, companyId = 'jr', dai
     };
   };
 
-  const getFact = (id) => {
+  const getFact = (id, scope) => {
     const row = db.prepare('SELECT * FROM brain_facts WHERE company_id = ? AND id = ?').get(companyId, id);
-    return row ? factRow(row) : null;
+    if (!row) return null;
+    const fact = factRow(row);
+    return scope && !canRead(scope, fact) ? null : fact;
+  };
+
+  /** Public projection returned by search: nothing about who wrote it or where it came from. */
+  const publicFact = (row, effective) => ({
+    id: row.id,
+    text: row.text,
+    kind: row.kind,
+    area: area(row.area_id)?.name ?? null,
+    risk: row.risk,
+    date: new Date(row.created_at).toISOString().slice(0, 10),
+    confidence: Math.round(effective * 10) / 10,
+    erpRef: row.erp_ref,
+  });
+
+  const checkFact = ({ text, confidence, areaId, risk }) => {
+    if (typeof text !== 'string' || !text.trim()) throw fail(400, 'invalid_fact');
+    if (typeof confidence !== 'number' || !(confidence >= 0 && confidence <= 10)) throw fail(400, 'invalid_fact');
+    const target = area(areaId);
+    if (!target) throw fail(404, 'area_not_found');
+    if (risk === 'high' && target.is_general === 1) throw fail(400, 'high_in_general');
   };
 
   const PATCHABLE = {
@@ -182,6 +205,7 @@ export function createBrainStore(dbPath, { now = Date.now, companyId = 'jr', dai
   };
 
   const insertFact = (fact) => {
+    checkFact(fact);
     const result = db
       .prepare(
         `INSERT INTO brain_facts (company_id, area_id, risk, kind, text, text_norm, source_quote, source_kind,
@@ -212,6 +236,7 @@ export function createBrainStore(dbPath, { now = Date.now, companyId = 'jr', dai
   return {
     close: () => db.close(),
     areas: {
+      fallbackId: fallbackAreaId,
       list: () =>
         db
           .prepare('SELECT * FROM areas WHERE company_id = ? ORDER BY is_general DESC, name')
@@ -240,21 +265,15 @@ export function createBrainStore(dbPath, { now = Date.now, companyId = 'jr', dai
         }
         return { id, name: value, isGeneral: false };
       },
-      /** Removing an area moves its facts and memberships to "Sem área". */
+      /** Removing an area moves its facts to the owner-only "Sem área" and drops its memberships. */
       remove(id) {
         const row = area(id);
         if (!row) throw fail(404, 'area_not_found');
         if (isProtected(row)) throw fail(400, 'area_protected');
         transaction(() => {
-          const fallback = fallbackAreaId();
+          // Facts go to the owner-only fallback area; members just lose the area (they keep Geral).
           db.prepare('UPDATE brain_facts SET area_id = ? WHERE company_id = ? AND area_id = ?').run(
-            fallback,
-            companyId,
-            id
-          );
-          // Members already in the fallback area keep that membership; the rest move over.
-          db.prepare(`UPDATE OR IGNORE user_areas SET area_id = ? WHERE company_id = ? AND area_id = ?`).run(
-            fallback,
+            fallbackAreaId(),
             companyId,
             id
           );
@@ -271,6 +290,7 @@ export function createBrainStore(dbPath, { now = Date.now, companyId = 'jr', dai
           db.prepare('DELETE FROM user_areas WHERE company_id = ? AND user_id = ?').run(companyId, userId);
           for (const membership of memberships) {
             if (!area(membership.areaId)) throw fail(404, 'area_not_found');
+            if (membership.areaId === fallbackAreaId()) throw fail(400, 'area_protected');
             if (membership.level !== 'colaborador' && membership.level !== 'gestor')
               throw fail(400, 'invalid_membership');
             db.prepare(
@@ -312,7 +332,7 @@ export function createBrainStore(dbPath, { now = Date.now, companyId = 'jr', dai
           const effective = effectiveConfidence(row);
           if (effective < minConfidence) continue;
           if (chars + row.text.length > maxChars) continue;
-          result.push(factRow(row, effective));
+          result.push(publicFact(row, effective));
           chars += row.text.length;
           if (result.length >= limit) break;
         }
@@ -320,7 +340,14 @@ export function createBrainStore(dbPath, { now = Date.now, companyId = 'jr', dai
       },
       update(id, patch, byUserId) {
         return transaction(() => {
-          if (!getFact(id)) throw fail(404, 'fact_not_found');
+          const current = getFact(id);
+          if (!current) throw fail(404, 'fact_not_found');
+          checkFact({
+            text: patch.text ?? current.text,
+            confidence: patch.confidence ?? current.confidence,
+            areaId: patch.areaId ?? current.areaId,
+            risk: patch.risk ?? current.risk,
+          });
           const sets = [];
           const params = [];
           for (const [key, column] of Object.entries(PATCHABLE)) {
@@ -347,7 +374,9 @@ export function createBrainStore(dbPath, { now = Date.now, companyId = 'jr', dai
         return transaction(() => {
           const old = getFact(oldId);
           if (!old) throw fail(404, 'fact_not_found');
+          if (old.supersededBy !== null) throw fail(409, 'already_superseded');
           if (old.risk !== newFact.risk) throw fail(409, 'risk_mismatch');
+          if (old.areaId !== newFact.areaId) throw fail(409, 'area_mismatch');
           const newId = insertFact(newFact);
           db.prepare('UPDATE brain_facts SET superseded_by = ? WHERE company_id = ? AND id = ?').run(
             newId,
@@ -381,7 +410,7 @@ export function createBrainStore(dbPath, { now = Date.now, companyId = 'jr', dai
           .map((row) => factRow(row, effectiveConfidence(row)));
       },
       /** The supersession chain a fact belongs to, oldest first. */
-      history(id) {
+      history(id, scope) {
         const seen = new Map();
         const queue = [id];
         while (queue.length) {
@@ -396,7 +425,10 @@ export function createBrainStore(dbPath, { now = Date.now, companyId = 'jr', dai
             .all(companyId, current))
             queue.push(row.id);
         }
-        return [...seen.values()].sort((a, b) => a.createdAt - b.createdAt || a.id - b.id);
+        if (scope && (!seen.has(id) || !canRead(scope, seen.get(id)))) return [];
+        return [...seen.values()]
+          .filter((fact) => !scope || canRead(scope, fact))
+          .sort((a, b) => a.createdAt - b.createdAt || a.id - b.id);
       },
       /** Remove every fact an author wrote (right to be forgotten); returns how many. */
       deleteByAuthor(userId) {
@@ -406,7 +438,11 @@ export function createBrainStore(dbPath, { now = Date.now, companyId = 'jr', dai
             .all(companyId, userId)
             .map((row) => row.id);
           for (const id of ids) {
-            db.prepare('DELETE FROM brain_feedback WHERE fact_id = ?').run(id);
+            db.prepare('UPDATE brain_facts SET superseded_by = NULL WHERE company_id = ? AND superseded_by = ?').run(
+              companyId,
+              id
+            );
+            db.prepare('DELETE FROM brain_feedback WHERE company_id = ? AND fact_id = ?').run(companyId, id);
             db.prepare('DELETE FROM brain_facts WHERE id = ?').run(id);
           }
           return ids.length;
@@ -416,10 +452,12 @@ export function createBrainStore(dbPath, { now = Date.now, companyId = 'jr', dai
     feedback: {
       /** One vote per user per fact; a new vote replaces the previous one. `weight` is in confidence points. */
       vote(factId, userId, weight, vote = 'errado') {
+        if (!getFact(factId)) throw fail(404, 'fact_not_found');
+        const clamped = Number.isFinite(weight) ? Math.max(0, weight) : 0;
         db.prepare(
-          `INSERT INTO brain_feedback (fact_id, user_id, vote, weight, at) VALUES (?, ?, ?, ?, ?)
+          `INSERT INTO brain_feedback (fact_id, company_id, user_id, vote, weight, at) VALUES (?, ?, ?, ?, ?, ?)
            ON CONFLICT (fact_id, user_id) DO UPDATE SET vote = excluded.vote, weight = excluded.weight, at = excluded.at`
-        ).run(factId, userId, vote, weight, now());
+        ).run(factId, companyId, userId, vote, clamped, now());
       },
     },
     log: {

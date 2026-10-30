@@ -3,6 +3,7 @@ import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { readScope } from '../../../../services/brain/access.mjs';
 import { createBrainStore } from '../../../../services/brain/store.mjs';
 
 const DAY = 86_400_000;
@@ -106,9 +107,9 @@ test('recency: full for 30 days, decays, excluded when effective confidence < 3'
   store.facts.insert(fact(general.id, 'regra antiga de teste', { confidence: 10 }));
   const search = () => store.facts.search(lowScope(general.id), 'antiga');
   clock.t = T0 + 30 * DAY;
-  assert.equal(search()[0].effectiveConfidence, 10);
+  assert.equal(search()[0].confidence, 10);
   clock.t = T0 + 380 * DAY;
-  assert.ok(Math.abs(search()[0].effectiveConfidence - 5) < 0.01);
+  assert.ok(Math.abs(search()[0].confidence - 5) < 0.01);
   clock.t = T0 + 800 * DAY;
   assert.deepEqual(search(), []);
 });
@@ -118,11 +119,11 @@ test('feedback penalty lowers confidence; one vote per user per fact', () => {
   const id = store.facts.insert(fact(general.id, 'dado discutivel', { confidence: 6 }));
   store.feedback.vote(id, 'bia', 2);
   store.feedback.vote(id, 'bia', 2);
-  assert.equal(store.facts.search(lowScope(general.id), 'discutivel')[0].effectiveConfidence, 4);
+  assert.equal(store.facts.search(lowScope(general.id), 'discutivel')[0].confidence, 4);
   store.feedback.vote(id, 'caio', 2);
   assert.deepEqual(store.facts.search(lowScope(general.id), 'discutivel'), []);
   store.feedback.vote(id, 'caio', 0, 'certo');
-  assert.equal(store.facts.search(lowScope(general.id), 'discutivel')[0].effectiveConfidence, 4);
+  assert.equal(store.facts.search(lowScope(general.id), 'discutivel')[0].confidence, 4);
 });
 
 test('supersede keeps the old row, links it, and only within the same risk', () => {
@@ -190,12 +191,12 @@ test('deleteByAuthor removes only that author facts', () => {
   assert.equal(store.facts.deleteByAuthor('ana'), 1);
   assert.equal(store.facts.get(mine), null);
   assert.deepEqual(
-    store.facts.search(lowScope(general.id), 'meu').map((f) => f.authorUserId),
-    ['bia']
+    store.facts.search(lowScope(general.id), 'meu').map((f) => f.text),
+    ['fato do outro meu']
   );
 });
 
-test('areas and members: set replaces, remove moves facts and members to Sem área', () => {
+test('areas and members: set replaces, remove moves facts to Sem área and drops memberships', () => {
   const { store, general, frota, compras } = open();
   const fallback = store.areas.list().find((a) => a.name === 'Sem área').id;
   store.members.set('ana', [
@@ -221,7 +222,7 @@ test('areas and members: set replaces, remove moves facts and members to Sem ár
   store.areas.rename(frota, 'Frota Pesada');
   store.areas.remove(frota);
   assert.equal(store.facts.get(id).areaId, fallback);
-  assert.deepEqual(store.members.of('bia'), [{ areaId: fallback, level: 'colaborador', primary: true }]);
+  assert.deepEqual(store.members.of('bia'), []);
   assert.ok(!store.areas.list().some((a) => a.id === frota));
   assert.ok(general.id);
 });
@@ -273,4 +274,134 @@ test('companies are isolated and file database is private', async () => {
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test('removed areas: facts go to owner-only Sem área and former members cannot read them', () => {
+  const { store, general, frota, compras } = open();
+  const fallback = store.areas.fallbackId();
+  store.members.set('ana', [{ areaId: frota, level: 'colaborador', primary: true }]);
+  store.members.set('bia', [{ areaId: compras, level: 'colaborador', primary: true }]);
+  const fa = store.facts.insert(fact(frota, 'segredo da frota antiga'));
+  const fb = store.facts.insert(fact(compras, 'segredo de compras antigo'));
+  assert.throws(
+    () => store.members.set('ana', [{ areaId: fallback, level: 'colaborador', primary: false }]),
+    /area_protected/
+  );
+  store.areas.remove(frota);
+  store.areas.remove(compras);
+  for (const user of ['ana', 'bia']) {
+    const scope = readScope({ userId: user }, store.members.of(user), general.id, fallback);
+    assert.equal(store.facts.search(scope, 'segredo').length, 0);
+    assert.equal(store.facts.get(fa, scope), null);
+    assert.equal(store.facts.get(fb, scope), null);
+  }
+  assert.equal(store.facts.search({ all: true }, 'segredo').length, 2);
+  const stale = readScope(
+    { userId: 'x' },
+    [{ areaId: fallback, level: 'gestor', primary: true }],
+    general.id,
+    fallback
+  );
+  assert.deepEqual([...stale.low], [general.id]);
+  assert.deepEqual([...stale.high], []);
+});
+
+test('get and history are scope-aware', () => {
+  const { store, general, frota, compras } = open();
+  const a = store.facts.insert(fact(frota, 'v1 frota'));
+  const b = store.facts.supersede(a, fact(frota, 'v2 frota'));
+  const c = store.facts.insert(fact(compras, 'v1 compras', { risk: 'high' }));
+  const scope = { low: new Set([general.id, frota]), high: new Set() };
+  assert.equal(store.facts.get(a, scope).id, a);
+  assert.equal(store.facts.get(c, scope), null);
+  assert.equal(store.facts.get(c).id, c);
+  assert.deepEqual(
+    store.facts.history(b, scope).map((f) => f.id),
+    [a, b]
+  );
+  assert.deepEqual(store.facts.history(c, scope), []);
+  assert.deepEqual(store.facts.history(a, { low: new Set([general.id]), high: new Set() }), []);
+});
+
+test('search returns a public projection only', () => {
+  const { store, frota } = open();
+  store.facts.insert(
+    fact(frota, 'Fornecedor Z entrega rapido', {
+      sourceQuote: 'quote',
+      authorBot: 'bot',
+      conversationRef: 'c1',
+      erpRef: 'obra:1',
+    })
+  );
+  const [found] = store.facts.search({ all: true }, 'fornecedor');
+  assert.deepEqual(found, {
+    id: found.id,
+    text: 'Fornecedor Z entrega rapido',
+    kind: 'fato',
+    area: 'Frota',
+    risk: 'low',
+    date: '2026-10-30',
+    confidence: 8,
+    erpRef: 'obra:1',
+  });
+  assert.equal('sourceQuote' in store.facts.listForManager({ all: true })[0], true);
+});
+
+test('deleteByAuthor makes superseded predecessors heads again', () => {
+  const { store, general } = open();
+  const old = store.facts.insert(fact(general.id, 'prazo velho', { authorUserId: 'bia' }));
+  store.facts.supersede(old, fact(general.id, 'prazo novo', { authorUserId: 'ana' }));
+  store.facts.deleteByAuthor('ana');
+  assert.equal(store.facts.get(old).supersededBy, null);
+  assert.deepEqual(
+    store.facts.search(lowScope(general.id), 'prazo').map((f) => f.id),
+    [old]
+  );
+});
+
+test('feedback rows carry the company and do not leak across companies', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'brain-'));
+  try {
+    const path = join(dir, 'b.db');
+    const jr = createBrainStore(path);
+    const other = createBrainStore(path, { companyId: 'outra' });
+    const id = jr.facts.insert(fact(jr.areas.list()[0].id, 'dado compartilhado'));
+    assert.throws(() => other.feedback.vote(id, 'bia', 5), /fact_not_found/);
+    jr.feedback.vote(id, 'bia', 2);
+    assert.equal(jr.facts.search({ all: true }, 'compartilhado')[0].confidence, 6);
+    jr.close();
+    other.close();
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('supersede rejects an already superseded fact and another area', () => {
+  const { store, general, frota } = open();
+  const a = store.facts.insert(fact(general.id, 'um'));
+  store.facts.supersede(a, fact(general.id, 'dois'));
+  assert.throws(() => store.facts.supersede(a, fact(general.id, 'tres')), /already_superseded/);
+  const b = store.facts.insert(fact(general.id, 'quatro'));
+  assert.throws(() => store.facts.supersede(b, fact(frota, 'cinco')), /area_mismatch/);
+});
+
+test('vote clamps negative weight and rejects unknown facts', () => {
+  const { store, general } = open();
+  const id = store.facts.insert(fact(general.id, 'fato votado', { confidence: 6 }));
+  store.feedback.vote(id, 'bia', -5);
+  assert.equal(store.facts.search(lowScope(general.id), 'votado')[0].confidence, 6);
+  assert.throws(() => store.feedback.vote(999, 'bia', 1), /fact_not_found/);
+});
+
+test('update validates text, confidence, area and high-in-Geral', () => {
+  const { store, general, frota } = open();
+  const id = store.facts.insert(fact(frota, 'fato valido'));
+  assert.throws(() => store.facts.update(id, { text: '   ' }, 'g'), /invalid_fact/);
+  assert.throws(() => store.facts.update(id, { confidence: 11 }, 'g'), /invalid_fact/);
+  assert.throws(() => store.facts.update(id, { confidence: -1 }, 'g'), /invalid_fact/);
+  assert.throws(() => store.facts.update(id, { areaId: 999 }, 'g'), /area_not_found/);
+  assert.throws(() => store.facts.update(id, { risk: 'high', areaId: general.id }, 'g'), /high_in_general/);
+  store.facts.update(id, { risk: 'high' }, 'g');
+  assert.throws(() => store.facts.update(id, { areaId: general.id }, 'g'), /high_in_general/);
+  assert.equal(store.facts.get(id).areaId, frota);
 });

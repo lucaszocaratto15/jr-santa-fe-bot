@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { canManage, readScope } from '../../../../services/brain/access.mjs';
+import { canManage, canRead, readScope } from '../../../../services/brain/access.mjs';
 import { findSecrets, normalize } from '../../../../services/brain/text.mjs';
 
 const GERAL = 1;
@@ -72,4 +72,19 @@ test('findSecrets leaves ordinary work facts alone', () => {
   assert.deepEqual(findSecrets('Fornecedor X passou a cobrar frete de R$ 1.200 em 2026'), []);
   assert.deepEqual(findSecrets('Obra 123 tem 4111 m2 de area e 12 funcionarios'), []);
   assert.deepEqual(findSecrets('internacionalizacaoinstitucionalizacaoconstitucional'), []);
+});
+
+test('canRead applies the area x risk rule', () => {
+  const scope = { low: new Set([1, 2]), high: new Set([2]) };
+  assert.equal(canRead(scope, { areaId: 1, risk: 'low' }), true);
+  assert.equal(canRead(scope, { areaId: 1, risk: 'high' }), false);
+  assert.equal(canRead(scope, { areaId: 2, risk: 'high' }), true);
+  assert.equal(canRead(scope, { areaId: 3, risk: 'low' }), false);
+  assert.equal(canRead({ all: true }, { areaId: 9, risk: 'high' }), true);
+});
+
+test('readScope never includes the fallback area for non-owners', () => {
+  const scope = readScope(user, [{ areaId: 4, level: 'gestor', primary: true }], GERAL, 4);
+  assert.deepEqual([...scope.low], [GERAL]);
+  assert.deepEqual([...scope.high], []);
 });
