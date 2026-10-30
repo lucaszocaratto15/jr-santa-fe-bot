@@ -1056,7 +1056,8 @@ const handleAppReady = async (): Promise<void> => {
   // "Manual da função": drafts, employee-approved publishing and the role handbook reads.
   startHandbookService(app.getPath('userData'), (target, init, admin) => controller.call(target, init, admin));
   // Company brain: silent capture of conversation stretches and the data notice.
-  startBrainService(app.getPath('userData'), (target, init, admin) => controller.call(target, init, admin));
+  // Brain calls never mark the app offline: a slow or missing brain fails only that call.
+  startBrainService(app.getPath('userData'), (target, init, admin) => controller.brainCall(target, init, admin));
   jrAccessController = controller;
   setJrAccessController(controller);
   const debugBackendStartupFailure = resolveDebugBackendStartupFailure();

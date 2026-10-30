@@ -608,7 +608,16 @@ export class JrAccessController {
       return this.state;
     });
   }
-  private async authorized(path: string, init: RequestInit = {}, admin = false): Promise<unknown> {
+  /**
+   * `offlineOnFailure: false` is for optional side services (the company brain): a network failure or
+   * timeout fails only that call and never marks the app offline or stops the core.
+   */
+  private async authorized(
+    path: string,
+    init: RequestInit = {},
+    admin = false,
+    offlineOnFailure = true
+  ): Promise<unknown> {
     if (this.current.status !== 'authenticated' || !this.saved?.token) return fail('JR_ACCESS_REQUIRED');
     if (admin && !isJrAdmin(this.current.user)) return fail('JR_ACCESS_FORBIDDEN');
     const epoch = this.generation,
@@ -618,6 +627,7 @@ export class JrAccessController {
       response = await this.remote(path, init, token);
     } catch {
       if (epoch !== this.generation) return fail('JR_ACCESS_REQUIRED');
+      if (!offlineOnFailure) return fail('JR_ACCESS_UNAVAILABLE');
       await this.blockTransitions(async () => {
         this.publish('offline');
         await this.stopCore();
@@ -662,6 +672,15 @@ export class JrAccessController {
     if (this.options.pilot || !this.options.url) return fail('JR_ACCESS_UNCONFIGURED');
     if (!path.startsWith('/') || path.includes('..')) return fail('JR_ACCESS_INVALID_REQUEST');
     return this.authorized(path, init, admin || path.startsWith('/admin/'));
+  }
+  /**
+   * Like `call`, for `/api/brain/*` only. The brain is optional: when the control service cannot be
+   * reached or times out, only this call fails (JR_ACCESS_UNAVAILABLE); access status stays as it is.
+   */
+  async brainCall(path: string, init: RequestInit = {}, admin = false): Promise<unknown> {
+    if (this.options.pilot || !this.options.url) return fail('JR_ACCESS_UNCONFIGURED');
+    if (!path.startsWith('/api/brain/') || path.includes('..')) return fail('JR_ACCESS_INVALID_REQUEST');
+    return this.authorized(path, init, admin, false);
   }
   async setEmployeeTitle(input: { employeeId: string; title: string | null }): Promise<{ title: string | null }> {
     if (!validId(input?.employeeId)) return fail('JR_ACCESS_INVALID_EMPLOYEE');
