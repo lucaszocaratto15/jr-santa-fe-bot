@@ -245,7 +245,9 @@ export function createHandbookService(deps: HandbookServiceDeps): HandbookServic
           const task = await readTaughtTask(skillsDir, name);
           const { dir, shots } = await listShots(deps.shotsDirs(name, skillsDir));
           const { shots: used, ...body } = activityFromSkill(task, shots);
-          const lessons = ((await deps.lessonsFor?.(name)) ?? []).map((lesson) => lesson.text);
+          // A lesson store that cannot be read only leaves the lessons out, never the task.
+          const stored = (await deps.lessonsFor?.(name).catch((): Lesson[] => [])) ?? [];
+          const lessons = stored.map((lesson) => lesson.text);
           if (lessons.length > 0) body.lessons = lessons;
           return { key: `taught:${name}`, kind: 'activity', source: 'taught', body, shots: used, shotsDir: dir };
         } catch {

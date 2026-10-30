@@ -75,6 +75,7 @@ async function setup(
     accepted?: string | null;
     maxPublishMediaBytes?: number;
     lessons?: Lesson[];
+    lessonsFor?: (skill: string) => Promise<Lesson[]>;
   } = {}
 ) {
   const root = await mkdtemp(join(tmpdir(), 'jr-handbook-'));
@@ -93,6 +94,7 @@ async function setup(
     shotsDirs: (skill, dir) => [join(dir, skill, 'telas')],
     learn: () => learn,
     ...(options.lessons ? { lessonsFor: async () => options.lessons ?? [] } : {}),
+    ...(options.lessonsFor ? { lessonsFor: options.lessonsFor } : {}),
     stateFile,
     now: () => NOW,
     ...(options.maxPublishMediaBytes === undefined ? {} : { maxPublishMediaBytes: options.maxPublishMediaBytes }),
@@ -175,6 +177,15 @@ describe('handbook service task lessons', () => {
     expect((drafts[0].body as HandbookActivityBody).lessons).toEqual(['Usar o CNPJ da matriz', 'Conferir o valor']);
     const none = await setup({ lessons: [] });
     expect('lessons' in (await none.service.drafts()).drafts[0].body).toBe(false);
+  });
+
+  it('keeps the taught draft, without lessons, when the lesson store cannot be read', async () => {
+    const broken = await setup({
+      lessonsFor: async () => Promise.reject(Object.assign(new Error('EACCES'), { code: 'EACCES' })),
+    });
+    const { drafts } = await broken.service.drafts();
+    expect(drafts.map((draft) => draft.key)).toEqual([taughtKey]);
+    expect('lessons' in drafts[0].body).toBe(false);
   });
 
   it('changing the lessons changes the draft hash and publishes them in the body', async () => {
