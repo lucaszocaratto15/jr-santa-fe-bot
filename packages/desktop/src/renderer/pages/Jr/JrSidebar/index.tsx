@@ -44,6 +44,7 @@ import { initialsFromName, sidebarProfile } from './sidebarProfile';
 import { readSidebarLayout, writeSidebarLayout } from './preferences';
 import styles from './JrSidebar.module.css';
 import { useTaughtRunWatcher } from './Teach/useTaughtRunWatcher';
+import { useLessonRuleSync } from './Teach/useLessonRuleSync';
 import { useLearnSettingsRequests } from '@renderer/hooks/agent/useLearnState';
 
 const JrConnections = lazy(() => import('../Connections'));
@@ -142,6 +143,7 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
   const navigate = useNavigate();
   const location = useLocation();
   useTaughtRunWatcher();
+  useLessonRuleSync();
   const { state, logout } = useJrAccess();
   const { user } = useAuth();
   const [connectionsOpen, setConnectionsOpen] = useState(false);

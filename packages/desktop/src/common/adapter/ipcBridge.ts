@@ -2597,6 +2597,10 @@ export type TeachSaveDraftInput = import('@/common/types/agent/teachTypes').Teac
 export type TeachDraftRejectedEvent = import('@/common/types/agent/teachTypes').TeachDraftRejectedEvent;
 export type TaughtTaskContent = import('@/common/types/agent/teachTypes').TaughtTaskContent;
 export type TaughtTaskErrorCode = import('@/common/types/agent/teachTypes').TaughtTaskErrorCode;
+type Lesson = import('@/common/types/agent/lessonTypes').Lesson;
+type LessonCounters = import('@/common/types/agent/lessonTypes').LessonCounters;
+type LessonProposal = import('@/common/types/agent/lessonTypes').LessonProposal;
+type TranscriptMessage = import('@/common/types/agent/lessonTypes').TranscriptMessage;
 
 export const teach = {
   openTab: bridge.buildEmitter<{ url: string; openerWebContentsId: number }>('teach:open-tab'),
@@ -2637,6 +2641,31 @@ export const teach = {
   /** Main → renderer: show the "Manual da função" card of an activity (from `handbook_show`). */
   /** `roleKey` only when an admin views another role's activity (read-only). */
   showHandbook: bridge.buildEmitter<{ activityId: string; roleKey?: string }>('teach:show-handbook'),
+  /** "Lições": every stored lesson, active or not. */
+  lessonsList: bridge.buildProvider<Lesson[], void>('teach:lessons-list'),
+  lessonsCounters: bridge.buildProvider<LessonCounters, void>('teach:lessons-counters'),
+  /** Asks the model for lessons from a corrected chat; empty proposals mean silence. */
+  lessonsExtract: bridge.buildProvider<
+    { proposals: LessonProposal[]; upToMessageId: string },
+    { conversationId: string; messages: TranscriptMessage[] }
+  >('teach:lessons-extract'),
+  /** Stores the approved lessons; rejects with a lesson store error `code`. */
+  lessonsSave: bridge.buildProvider<
+    Lesson[],
+    {
+      conversationId: string;
+      upToMessageId: string;
+      accepted: { proposal: LessonProposal; edited: boolean }[];
+      discarded: number;
+    }
+  >('teach:lessons-save'),
+  lessonsUpdate: bridge.buildProvider<Lesson, { id: string; text: string }>('teach:lessons-update'),
+  lessonsSetActive: bridge.buildProvider<Lesson, { id: string; active: boolean }>('teach:lessons-set-active'),
+  lessonsRevert: bridge.buildProvider<Lesson, { id: string; versionIndex: number }>('teach:lessons-revert'),
+  lessonsLastOffered: bridge.buildProvider<string | null, { conversationId: string }>('teach:lessons-last-offered'),
+  /** Active general lessons as the text appended to every bot rule. */
+  lessonsGeneralText: bridge.buildProvider<string, void>('teach:lessons-general-text'),
+  lessonsChanged: bridge.buildEmitter<{ scope: 'general' | 'task' }>('teach:lessons-changed'),
 };
 
 // ---------------------------------------------------------------------------

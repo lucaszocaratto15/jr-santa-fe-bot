@@ -5,7 +5,7 @@ import { getTeachServices } from '../registry';
 import { createLessonStore, type LessonStore } from './lessonStore';
 
 /** Vault usernames and passwords, read in the main process only so lesson text can be screened. */
-async function vaultSecrets(): Promise<string[]> {
+export async function vaultSecrets(): Promise<string[]> {
   const vault = getTeachServices()?.vault;
   if (!vault?.available()) return [];
   const out: string[] = [];

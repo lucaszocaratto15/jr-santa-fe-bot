@@ -31,6 +31,7 @@ vi.mock('@/common', () => ({
   ipcBridge: {
     conversation: { listChanged: { on: () => () => {} }, artifactStream: { on: () => () => {} } },
     learn: { state: { invoke: async () => null }, stateChanged: { on: () => () => {} } },
+    teach: { lessonsChanged: { on: () => () => {} } },
   },
 }));
 vi.mock('@/renderer/pages/Jr/jrBots', () => ({

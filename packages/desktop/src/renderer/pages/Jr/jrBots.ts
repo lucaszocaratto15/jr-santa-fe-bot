@@ -50,6 +50,15 @@ function instructionWithMemory(instructions: string, learning: string, generalLe
   ].join('\n\n');
 }
 
+/** Active general lessons for the bot rule; a failed read means no lessons, never a failed save. */
+async function generalLessonsText(): Promise<string> {
+  try {
+    return (await ipcBridge.teach.lessonsGeneralText.invoke()) ?? '';
+  } catch {
+    return '';
+  }
+}
+
 export function validateJrBot(input: JrBotInput): 'name' | 'instructions' | 'learning' | 'workspace' | null {
   if (!input.name.trim() || input.name.trim().length > 80) return 'name';
   if (!input.instructions.trim() || input.instructions.length > 12000) return 'instructions';
@@ -204,7 +213,7 @@ export async function saveJrBot(input: JrBotInput, id?: string): Promise<JrBot> 
     const written = await ipcBridge.fs.writeAssistantRule.invoke({
       assistant_id: id,
       locale: 'pt-BR',
-      content: instructionWithMemory(input.instructions, learning),
+      content: instructionWithMemory(input.instructions, learning, await generalLessonsText()),
     });
     if (!written) throw new Error('Bot instructions were not saved');
     if (previous)
@@ -399,7 +408,7 @@ async function recreateBotAssistant(bot: JrBot, skillIds: readonly string[]): Pr
   const written = await ipcBridge.fs.writeAssistantRule.invoke({
     assistant_id: bot.id,
     locale: 'pt-BR',
-    content: instructionWithMemory(bot.instructions, bot.learning ?? ''),
+    content: instructionWithMemory(bot.instructions, bot.learning ?? '', await generalLessonsText()),
   });
   if (!written) throw new Error('Bot instructions were not saved');
 }
@@ -417,13 +426,29 @@ async function ensureBotAssistant(bot: JrBot, skillIds: readonly string[]): Prom
       const written = await ipcBridge.fs.writeAssistantRule.invoke({
         assistant_id: bot.id,
         locale: 'pt-BR',
-        content: instructionWithMemory(bot.instructions, bot.learning ?? ''),
+        content: instructionWithMemory(bot.instructions, bot.learning ?? '', await generalLessonsText()),
       });
       if (!written) throw new Error('Bot instructions were not saved');
     }
     return;
   }
   await recreateBotAssistant(bot, skillIds);
+}
+
+/** Re-writes every saved bot's rule with the current general lessons. One failing bot does not stop the rest. */
+export async function rewriteAllBotRules(): Promise<void> {
+  const [bots, lessons] = await Promise.all([listJrBots(), generalLessonsText()]);
+  for (const bot of bots) {
+    try {
+      await ipcBridge.fs.writeAssistantRule.invoke({
+        assistant_id: bot.id,
+        locale: 'pt-BR',
+        content: instructionWithMemory(bot.instructions, bot.learning ?? '', lessons),
+      });
+    } catch (error) {
+      console.error('[JR] Could not refresh lessons in bot rule:', bot.id, error);
+    }
+  }
 }
 
 /** Create or enable the app Chrome connector so a new bot can use it immediately. */
