@@ -349,11 +349,12 @@ test('a publish request over the 6 MB cap is rejected with 413 and one under it 
 
 const BRAIN_SECRET = 'brain-test-only-secret-0123456789';
 
-/** Fake brain: `peersOf[userId]` is that caller's `/peers` list; `down` answers 500. */
+/** Fake brain: `peersOf[userId]` is that caller's `/peers` list; `down` answers 500; `hang` never answers. */
 async function withBrain(t) {
-  const state = { peersOf: {}, down: false, calls: 0 };
+  const state = { peersOf: {}, down: false, hang: false, calls: 0 };
   const server = createServer((request, response) => {
     state.calls += 1;
+    if (state.hang) return;
     const id = request.headers['x-jr-user-id'];
     const reply = state.down || request.url !== '/peers' ? 500 : 200;
     response.writeHead(reply, { 'content-type': 'application/json' });
@@ -361,7 +362,13 @@ async function withBrain(t) {
   });
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
-  t.after(() => new Promise((resolve) => server.close(resolve)));
+  t.after(
+    () =>
+      new Promise((resolve) => {
+        server.closeAllConnections();
+        server.close(resolve);
+      })
+  );
   const brainUrl = `http://127.0.0.1:${server.address().port}`;
   const env = await setup(t, undefined, { brainUrl, brainSecret: BRAIN_SECRET });
   return { ...env, state };
@@ -400,6 +407,16 @@ test('colaborador reads activity items of area peers but not of other roles, and
   const denied = await app.request(roleUrl('financeiro'), { token: frota1.token });
   assert.equal(denied.status, 403);
   assert.equal(fin.user.title, 'Financeiro');
+});
+
+test('a hung brain only delays handbook reads by the 2 s /peers timeout, then falls back to the own role', async (t) => {
+  const { app, frota1, state } = await areaSetup(t);
+  state.hang = true;
+  const started = Date.now();
+  const response = await app.request('/handbook/roles', { token: frota1.token });
+  const elapsed = Date.now() - started;
+  assert.equal(response.status, 200);
+  assert.ok(elapsed >= 1500 && elapsed < 3500, `elapsed ${elapsed}`);
 });
 
 test('gestor of the shared area sees the indicators of the peers role', async (t) => {

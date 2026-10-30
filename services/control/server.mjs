@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { brainRequest, handleBrain } from './brain.mjs';
+import { BRAIN_PEERS_TIMEOUT_MS, brainRequest, handleBrain } from './brain.mjs';
 import { handleHandbook } from './handbook.mjs';
 import { createModelProxy } from './proxy.mjs';
 import { createStore } from './store.mjs';
@@ -17,7 +17,15 @@ const json = (response, status, body) => {
 /** Brain `/peers` for the session, or null when the brain is not configured, down or answers badly. */
 const brainPeers = (config) => async (session) => {
   if (!config.brain) return null;
-  const reply = await brainRequest(config, session.user, 'GET', '/peers', undefined, config.brainFetch);
+  const reply = await brainRequest(
+    config,
+    session.user,
+    'GET',
+    '/peers',
+    undefined,
+    config.brainFetch,
+    BRAIN_PEERS_TIMEOUT_MS
+  );
   return reply.status === 200 ? reply.body : null;
 };
 

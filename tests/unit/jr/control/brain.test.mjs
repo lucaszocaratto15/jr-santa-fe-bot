@@ -106,6 +106,67 @@ test('forwards the brain status and body as-is', async (t) => {
   assert.deepEqual(await response.json(), { error: { code: 'forbidden' } });
 });
 
+test('a brain 401 (wrong shared secret) becomes 502 brain_unavailable, never a session error', async (t) => {
+  const { control, owner } = await setup(t, () => ({ status: 401, body: { error: { code: 'unauthorized' } } }));
+  const response = await control.request('/api/brain/facts/1', { token: owner.token });
+  assert.equal(response.status, 502);
+  assert.deepEqual(await response.json(), { error: { code: 'brain_unavailable' } });
+  const session = await control.request('/auth/session', { token: owner.token });
+  assert.equal(session.status, 200);
+});
+
+/** A brainFetch that never answers and only fails when its timeout signal fires. */
+const hungFetch = (seen) => (_url, init) =>
+  new Promise((_resolve, reject) => {
+    seen.push(init.signal);
+    init.signal.addEventListener('abort', () => reject(init.signal.reason));
+  });
+
+test('a hung brain answers 503 within about 4 s while /auth/session keeps answering', async (t) => {
+  const signals = [];
+  const control = await startControl(t, {
+    brainUrl: 'http://brain.invalid',
+    brainSecret: SECRET,
+    brainFetch: hungFetch(signals),
+  });
+  const owner = await control.login();
+  const started = Date.now();
+  const pending = control.request('/api/brain/facts/search?q=x', { token: owner.token });
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  const sessionStarted = Date.now();
+  const session = await control.request('/auth/session', { token: owner.token });
+  assert.equal(session.status, 200);
+  assert.ok(Date.now() - sessionStarted < 1000);
+  const response = await pending;
+  const elapsed = Date.now() - started;
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { error: { code: 'brain_unavailable' } });
+  assert.ok(elapsed >= 3500 && elapsed < 5500, `elapsed ${elapsed}`);
+  assert.equal(signals.length, 1);
+});
+
+test('brainRequest takes a per-call timeout; /peers lookups use 2 s', async () => {
+  const { BRAIN_PEERS_TIMEOUT_MS, BRAIN_TIMEOUT_MS, brainRequest } =
+    await import('../../../../services/control/brain.mjs');
+  assert.equal(BRAIN_TIMEOUT_MS, 4000);
+  assert.equal(BRAIN_PEERS_TIMEOUT_MS, 2000);
+  const started = Date.now();
+  await assert.rejects(
+    brainRequest(
+      { brain: { url: 'http://brain.invalid', secret: SECRET } },
+      { id: 'u1', role: 'employee' },
+      'GET',
+      '/peers',
+      undefined,
+      hungFetch([]),
+      BRAIN_PEERS_TIMEOUT_MS
+    ),
+    { status: 503 }
+  );
+  const elapsed = Date.now() - started;
+  assert.ok(elapsed >= 1500 && elapsed < 3000, `elapsed ${elapsed}`);
+});
+
 test('rejects bodies over 256 KB', async (t) => {
   const { brain, control, owner } = await setup(t);
   const response = await control.request('/api/brain/facts', {

@@ -7,7 +7,10 @@
 import { httpError } from './validation.mjs';
 
 export const BRAIN_BODY_LIMIT = 256 * 1024;
-export const BRAIN_TIMEOUT_MS = 10_000;
+/** Forwarded requests: a hung brain answers 503 quickly instead of holding the employee's request. */
+export const BRAIN_TIMEOUT_MS = 4_000;
+/** `/peers` lookups gate handbook reads; they fall back to the caller's own role on failure. */
+export const BRAIN_PEERS_TIMEOUT_MS = 2_000;
 const PREFIX = '/api/brain';
 const METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
 /** Characters allowed in a forwarded path; dot segments are rejected separately. */
@@ -31,9 +34,19 @@ const headerValue = (value) => (SAFE_HEADER.test(value) ? value : encodeURICompo
 /**
  * Call the brain on behalf of `identity` ({ id, role, title }). `path` includes any query string and
  * starts with `/`. Returns `{ status, body }` with the brain's own status and parsed JSON (null when
- * empty). Unreachable, timed out or non-JSON replies become a 503 `brain_unavailable`.
+ * empty). Unreachable, timed out or non-JSON replies become a 503 `brain_unavailable`. A brain 401
+ * only means the shared secret is wrong (a deployment fault, not the employee's session), so it
+ * becomes a 502 `brain_unavailable` and the desktop never reads it as an invalid session.
  */
-export async function brainRequest(config, identity, method, path, body, brainFetch = fetch) {
+export async function brainRequest(
+  config,
+  identity,
+  method,
+  path,
+  body,
+  brainFetch = fetch,
+  timeoutMs = BRAIN_TIMEOUT_MS
+) {
   if (!config?.brain) throw httpError(404, 'not_found');
   if (identity?.id === 'curator') throw httpError(403, 'forbidden');
   const headers = {
@@ -43,19 +56,22 @@ export async function brainRequest(config, identity, method, path, body, brainFe
   };
   if (identity.title) headers['x-jr-title'] = headerValue(String(identity.title));
   if (body !== undefined) headers['content-type'] = 'application/json';
+  let result;
   try {
     const reply = await brainFetch(`${config.brain.url}${path}`, {
       method,
       headers,
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       redirect: 'manual',
-      signal: AbortSignal.timeout(BRAIN_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     const text = await reply.text();
-    return { status: reply.status, body: text ? JSON.parse(text) : null };
+    result = { status: reply.status, body: text ? JSON.parse(text) : null };
   } catch {
     throw httpError(503, 'brain_unavailable');
   }
+  if (result.status === 401) throw httpError(502, 'brain_unavailable');
+  return result;
 }
 
 /** Handle `/api/brain/*`; returns true when the request was answered. */
