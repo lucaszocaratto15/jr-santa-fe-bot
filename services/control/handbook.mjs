@@ -152,7 +152,7 @@ export function createHandbookStore(db, now, httpError) {
     const row = db.prepare('SELECT title FROM users WHERE id = ?').get(userId);
     return typeof row?.title === 'string' && row.title.trim() ? row.title.trim() : null;
   };
-  const payloadFor = (key, title) => {
+  const payloadFor = (key, title, withIndicators = true) => {
     const items = db
       .prepare("SELECT * FROM handbook_items WHERE role_key = ? AND kind = 'activity' ORDER BY approved_at, id")
       .all(key)
@@ -168,6 +168,8 @@ export function createHandbookStore(db, now, httpError) {
           .all(row.id)
           .map((media) => media.id),
       }));
+    // Indicators the caller may not see are omitted from the payload, not sent as null.
+    if (!withIndicators) return { role: { key, title }, items };
     const indicators = aggregateIndicators(
       db
         .prepare(
@@ -186,10 +188,23 @@ export function createHandbookStore(db, now, httpError) {
       if (!title) return { role: null, items: [], indicators: null };
       return payloadFor(roleKey(title), title);
     },
-    forRole(key) {
+    forRole(key, withIndicators = true) {
       const title = latestTitle(key);
       if (!title) throw httpError(404, 'not_found');
-      return payloadFor(key, title);
+      return payloadFor(key, title, withIndicators);
+    },
+    /** Role keys of the given users, read from this server's own users table (never from the brain). */
+    roleKeysOf(userIds) {
+      const byUser = new Map();
+      for (const id of userIds) {
+        const title = userTitle(id);
+        if (title) byUser.set(id, roleKey(title));
+      }
+      return byUser;
+    },
+    ownRoleKey(userId) {
+      const title = userTitle(userId);
+      return title ? roleKey(title) : null;
     },
     roles() {
       return db
@@ -264,28 +279,68 @@ export function createHandbookStore(db, now, httpError) {
       const result = db.prepare("DELETE FROM handbook_items WHERE author_id = ? AND source = 'learn'").run(userId);
       return { removed: Number(result.changes) };
     },
-    media(userId, mediaId, isAdmin) {
+    /** Role key of the item that owns a media row; 404 when the media does not exist. */
+    mediaRoleKey(mediaId) {
       const row = db
         .prepare(
-          `SELECT handbook_media.mime AS mime, handbook_media.data AS data, handbook_items.role_key AS role_key
-          FROM handbook_media JOIN handbook_items ON handbook_items.id = handbook_media.item_id WHERE handbook_media.id = ?`
+          'SELECT handbook_items.role_key AS role_key FROM handbook_media JOIN handbook_items ON handbook_items.id = handbook_media.item_id WHERE handbook_media.id = ?'
         )
         .get(mediaId);
       if (!row) throw httpError(404, 'not_found');
-      if (!isAdmin) {
-        const title = userTitle(userId);
-        if (!title || roleKey(title) !== row.role_key) throw httpError(403, 'forbidden');
-      }
+      return row.role_key;
+    },
+    media(mediaId) {
+      const row = db.prepare('SELECT mime, data FROM handbook_media WHERE id = ?').get(mediaId);
+      if (!row) throw httpError(404, 'not_found');
       return { mime: row.mime, base64: Buffer.from(row.data).toString('base64') };
     },
   };
 }
 
 /**
+ * What a non-admin caller may read besides their own role, from the brain's `/peers` (user ids that share an
+ * area with the caller, plus the caller's level in each shared area). Titles come from the control users
+ * table. Returns role key -> `{ indicators }`; brain off, down or malformed gives an empty map, so the
+ * caller falls back to their own role only.
+ */
+async function peerRoles(store, session, brainPeers) {
+  const roles = new Map();
+  let reply = null;
+  try {
+    reply = brainPeers ? await brainPeers(session) : null;
+  } catch {
+    reply = null;
+  }
+  if (!Array.isArray(reply?.peers)) return roles;
+  const peers = reply.peers.filter((peer) => typeof peer?.userId === 'string' && Array.isArray(peer.areas));
+  const keys = store.roleKeysOf(peers.map((peer) => peer.userId));
+  for (const peer of peers) {
+    const key = keys.get(peer.userId);
+    if (!key) continue;
+    const manages = peer.areas.some((area) => area?.level === 'gestor');
+    const entry = roles.get(key) ?? { indicators: false };
+    entry.indicators ||= manages;
+    roles.set(key, entry);
+  }
+  return roles;
+}
+
+/**
  * Route `/handbook/*` and `/admin/handbook/*`. Returns true when the request was handled.
  * Admins only read: there is no admin write route and no approval queue.
  */
-export async function handleHandbook({ request, response, path, session, store, readJson, json, httpError, reauth }) {
+export async function handleHandbook({
+  request,
+  response,
+  path,
+  session,
+  store,
+  readJson,
+  json,
+  httpError,
+  reauth,
+  brainPeers,
+}) {
   if (!path) return false;
   const isAdmin = session.user.role === 'admin';
   const userId = session.user.id;
@@ -327,9 +382,44 @@ export async function handleHandbook({ request, response, path, session, store, 
     json(response, 200, store.remove(userId, item[1]));
     return true;
   }
+  if (request.method === 'GET' && path === '/handbook/roles') {
+    if (isAdmin) {
+      json(response, 200, { roles: store.roles() });
+      return true;
+    }
+    const own = store.ownRoleKey(userId);
+    const visible = await peerRoles(store, session, brainPeers);
+    if (own && !visible.has(own)) visible.set(own, { indicators: false });
+    json(response, 200, { roles: store.roles().filter((role) => visible.has(role.key)) });
+    return true;
+  }
+  const role = /^\/handbook\/roles\/([^/]{1,240})$/u.exec(path);
+  if (request.method === 'GET' && role) {
+    let key;
+    try {
+      key = textField(decodeURIComponent(role[1]), 1, 120);
+    } catch {
+      throw httpError(400, 'invalid_request');
+    }
+    if (isAdmin) {
+      json(response, 200, store.forRole(key));
+      return true;
+    }
+    // Own role is always readable; `/handbook/mine` keeps serving its indicators as before. Here indicators
+    // follow the area rule for every role, own included.
+    const visible = await peerRoles(store, session, brainPeers);
+    const allowed = visible.get(key) ?? (key === store.ownRoleKey(userId) ? { indicators: false } : null);
+    if (!allowed) throw httpError(403, 'forbidden');
+    json(response, 200, store.forRole(key, allowed.indicators));
+    return true;
+  }
   const media = /^\/handbook\/media\/([0-9a-f-]{36})$/u.exec(path);
   if (request.method === 'GET' && media) {
-    json(response, 200, store.media(userId, media[1], isAdmin));
+    const mediaRole = store.mediaRoleKey(media[1]);
+    if (!isAdmin && mediaRole !== store.ownRoleKey(userId)) {
+      if (!(await peerRoles(store, session, brainPeers)).has(mediaRole)) throw httpError(403, 'forbidden');
+    }
+    json(response, 200, store.media(media[1]));
     return true;
   }
   throw httpError(404, 'not_found');

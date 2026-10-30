@@ -220,6 +220,9 @@ export const jr = {
     preview: bridge.buildProvider<string, { body: HandbookActivityBody }>('jr-handbook-preview'),
     adminRoles: bridge.buildProvider<HandbookRoleSummary[], void>('jr-handbook-admin-roles'),
     adminRole: bridge.buildProvider<HandbookView, { key: string }>('jr-handbook-admin-role'),
+    /** Roles of the employee's area (own role included); indicators come only when the server allows. */
+    roles: bridge.buildProvider<HandbookRoleSummary[], void>('jr-handbook-roles'),
+    role: bridge.buildProvider<HandbookView, { key: string }>('jr-handbook-role'),
   },
 };
 

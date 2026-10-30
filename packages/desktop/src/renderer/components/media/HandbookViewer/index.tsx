@@ -82,7 +82,7 @@ const HandbookViewer: React.FC<HandbookViewerProps> = ({ payload, activityId, lo
     return (
       <div className='flex flex-col gap-12px'>
         <Empty description={t('common.jr.handbook.viewer.noHandbook')} />
-        <RoleIndicators indicators={payload.indicators} />
+        {!payload.indicatorsHidden && <RoleIndicators indicators={payload.indicators} />}
       </div>
     );
   }
@@ -110,7 +110,7 @@ const HandbookViewer: React.FC<HandbookViewerProps> = ({ payload, activityId, lo
           </Button>
         ))}
       </div>
-      <RoleIndicators indicators={payload.indicators} />
+      {!payload.indicatorsHidden && <RoleIndicators indicators={payload.indicators} />}
     </div>
   );
 };

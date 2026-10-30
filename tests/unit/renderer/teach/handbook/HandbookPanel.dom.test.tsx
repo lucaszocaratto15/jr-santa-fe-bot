@@ -20,6 +20,8 @@ const { handbook, message } = vi.hoisted(() => {
       preview: fn(),
       adminRoles: fn(),
       adminRole: fn(),
+      roles: fn(),
+      role: fn(),
     },
     message: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
   };
@@ -97,6 +99,7 @@ beforeEach(() => {
   handbook.draftShot.invoke.mockImplementation(async ({ shot }: { shot: number }) => `data:image/jpeg;base64,${shot}`);
   handbook.preview.invoke.mockResolvedValue('flowchart TD');
   handbook.mine.invoke.mockResolvedValue(view);
+  handbook.roles.invoke.mockResolvedValue([]);
 });
 
 describe('HandbookPanel', () => {
@@ -195,5 +198,35 @@ describe('HandbookPanel', () => {
     const { container } = show();
     await screen.findByTestId('published-item-1');
     expect(container.textContent).not.toMatch(/Aguardando gestor|aprovação do gestor|pendente/i);
+  });
+
+  it('lists other roles of the area and opens one without indicators when the server withheld them', async () => {
+    handbook.roles.invoke.mockResolvedValue([
+      { key: view.role!.key, title: view.role!.title, activities: 1, updatedAt: 1 },
+      { key: 'frota', title: 'Frota', activities: 2, updatedAt: 1 },
+    ]);
+    handbook.role.invoke.mockResolvedValue({
+      ...view,
+      role: { key: 'frota', title: 'Frota' },
+      indicators: null,
+      indicatorsHidden: true,
+      roleFlowchart: 'flowchart TD',
+    });
+    show();
+    const row = await screen.findByTestId('peer-role-frota');
+    expect(screen.queryByTestId(`peer-role-${view.role!.key}`)).not.toBeInTheDocument();
+    fireEvent.click(within(row).getByText('Ver'));
+    await waitFor(() => expect(handbook.role.invoke).toHaveBeenCalledWith({ key: 'frota' }));
+    await screen.findByTestId('handbook-role');
+    expect(screen.queryByTestId('handbook-indicators')).not.toBeInTheDocument();
+  });
+
+  it('shows no area section when the employee only has their own role', async () => {
+    handbook.roles.invoke.mockResolvedValue([
+      { key: view.role!.key, title: view.role!.title, activities: 1, updatedAt: 1 },
+    ]);
+    show();
+    await screen.findByText('Cargo: Auxiliar de escritório');
+    expect(screen.queryByText('Manuais da sua área')).not.toBeInTheDocument();
   });
 });

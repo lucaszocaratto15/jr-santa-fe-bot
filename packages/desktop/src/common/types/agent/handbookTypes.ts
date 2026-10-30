@@ -58,6 +58,8 @@ export type HandbookPayload = {
   role: { key: string; title: string } | null;
   items: HandbookItem[];
   indicators: HandbookRoleIndicators | null;
+  /** True when the server left the indicators out because the caller may not see them. */
+  indicatorsHidden?: boolean;
 };
 
 export type HandbookRoleSummary = { key: string; title: string; activities: number; updatedAt: number };

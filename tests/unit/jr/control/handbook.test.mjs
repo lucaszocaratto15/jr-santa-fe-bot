@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { once } from 'node:events';
+import { createServer } from 'node:http';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
@@ -22,8 +24,8 @@ const activity = (title = 'Lançar nota fiscal') => ({
   confirmBefore: ['Valor da nota'],
 });
 
-async function setup(t, clock) {
-  const app = await startControl(t, clock ? { now: () => clock.value } : {});
+async function setup(t, clock, extra = {}) {
+  const app = await startControl(t, { ...(clock ? { now: () => clock.value } : {}), ...extra });
   const owner = await app.login();
   const hire = async (name, title, suffix) => {
     const created = await app.request('/admin/invites', {
@@ -335,4 +337,117 @@ test('a publish request over the 6 MB cap is rejected with 413 and one under it 
   });
   assert.equal(fits.status, 200);
   assert.equal(HANDBOOK_REQUEST_LIMIT, 6 * 1024 * 1024);
+});
+
+// ---- role handbooks visible within an area (company brain /peers) ----
+
+const BRAIN_SECRET = 'brain-test-only-secret-0123456789';
+
+/** Fake brain: `peersOf[userId]` is that caller's `/peers` list; `down` answers 500. */
+async function withBrain(t) {
+  const state = { peersOf: {}, down: false, calls: 0 };
+  const server = createServer((request, response) => {
+    state.calls += 1;
+    const id = request.headers['x-jr-user-id'];
+    const reply = state.down || request.url !== '/peers' ? 500 : 200;
+    response.writeHead(reply, { 'content-type': 'application/json' });
+    response.end(JSON.stringify(reply === 200 ? { peers: state.peersOf[id] ?? [] } : { error: { code: 'x' } }));
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const brainUrl = `http://127.0.0.1:${server.address().port}`;
+  const env = await setup(t, undefined, { brainUrl, brainSecret: BRAIN_SECRET });
+  return { ...env, state };
+}
+
+const roleUrl = (key) => `/handbook/roles/${encodeURIComponent(key)}`;
+
+async function areaSetup(t) {
+  const env = await withBrain(t);
+  const { hire, publish, state } = env;
+  const frota1 = await hire('Fabio', 'Frota', 'f1');
+  const frota2 = await hire('Fatima', 'Frota', 'f2');
+  const fin = env.fin;
+  await publish(frota2, { body: activity('Abastecer caminhão') });
+  await publish(frota2, indicators(3, 5));
+  await publish(fin, { body: activity('Conciliar banco') });
+  const peers = (level) => [{ userId: frota2.id, areas: [{ areaId: 1, level }] }];
+  state.peersOf[frota1.id] = peers('colaborador');
+  return { ...env, frota1, frota2, peers };
+}
+
+test('colaborador reads activity items of area peers but not of other roles, and gets no indicators', async (t) => {
+  const { app, frota1, fin } = await areaSetup(t);
+  const list = await (await app.request('/handbook/roles', { token: frota1.token })).json();
+  assert.deepEqual(
+    list.roles.map((role) => role.key),
+    ['frota']
+  );
+  const frota = await app.request(roleUrl('frota'), { token: frota1.token });
+  assert.equal(frota.status, 200);
+  const payload = await frota.json();
+  assert.equal(payload.items.length, 1);
+  assert.equal(payload.items[0].body.title, 'Abastecer caminhão');
+  assert.equal('indicators' in payload, false);
+  assert.equal(JSON.stringify(payload).includes('timesPerWeek'), false);
+  const denied = await app.request(roleUrl('financeiro'), { token: frota1.token });
+  assert.equal(denied.status, 403);
+  assert.equal(fin.user.title, 'Financeiro');
+});
+
+test('gestor of the shared area sees the indicators of the peers role', async (t) => {
+  const { app, frota1, state, peers } = await areaSetup(t);
+  state.peersOf[frota1.id] = peers('gestor');
+  const payload = await (await app.request(roleUrl('frota'), { token: frota1.token })).json();
+  assert.equal(payload.indicators.contributors, 1);
+  assert.equal(payload.indicators.activities[0].timesPerWeek, 3);
+  const financeiro = await app.request(roleUrl('financeiro'), { token: frota1.token });
+  assert.equal(financeiro.status, 403);
+});
+
+test('owner sees every role with indicators', async (t) => {
+  const { app, owner } = await areaSetup(t);
+  const list = await (await app.request('/handbook/roles', { token: owner.token })).json();
+  assert.deepEqual(list.roles.map((role) => role.key).sort(), ['financeiro', 'frota']);
+  const payload = await (await app.request(roleUrl('frota'), { token: owner.token })).json();
+  assert.equal(payload.indicators.contributors, 1);
+});
+
+test('peers media is readable by the area, other roles media is not', async (t) => {
+  const { app, frota1, frota2, fin, publish } = await areaSetup(t);
+  const peerMedia = randomUUID();
+  const otherMedia = randomUUID();
+  await publish(frota2, { media: [{ id: peerMedia, base64: JPEG() }] });
+  await publish(fin, { media: [{ id: otherMedia, base64: JPEG() }] });
+  assert.equal((await app.request(`/handbook/media/${peerMedia}`, { token: frota1.token })).status, 200);
+  assert.equal((await app.request(`/handbook/media/${otherMedia}`, { token: frota1.token })).status, 403);
+});
+
+test('brain down falls back to the own role only, never an error', async (t) => {
+  const { app, frota1, state, publish } = await areaSetup(t);
+  await publish(frota1, { body: activity('Revisar pneus') });
+  state.down = true;
+  const list = await app.request('/handbook/roles', { token: frota1.token });
+  assert.equal(list.status, 200);
+  assert.deepEqual(
+    (await list.json()).roles.map((role) => role.key),
+    ['frota']
+  );
+  const own = await (await app.request(roleUrl('frota'), { token: frota1.token })).json();
+  assert.equal(own.items.length, 2);
+  const fin = await app.request(roleUrl('financeiro'), { token: frota1.token });
+  assert.equal(fin.status, 403);
+});
+
+test('without a brain configured an employee reads only their own role', async (t) => {
+  const { app, a, fin, publish } = await setup(t);
+  await publish(fin, { body: activity('Conciliar banco') });
+  await publish(a, { body: activity('Arquivar') });
+  const list = await (await app.request('/handbook/roles', { token: a.token })).json();
+  assert.deepEqual(
+    list.roles.map((role) => role.key),
+    ['auxiliar de escritorio']
+  );
+  assert.equal((await app.request(roleUrl('financeiro'), { token: a.token })).status, 403);
 });

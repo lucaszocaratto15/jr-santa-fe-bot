@@ -23,6 +23,8 @@ import { EmptyState, PageHeader, SectionLabel } from './PanelParts';
 
 const DRAFTS_KEY = 'jr.handbook.drafts';
 const MINE_KEY = 'jr.handbook.mine';
+const ROLES_KEY = 'jr.handbook.roles';
+const ROLE_KEY = 'jr.handbook.role';
 const loadMedia = (id: string) => ipcBridge.jr.handbook.media.invoke({ id });
 
 const draftLabel = (draft: HandbookDraft, t: (key: string, options?: Record<string, unknown>) => string) => {
@@ -43,6 +45,12 @@ const HandbookPanel: React.FC = () => {
   const [viewing, setViewing] = useState<HandbookPublished | null>(null);
   const mine = useSWR(viewing ? MINE_KEY : null, () => ipcBridge.jr.handbook.mine.invoke());
   const [busy, setBusy] = useState<string | null>(null);
+  const [peerRole, setPeerRole] = useState<{ key: string; title: string } | null>(null);
+  // Roles of the employee's areas. A server without area sharing answers with the own role only.
+  const roles = useSWR(ROLES_KEY, () => ipcBridge.jr.handbook.roles.invoke(), { shouldRetryOnError: false });
+  const peerPayload = useSWR(peerRole ? [ROLE_KEY, peerRole.key] : null, () =>
+    ipcBridge.jr.handbook.role.invoke({ key: (peerRole as { key: string }).key })
+  );
 
   const act = async (id: string, action: () => Promise<void>, success?: string) => {
     setBusy(id);
@@ -91,6 +99,7 @@ const HandbookPanel: React.FC = () => {
     );
   }
   const { role, published } = drafts.data;
+  const otherRoles = (roles.data ?? []).filter((entry) => entry.key !== role?.key && entry.activities > 0);
   if (!role) {
     return (
       <div>
@@ -192,6 +201,37 @@ const HandbookPanel: React.FC = () => {
           </div>
         ))}
       </div>
+      {otherRoles.length > 0 && (
+        <>
+          <SectionLabel>{t('common.jr.handbook.peerRolesTitle')}</SectionLabel>
+          <p className={styles.rowMeta}>{t('common.jr.handbook.peerRolesHint')}</p>
+          <div className={`${styles.card} ${styles.cardList}`}>
+            {otherRoles.map((entry) => (
+              <div key={entry.key} className={styles.row} data-testid={`peer-role-${entry.key}`}>
+                <span className={styles.rowIcon} aria-hidden='true'>
+                  <BookOpen theme='outline' size={16} />
+                </span>
+                <div className={styles.rowCopy}>
+                  <p className={`${styles.rowTitle} font-500`}>{entry.title}</p>
+                  <p className={styles.rowMeta}>
+                    {t('common.jr.handbook.peerRoleActivities', { count: entry.activities })}
+                  </p>
+                </div>
+                <div className={styles.rowActions}>
+                  <Button
+                    className={styles.ghostIcon}
+                    shape='round'
+                    size='small'
+                    onClick={() => setPeerRole({ key: entry.key, title: entry.title })}
+                  >
+                    {t('common.jr.handbook.view')}
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
       {editing && (
         <HandbookDraftEditor
           draft={editing}
@@ -201,6 +241,10 @@ const HandbookPanel: React.FC = () => {
           }}
         />
       )}
+      <Modal visible={Boolean(peerRole)} title={peerRole?.title} footer={null} onCancel={() => setPeerRole(null)}>
+        {peerPayload.data && <HandbookViewer payload={peerPayload.data} loadMedia={loadMedia} />}
+        {peerPayload.error && <Alert type='error' content={t('common.jr.handbook.loadFailed')} />}
+      </Modal>
       <Modal visible={Boolean(viewing)} title={viewing?.title} footer={null} onCancel={() => setViewing(null)}>
         {mine.data && viewing && (
           <HandbookViewer payload={mine.data} activityId={viewing.itemId} loadMedia={loadMedia} />

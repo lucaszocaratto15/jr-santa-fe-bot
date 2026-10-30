@@ -103,6 +103,8 @@ export type HandbookService = {
   preview(body: HandbookActivityBody): string;
   adminRoles(): Promise<HandbookRoleSummary[]>;
   adminRole(key: string): Promise<HandbookView>;
+  roles(): Promise<HandbookRoleSummary[]>;
+  role(key: string): Promise<HandbookView>;
 };
 
 type SourceDraft = Omit<HandbookDraft, 'hash' | 'publishedItemId' | 'status'> & { shotsDir: string | null };
@@ -495,6 +497,12 @@ export function createHandbookService(deps: HandbookServiceDeps): HandbookServic
 
     async adminRole(key) {
       return withFlowcharts(await deps.client.adminRole(key));
+    },
+
+    roles: () => deps.client.roles(),
+
+    async role(key) {
+      return withFlowcharts(await deps.client.role(key));
     },
   };
 }

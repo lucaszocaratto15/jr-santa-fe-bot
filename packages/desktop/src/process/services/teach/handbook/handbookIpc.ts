@@ -35,6 +35,8 @@ export function initHandbookBridge(): void {
   ipcBridge.jr.handbook.preview.provider(async ({ body }) => requireService().preview(body));
   ipcBridge.jr.handbook.adminRoles.provider(async () => requireService().adminRoles());
   ipcBridge.jr.handbook.adminRole.provider(async ({ key }) => requireService().adminRole(key));
+  ipcBridge.jr.handbook.roles.provider(async () => requireService().roles());
+  ipcBridge.jr.handbook.role.provider(async ({ key }) => requireService().role(key));
 }
 
 /** Create and register the handbook service over the JR access controller's `call`. */

@@ -103,4 +103,9 @@ describe('HandbookViewer', () => {
     render(<HandbookViewer payload={view} activityId={ITEM_ID} loadMedia={loadMedia} />);
     expect(screen.queryByText(/withdraw|dismiss|delete|edit/i)).not.toBeInTheDocument();
   });
+
+  it('hides the indicators section when the server withheld them', () => {
+    render(<HandbookViewer payload={{ ...view, indicators: null, indicatorsHidden: true }} loadMedia={loadMedia} />);
+    expect(screen.queryByTestId('handbook-indicators')).not.toBeInTheDocument();
+  });
 });

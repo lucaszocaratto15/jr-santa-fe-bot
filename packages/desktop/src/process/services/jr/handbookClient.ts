@@ -41,6 +41,9 @@ export type HandbookClient = {
   media(id: string): Promise<{ mime: string; base64: string }>;
   adminRoles(): Promise<HandbookRoleSummary[]>;
   adminRole(key: string): Promise<HandbookPayload>;
+  /** Roles the employee may browse: their own and those held by people in their areas. */
+  roles(): Promise<HandbookRoleSummary[]>;
+  role(key: string): Promise<HandbookPayload>;
 };
 
 const PUBLISH_TIMEOUT_MS = 120_000;
@@ -158,7 +161,22 @@ export function parseHandbookPayload(value: unknown): HandbookPayload {
     role,
     items: value.items.map(parseItem).filter((item): item is HandbookItem => item !== null),
     indicators: parseIndicators(value.indicators ?? null),
+    // An absent `indicators` key means the server withheld them (not that there are none).
+    ...('indicators' in value ? {} : { indicatorsHidden: true }),
   };
+}
+
+function parseRoleSummaries(value: unknown): HandbookRoleSummary[] {
+  if (!record(value) || !Array.isArray(value.roles)) return invalid();
+  return value.roles.map((entry): HandbookRoleSummary => {
+    if (!record(entry) || !text(entry.key, 120) || !text(entry.title, 80) || !count(entry.activities)) return invalid();
+    return {
+      key: entry.key,
+      title: entry.title,
+      activities: entry.activities,
+      updatedAt: count(entry.updatedAt) ? entry.updatedAt : 0,
+    };
+  });
 }
 
 export function createHandbookClient(call: HandbookCall): HandbookClient {
@@ -197,24 +215,12 @@ export function createHandbookClient(call: HandbookCall): HandbookClient {
         if (!record(value) || value.mime !== 'image/jpeg' || typeof value.base64 !== 'string') return invalid();
         return { mime: value.mime, base64: value.base64 };
       }),
-    adminRoles: () =>
-      guarded(async () => {
-        const value = await call('/admin/handbook/roles', {}, true);
-        if (!record(value) || !Array.isArray(value.roles)) return invalid();
-        return value.roles.map((entry): HandbookRoleSummary => {
-          if (!record(entry) || !text(entry.key, 120) || !text(entry.title, 80) || !count(entry.activities))
-            return invalid();
-          return {
-            key: entry.key,
-            title: entry.title,
-            activities: entry.activities,
-            updatedAt: count(entry.updatedAt) ? entry.updatedAt : 0,
-          };
-        });
-      }),
+    adminRoles: () => guarded(async () => parseRoleSummaries(await call('/admin/handbook/roles', {}, true))),
     adminRole: (key) =>
       guarded(async () =>
         parseHandbookPayload(await call(`/admin/handbook/roles/${encodeURIComponent(key)}`, {}, true))
       ),
+    roles: () => guarded(async () => parseRoleSummaries(await call('/handbook/roles'))),
+    role: (key) => guarded(async () => parseHandbookPayload(await call(`/handbook/roles/${encodeURIComponent(key)}`))),
   };
 }

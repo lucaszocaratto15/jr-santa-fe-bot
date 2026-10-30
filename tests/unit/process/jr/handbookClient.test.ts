@@ -190,6 +190,21 @@ describe('createHandbookClient', () => {
     expect(call).toHaveBeenCalledWith('/admin/handbook/roles/auxiliar%20de%20escritorio', {}, true);
   });
 
+  it('employee area calls use the non-admin paths and flag withheld indicators', async () => {
+    const call = vi.fn<HandbookCall>(async (path) =>
+      path === '/handbook/roles'
+        ? { roles: [{ key: 'frota', title: 'Frota', activities: 2, updatedAt: 5 }] }
+        : { role: payload.role, items: payload.items }
+    );
+    const client = createHandbookClient(call);
+    await expect(client.roles()).resolves.toEqual([{ key: 'frota', title: 'Frota', activities: 2, updatedAt: 5 }]);
+    expect(call).toHaveBeenCalledWith('/handbook/roles');
+    const withheld = await client.role('frota alta');
+    expect(call).toHaveBeenCalledWith('/handbook/roles/frota%20alta');
+    expect(withheld.indicators).toBeNull();
+    expect(withheld.indicatorsHidden).toBe(true);
+  });
+
   it('refuses a media id that is not a uuid before calling', async () => {
     const call = vi.fn<HandbookCall>(async () => ({}));
     await expect(createHandbookClient(call).media('../admin')).rejects.toThrow('unavailable');

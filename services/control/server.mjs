@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { handleBrain } from './brain.mjs';
+import { brainRequest, handleBrain } from './brain.mjs';
 import { handleHandbook } from './handbook.mjs';
 import { createModelProxy } from './proxy.mjs';
 import { createStore } from './store.mjs';
@@ -12,6 +12,13 @@ const json = (response, status, body) => {
     'X-Content-Type-Options': 'nosniff',
   });
   response.end(JSON.stringify(body));
+};
+
+/** Brain `/peers` for the session, or null when the brain is not configured, down or answers badly. */
+const brainPeers = (config) => async (session) => {
+  if (!config.brain) return null;
+  const reply = await brainRequest(config, session.user, 'GET', '/peers', undefined, config.brainFetch);
+  return reply.status === 200 ? reply.body : null;
 };
 
 async function readJson(request, limit) {
@@ -98,6 +105,7 @@ export function createControlServer(options = {}) {
             json,
             httpError,
             reauth: authenticate,
+            brainPeers: brainPeers(config),
           })
         )
           return;
