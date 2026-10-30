@@ -707,6 +707,24 @@
         "no_description": "The task needs a description.",
         "no_steps": "The draft has no steps.",
         "no_review": "This recording is no longer waiting for review."
+      },
+      "lessons": {
+        "title": "I learned this — keep it?",
+        "keep": "Keep this lesson",
+        "textLabel": "Lesson text",
+        "scopeLabel": "Applies to",
+        "scopeAll": "All your conversations",
+        "quote": "From your message: “{{quote}}”",
+        "updates": "Updates lesson",
+        "save": "Save",
+        "discard": "Discard",
+        "saveFailed": "Could not save the lessons. Try again.",
+        "errors": {
+          "limit_task": "This task already has 20 lessons. Turn off or edit one before saving another.",
+          "limit_general": "You already have 30 general lessons. Turn off or edit one before saving another.",
+          "secret": "The lesson seems to contain sensitive data (password, tax ID, e-mail or key). Remove it and try again.",
+          "too_long": "The lesson is over 200 characters. Shorten the text."
+        }
       }
     },
     "learn": {

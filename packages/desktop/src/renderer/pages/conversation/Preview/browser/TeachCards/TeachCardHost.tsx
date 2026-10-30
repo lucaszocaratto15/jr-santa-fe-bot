@@ -11,6 +11,8 @@ import { TeachRecordingBar } from '../TeachControls';
 import DescribeCard from './DescribeCard';
 import GeneratingCard from './GeneratingCard';
 import HandbookCard from './HandbookCard';
+import LessonCard from './LessonCard';
+import { useLessonCard } from './lessonCardStore';
 import { closeHandbookCard, startHandbookCards, useHandbookCard } from './handbookCardStore';
 import ReviewCard from './ReviewCard';
 import SecureCard from './SecureCard';
@@ -44,6 +46,7 @@ const TeachCardHost: React.FC<TeachCardHostProps> = ({ conversationId }) => {
   // "Manual da função" card asked for by this conversation's bot (handbook_show).
   const handbook = useHandbookCard(conversationId);
   useEffect(() => startHandbookCards(), []);
+  const lessons = useLessonCard(conversationId);
   // Single mount point per conversation for the "Lições" offer trigger.
   useLessonOffer(conversationId);
   useEffect(() => {
@@ -84,6 +87,16 @@ const TeachCardHost: React.FC<TeachCardHostProps> = ({ conversationId }) => {
           activityId={handbook.activityId}
           roleKey={handbook.roleKey}
           onClose={() => closeHandbookCard(conversationId)}
+        />
+      );
+    }
+    // Lessons wait behind every teach card and the handbook card.
+    if (lessons) {
+      return (
+        <LessonCard
+          conversationId={conversationId}
+          proposals={lessons.proposals}
+          upToMessageId={lessons.upToMessageId}
         />
       );
     }

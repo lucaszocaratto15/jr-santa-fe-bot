@@ -178,3 +178,25 @@
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
+
+.lesson {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.lessonBody {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.lessonUpdate {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: var(--color-text-3);
+  font-size: 12px;
+}

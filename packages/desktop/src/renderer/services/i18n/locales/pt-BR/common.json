@@ -704,6 +704,24 @@
         "no_description": "A tarefa precisa de uma descrição.",
         "no_steps": "O rascunho não tem passos.",
         "no_review": "Esta gravação não está mais aguardando revisão."
+      },
+      "lessons": {
+        "title": "Aprendi isso — posso guardar?",
+        "keep": "Guardar esta lição",
+        "textLabel": "Texto da lição",
+        "scopeLabel": "Onde vale",
+        "scopeAll": "Em todas as suas conversas",
+        "quote": "Da sua mensagem: “{{quote}}”",
+        "updates": "Atualiza lição",
+        "save": "Salvar",
+        "discard": "Descartar",
+        "saveFailed": "Não foi possível salvar as lições. Tente de novo.",
+        "errors": {
+          "limit_task": "Essa tarefa já tem 20 lições. Desative ou edite alguma antes de guardar outra.",
+          "limit_general": "Você já tem 30 lições gerais. Desative ou edite alguma antes de guardar outra.",
+          "secret": "A lição parece conter um dado sensível (senha, CPF, CNPJ, e-mail ou chave). Tire esse dado e tente de novo.",
+          "too_long": "A lição passou de 200 caracteres. Encurte o texto."
+        }
       }
     },
     "learn": {
