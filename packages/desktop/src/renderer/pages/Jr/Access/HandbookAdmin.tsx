@@ -29,11 +29,11 @@ const HandbookAdmin: React.FC = () => {
     ipcBridge.jr.handbook.adminRole.invoke({ key: open as string })
   );
   return (
-    <section className='flex flex-col gap-12px mt-24px' data-testid='handbook-admin'>
-      <h2 className={`${styles.pageTitle} flex items-center gap-8px`}>
-        <BookOpen /> {t('common.jr.handbook.admin.title')}
-      </h2>
-      <p className={styles.hint}>{t('common.jr.handbook.admin.readOnly')}</p>
+    <section className='flex flex-col gap-10px' data-testid='handbook-admin'>
+      <div>
+        <h2 className={styles.sectionLabel}>{t('common.jr.handbook.admin.title')}</h2>
+        <p className={`${styles.hint} m-0 text-12.5px`}>{t('common.jr.handbook.admin.readOnly')}</p>
+      </div>
       {open ? (
         <>
           <Button type='text' icon={<Left />} className='self-start' onClick={() => setOpen(null)}>

@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import UsageDailyBars from '../JrSidebar/Usage/UsageDailyBars';
 import { compactTokens, readUsageConsumption, usagePeriod, type UsagePeriodDays } from '../JrSidebar/Usage/usageMeter';
 import usageStyles from '../JrSidebar/Usage/Usage.module.css';
+import styles from './Access.module.css';
 
 type Row = {
   id: string;
@@ -25,6 +26,15 @@ export function teamUsageRows(people: JrAdminEmployee[], days: UsagePeriodDays):
     }))
     .sort((a, b) => (b.period.tokens ?? -1) - (a.period.tokens ?? -1));
 }
+
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase();
 
 const TeamUsage: React.FC<{ people: JrAdminEmployee[]; self?: JrAdminEmployee }> = ({ people, self }) => {
   const { t, i18n } = useTranslation();
@@ -52,23 +62,32 @@ const TeamUsage: React.FC<{ people: JrAdminEmployee[]; self?: JrAdminEmployee }>
       : '';
 
   const tile = (label: string, value: string, hint: string) => (
-    <div className={usageStyles.tile}>
-      <div className={usageStyles.tileLabel}>{label}</div>
-      <div className={usageStyles.tileValue}>{value}</div>
-      <div className={usageStyles.tileHint}>{hint}</div>
+    <div className={styles.usageTile}>
+      <p className={styles.usageTileLabel}>{label}</p>
+      <p className={styles.usageTileValue}>{value}</p>
+      <p className={styles.usageTileHint}>{hint}</p>
     </div>
   );
   const number = (value: number | null) => <span className={usageStyles.number}>{tokens(value)}</span>;
 
   return (
     <section aria-labelledby='jr-team-usage'>
-      <h2 id='jr-team-usage'>{t('common.jr.usageStats.teamTitle')}</h2>
-      <Radio.Group type='button' value={days} onChange={(value: UsagePeriodDays) => setDays(value)}>
-        <Radio value={1}>{t('common.jr.usageStats.today')}</Radio>
-        <Radio value={7}>{t('common.jr.usageStats.days', { count: 7 })}</Radio>
-        <Radio value={30}>{t('common.jr.usageStats.days', { count: 30 })}</Radio>
-      </Radio.Group>
-      <div className={usageStyles.tiles} style={{ marginTop: 12 }}>
+      <div className={styles.usageHead}>
+        <h2 id='jr-team-usage' className={styles.sectionLabel}>
+          {t('common.jr.usageStats.teamTitle')}
+        </h2>
+        <Radio.Group
+          type='button'
+          className={styles.periods}
+          value={days}
+          onChange={(value: UsagePeriodDays) => setDays(value)}
+        >
+          <Radio value={1}>{t('common.jr.usageStats.today')}</Radio>
+          <Radio value={7}>{t('common.jr.usageStats.days', { count: 7 })}</Radio>
+          <Radio value={30}>{t('common.jr.usageStats.days', { count: 30 })}</Radio>
+        </Radio.Group>
+      </div>
+      <div className={styles.usageTiles}>
         {tile(t('common.jr.usageStats.teamTotal'), tokens(teamTokens), t('common.jr.usageStats.tokens'))}
         {tile(
           t('common.jr.usageStats.averagePerPerson'),
@@ -82,16 +101,33 @@ const TeamUsage: React.FC<{ people: JrAdminEmployee[]; self?: JrAdminEmployee }>
         )}
       </div>
       <Table
-        className={usageStyles.table}
+        className={`${usageStyles.table} ${styles.usageTable}`}
         rowKey='id'
         data={rows}
         pagination={false}
         border={false}
         tableLayoutFixed={false}
-        scroll={{ x: 760 }}
+        scroll={{ x: 680 }}
+        expandProps={{ expandRowByClick: true, width: 36 }}
         expandedRowRender={(row: Row) => <UsageDailyBars daily={row.period.daily} />}
         columns={[
-          { title: t('common.jr.usageStats.employee'), dataIndex: 'name' },
+          {
+            title: t('common.jr.usageStats.employee'),
+            dataIndex: 'name',
+            render: (_: unknown, row: Row) => (
+              <span className={styles.person}>
+                <span className={styles.avatar} aria-hidden='true'>
+                  {initials(row.name)}
+                </span>
+                <span className='min-w-0'>
+                  <span className={styles.personName}>{row.name}</span>
+                  <span className={styles.personMeta}>
+                    {t('common.jr.usageStats.requestsCount', { count: row.period.requests ?? 0 })}
+                  </span>
+                </span>
+              </span>
+            ),
+          },
           {
             title: t('common.jr.usageStats.last5h'),
             align: 'right',
@@ -114,16 +150,13 @@ const TeamUsage: React.FC<{ people: JrAdminEmployee[]; self?: JrAdminEmployee }>
           {
             title: t('common.jr.usageStats.periodTotal'),
             align: 'right',
-            render: (_: unknown, row: Row) => number(row.period.tokens),
-          },
-          {
-            title: t('common.jr.usageStats.requests'),
-            align: 'right',
-            render: (_: unknown, row: Row) => <span className={usageStyles.number}>{row.period.requests ?? '—'}</span>,
+            render: (_: unknown, row: Row) => (
+              <strong className={usageStyles.number}>{tokens(row.period.tokens)}</strong>
+            ),
           },
         ]}
       />
-      <p>{t('common.jr.usageStats.adminHint')}</p>
+      <p className={styles.usageHint}>{t('common.jr.usageStats.adminHint')}</p>
     </section>
   );
 };

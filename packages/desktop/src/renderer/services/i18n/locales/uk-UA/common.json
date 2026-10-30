@@ -406,6 +406,8 @@
       "exit": "Sair",
       "signOut": "Sair da conta",
       "adminTitle": "Administrativo",
+      "adminSubtitle": "People, access codes and the team's AI usage.",
+      "peopleTitle": "Employees",
       "roleAdmin": "Administrador",
       "roleEmployee": "Funcionário",
       "adminOnly": "Esta área é exclusiva do administrador.",
@@ -414,6 +416,7 @@
       "newEmployee": "Novo funcionário",
       "newEmployeeTitle": "Novo funcionário",
       "employeeTitle": "Cargo (opcional)",
+      "noTitle": "No role",
       "employeeEmail": "E-mail (opcional)",
       "employeeEmailPlaceholder": "nome@empresa.com",
       "createEmployee": "Criar e gerar código",
@@ -569,6 +572,7 @@
       "peak5h": "5h peak",
       "periodTotal": "Period total",
       "requests": "Bot requests",
+      "requestsCount": "{{count}} requests",
       "total": "Total",
       "tokens": "tokens",
       "last7dHint": "in the last 7 days",
@@ -576,7 +580,7 @@
       "chartLabel": "Usage per day",
       "dayTooltip": "{{date}}: {{tokens}} tokens, {{requests}} requests",
       "noLimitYet": "There is no usage limit yet. These numbers help set a fair limit later.",
-      "adminHint": "Click the arrow on a row to see daily usage. Use the 5h peak column to choose the 5-hour limit."
+      "adminHint": "Click a person to see daily usage. Use the 5h peak column to pick a fair limit."
     },
     "vault": {
       "title": "Vault",

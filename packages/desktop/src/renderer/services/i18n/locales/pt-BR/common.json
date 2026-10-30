@@ -403,6 +403,8 @@
       "exit": "Sair",
       "signOut": "Sair da conta",
       "adminTitle": "Administrativo",
+      "adminSubtitle": "Pessoas, códigos de acesso e uso de IA da equipe.",
+      "peopleTitle": "Funcionários",
       "roleAdmin": "Administrador",
       "roleEmployee": "Funcionário",
       "adminOnly": "Esta área é exclusiva do administrador.",
@@ -411,6 +413,7 @@
       "newEmployee": "Novo funcionário",
       "newEmployeeTitle": "Novo funcionário",
       "employeeTitle": "Cargo (opcional)",
+      "noTitle": "Sem cargo",
       "employeeEmail": "E-mail (opcional)",
       "employeeEmailPlaceholder": "nome@empresa.com",
       "createEmployee": "Criar e gerar código",
@@ -566,6 +569,7 @@
       "peak5h": "Pico em 5h",
       "periodTotal": "Total no período",
       "requests": "Pedidos ao bot",
+      "requestsCount": "{{count}} pedidos",
       "total": "Total",
       "tokens": "tokens",
       "last7dHint": "nos últimos 7 dias",
@@ -573,7 +577,7 @@
       "chartLabel": "Uso por dia",
       "dayTooltip": "{{date}}: {{tokens}} tokens, {{requests}} pedidos",
       "noLimitYet": "Ainda não há limite de uso. Estes números servem para definir um limite justo mais adiante.",
-      "adminHint": "Clique na seta de uma linha para ver o uso dia a dia. Use a coluna Pico em 5h para escolher o limite de 5 horas."
+      "adminHint": "Clique numa pessoa para ver o uso dia a dia. Use a coluna Pico em 5h para escolher um limite justo."
     },
     "vault": {
       "title": "Cofre",

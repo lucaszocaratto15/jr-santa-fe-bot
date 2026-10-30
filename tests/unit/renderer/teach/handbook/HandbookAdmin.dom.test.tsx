@@ -98,7 +98,7 @@ describe('HandbookAdmin', () => {
       return { title: input.title };
     });
     show();
-    fireEvent.click(await screen.findByText('common.jr.access.editTitle'));
+    fireEvent.click(await screen.findByRole('button', { name: 'common.jr.access.editTitle' }));
     const input = await screen.findByLabelText('common.jr.access.employeeTitle');
     expect(input).toHaveValue('Auxiliar');
     fireEvent.change(input, { target: { value: '  Financeiro ' } });

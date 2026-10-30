@@ -1,6 +1,7 @@
 import { ipcBridge } from '@/common';
 import type { JrAdminEmployee, JrInvite } from '@/common/config/clientSettings';
-import { Alert, Button, Input, Modal, Spin } from '@arco-design/web-react';
+import { Alert, Button, Input, Modal, Spin, Tooltip } from '@arco-design/web-react';
+import { Computer, Copy, Edit, Key, Lock, PeopleMinus, Plus, Unlock } from '@icon-park/react';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import useSWR from 'swr';
@@ -8,6 +9,15 @@ import { isJrAdmin, useJrAccess } from './context';
 import styles from './Access.module.css';
 import HandbookAdmin from './HandbookAdmin';
 import TeamUsage from './TeamUsage';
+
+const initialsOf = (name: string): string =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase();
 
 const statusKey = (person: JrAdminEmployee) => {
   if (person.revoked) return 'common.jr.access.revokedStatus';
@@ -159,18 +169,22 @@ const AdminContent: React.FC = () => {
   };
   return (
     <main className={styles.admin}>
-      <div className={styles.heading}>
-        <h1 className={styles.pageTitle}>{t('common.jr.access.adminTitle')}</h1>
+      <header className={styles.heading}>
+        <div className={styles.headingCopy}>
+          <h1 className={styles.pageTitle}>{t('common.jr.access.adminTitle')}</h1>
+          <p className={styles.subtitle}>{t('common.jr.access.adminSubtitle')}</p>
+        </div>
         <Button
           type='primary'
           shape='round'
           className={styles.primary}
+          icon={<Plus theme='outline' size={14} fill='currentColor' />}
           disabled={Boolean(pending)}
           onClick={openCreate}
         >
           {t('common.jr.access.newEmployee')}
         </Button>
-      </div>
+      </header>
       {failed && !creating && !invite && <Alert type='error' content={t('common.jr.access.actionError')} />}
       {isLoading ? (
         <Spin />
@@ -181,63 +195,106 @@ const AdminContent: React.FC = () => {
       ) : (
         <>
           <TeamUsage people={people} self={self} />
-          <div className={styles.list}>
-            {people.map((person) => (
-              <article key={person.id} className={styles.row}>
-                <div className={styles.rowMain}>
-                  <h2 className={styles.rowName}>{person.name}</h2>
-                  {person.title ? <p className={styles.rowMeta}>{person.title}</p> : null}
-                </div>
-                <span
-                  className={styles.status}
-                  data-state={person.revoked ? 'revoked' : person.blocked ? 'blocked' : 'active'}
-                >
-                  {t(statusKey(person))}
-                </span>
-                {person.role === 'employee' && !person.revoked && (
-                  <div className={styles.rowActions}>
-                    <Button
-                      type='text'
-                      className={styles.quiet}
-                      disabled={Boolean(pending)}
-                      loading={pending === person.id}
-                      onClick={() => void setBlocked(person)}
-                    >
-                      {t(person.blocked ? 'common.jr.access.unblockAction' : 'common.jr.access.blockAction')}
-                    </Button>
-                    <Button
-                      type='text'
-                      className={styles.quiet}
-                      disabled={Boolean(pending)}
-                      onClick={() => openRetitle(person)}
-                    >
-                      {t('common.jr.access.editTitle')}
-                    </Button>
-                    <Button
-                      type='text'
-                      className={styles.quiet}
-                      disabled={Boolean(pending)}
-                      loading={pending === person.id}
-                      onClick={() => void generate(person.id)}
-                    >
-                      {t('common.jr.access.newCode')}
-                    </Button>
-                    <Button
-                      type='text'
-                      className={styles.dangerQuiet}
-                      disabled={Boolean(pending)}
-                      onClick={() => {
-                        setFailed(false);
-                        setToRevoke(person);
-                      }}
-                    >
-                      {t('common.jr.access.revokeAction')}
-                    </Button>
-                  </div>
-                )}
-              </article>
-            ))}
-          </div>
+          <section aria-labelledby='jr-admin-people'>
+            <h2 id='jr-admin-people' className={styles.sectionLabel}>
+              {t('common.jr.access.peopleTitle')}
+            </h2>
+            <div className={styles.list}>
+              {people.map((person) => {
+                const personState = person.revoked ? 'revoked' : person.blocked ? 'blocked' : 'active';
+                const devices = (person.devices ?? [])
+                  .filter((device) => !device.revokedAt)
+                  .map((device) => device.name);
+                return (
+                  <article key={person.id} className={styles.row}>
+                    <span className={styles.avatar} data-state={personState} aria-hidden='true'>
+                      {initialsOf(person.name)}
+                    </span>
+                    <div className={styles.rowMain}>
+                      <div className={styles.rowTitle}>
+                        <h2 className={styles.rowName}>{person.name}</h2>
+                        <span className={styles.status} data-state={personState}>
+                          {t(statusKey(person))}
+                        </span>
+                      </div>
+                      <p className={styles.rowMeta}>
+                        <span>{person.title || t('common.jr.access.noTitle')}</span>
+                        {devices.length > 0 && (
+                          <span className={styles.devices}>
+                            <Computer theme='outline' size={12} />
+                            {devices.join(', ')}
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                    {person.role === 'employee' && !person.revoked && (
+                      <div className={styles.rowActions}>
+                        <Button
+                          className={styles.soft}
+                          shape='round'
+                          size='small'
+                          icon={<Key theme='outline' size={13} />}
+                          disabled={Boolean(pending)}
+                          loading={pending === person.id}
+                          onClick={() => void generate(person.id)}
+                        >
+                          {t('common.jr.access.newCode')}
+                        </Button>
+                        <Tooltip content={t('common.jr.access.editTitle')}>
+                          <Button
+                            type='text'
+                            shape='circle'
+                            size='small'
+                            className={styles.quiet}
+                            aria-label={t('common.jr.access.editTitle')}
+                            icon={<Edit theme='outline' size={15} />}
+                            disabled={Boolean(pending)}
+                            onClick={() => openRetitle(person)}
+                          />
+                        </Tooltip>
+                        <Tooltip
+                          content={t(
+                            person.blocked ? 'common.jr.access.unblockAction' : 'common.jr.access.blockAction'
+                          )}
+                        >
+                          <Button
+                            type='text'
+                            shape='circle'
+                            size='small'
+                            className={styles.quiet}
+                            aria-label={t(
+                              person.blocked ? 'common.jr.access.unblockAction' : 'common.jr.access.blockAction'
+                            )}
+                            icon={
+                              person.blocked ? <Unlock theme='outline' size={15} /> : <Lock theme='outline' size={15} />
+                            }
+                            disabled={Boolean(pending)}
+                            loading={pending === person.id}
+                            onClick={() => void setBlocked(person)}
+                          />
+                        </Tooltip>
+                        <Tooltip content={t('common.jr.access.revokeAction')}>
+                          <Button
+                            type='text'
+                            shape='circle'
+                            size='small'
+                            className={styles.dangerQuiet}
+                            aria-label={t('common.jr.access.revokeAction')}
+                            icon={<PeopleMinus theme='outline' size={15} />}
+                            disabled={Boolean(pending)}
+                            onClick={() => {
+                              setFailed(false);
+                              setToRevoke(person);
+                            }}
+                          />
+                        </Tooltip>
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+          </section>
         </>
       )}
       <HandbookAdmin />
@@ -275,7 +332,7 @@ const AdminContent: React.FC = () => {
           </label>
           {failed && <Alert type='error' content={t('common.jr.access.actionError')} />}
           <div className={styles.sheetActions}>
-            <Button disabled={Boolean(pending)} onClick={closeCreate}>
+            <Button type='text' shape='round' disabled={Boolean(pending)} onClick={closeCreate}>
               {t('common.cancel')}
             </Button>
             <Button
@@ -300,7 +357,13 @@ const AdminContent: React.FC = () => {
         {invite && (
           <div className={styles.codeSheet}>
             <code className={styles.code}>{invite.code}</code>
-            <Button type='primary' shape='round' className={styles.primary} onClick={() => void copy()}>
+            <Button
+              type='primary'
+              shape='round'
+              className={styles.primary}
+              icon={<Copy theme='outline' size={14} fill='currentColor' />}
+              onClick={() => void copy()}
+            >
               {t(copied ? 'common.jr.access.copied' : 'common.jr.access.copyCode')}
             </Button>
             {failed && <Alert type='error' content={t('common.jr.access.actionError')} />}
@@ -314,10 +377,16 @@ const AdminContent: React.FC = () => {
         maskClosable={!pending}
         onCancel={() => setToRetitle(undefined)}
         footer={[
-          <Button key='cancel' disabled={Boolean(pending)} onClick={() => setToRetitle(undefined)}>
+          <Button
+            key='cancel'
+            type='text'
+            shape='round'
+            disabled={Boolean(pending)}
+            onClick={() => setToRetitle(undefined)}
+          >
             {t('common.cancel')}
           </Button>,
-          <Button key='save' type='primary' loading={Boolean(pending)} onClick={() => void saveTitle()}>
+          <Button key='save' type='primary' shape='round' loading={Boolean(pending)} onClick={() => void saveTitle()}>
             {t('common.save')}
           </Button>,
         ]}
@@ -343,10 +412,23 @@ const AdminContent: React.FC = () => {
         maskClosable={!pending}
         onCancel={() => setToRevoke(undefined)}
         footer={[
-          <Button key='cancel' disabled={Boolean(pending)} onClick={() => setToRevoke(undefined)}>
+          <Button
+            key='cancel'
+            type='text'
+            shape='round'
+            disabled={Boolean(pending)}
+            onClick={() => setToRevoke(undefined)}
+          >
             {t('common.cancel')}
           </Button>,
-          <Button key='revoke' type='primary' status='danger' loading={Boolean(pending)} onClick={() => void revoke()}>
+          <Button
+            key='revoke'
+            type='primary'
+            status='danger'
+            shape='round'
+            loading={Boolean(pending)}
+            onClick={() => void revoke()}
+          >
             {t('common.jr.access.revokeAction')}
           </Button>,
         ]}
