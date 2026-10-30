@@ -78,11 +78,9 @@ export function createLessonsHandlers(deps: LessonsIpcDeps) {
     async extract({ conversationId, messages }: { conversationId: string; messages: TranscriptMessage[] }) {
       const upToMessageId = messages.at(-1)?.id ?? '';
       if (!upToMessageId) return { proposals: [] as LessonProposal[], upToMessageId };
-      const [existing, secrets, installedSkills] = await Promise.all([
-        store.list(),
-        deps.secrets(),
-        deps.installedSkills(),
-      ]);
+      const [all, secrets, installedSkills] = await Promise.all([store.list(), deps.secrets(), deps.installedSkills()]);
+      // Only active lessons can be updated by an offer.
+      const existing = all.filter((lesson) => lesson.active);
       const connection = deps.connection();
       const proposals = await deps.extract({ messages, installedSkills, existing, secrets, connection });
       // A request was made: consume the stretch even when nothing came back, so later turns
@@ -93,13 +91,10 @@ export function createLessonsHandlers(deps: LessonsIpcDeps) {
     },
 
     async save({ conversationId, upToMessageId, accepted, discarded }: SaveInput): Promise<Lesson[]> {
-      const saved: Lesson[] = [];
-      try {
-        // store.save already counts saved/edited.
-        for (const { proposal, edited } of accepted) saved.push(await store.save(proposal, edited));
-      } finally {
-        await afterChange(saved.map((lesson) => lesson.scope));
-      }
+      // All or nothing: a refused item leaves the store untouched, so a retry cannot duplicate.
+      // store.saveMany already counts saved/edited.
+      const saved = accepted.length > 0 ? await store.saveMany(accepted) : [];
+      await afterChange(saved.map((lesson) => lesson.scope));
       for (let i = 0; i < discarded; i += 1) await store.bump('discarded');
       await store.markOffered(conversationId, upToMessageId);
       return saved;

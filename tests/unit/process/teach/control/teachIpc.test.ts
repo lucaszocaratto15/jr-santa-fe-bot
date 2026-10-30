@@ -174,6 +174,13 @@ describe('teachIpc', () => {
       expect(writeTaughtTask).toHaveBeenCalledWith('/local/skills', { ...task, body: task.body.trimEnd() });
     });
 
+    it('saveTask still saves the task when the lesson store cannot be read', async () => {
+      vi.mocked(ipcBridge.fs.getSkillPaths.invoke).mockRejectedValue(new Error('offline'));
+      activeLessonsFor.mockRejectedValueOnce(Object.assign(new Error('EACCES'), { code: 'EACCES' }));
+      await handlers.saveTask(task);
+      expect(writeTaughtTask).toHaveBeenCalledWith('/local/skills', { ...task, body: task.body.trimEnd() });
+    });
+
     it('readTask forwards the name and returns the content', async () => {
       vi.mocked(ipcBridge.fs.getSkillPaths.invoke).mockResolvedValue({ user_skills_dir: '', builtin_skills_dir: '' });
       expect(await handlers.readTask({ name: 'jr-tarefa-nfs' })).toEqual({

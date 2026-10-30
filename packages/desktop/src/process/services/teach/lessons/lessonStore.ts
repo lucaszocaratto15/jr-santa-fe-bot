@@ -19,6 +19,8 @@ export const MAX_GENERAL_LESSONS = 30;
 export type LessonStore = {
   list(): Promise<Lesson[]>;
   save(p: LessonProposal, edited: boolean): Promise<Lesson>;
+  /** Saves every item or none: one invalid item rejects the whole batch. */
+  saveMany(items: SaveItem[]): Promise<Lesson[]>;
   update(id: string, text: string): Promise<Lesson>;
   setActive(id: string, active: boolean): Promise<Lesson>;
   revert(id: string, versionIndex: number): Promise<Lesson>;
@@ -27,6 +29,8 @@ export type LessonStore = {
   lastOffered(conversationId: string): Promise<string | null>;
   markOffered(conversationId: string, messageId: string): Promise<void>;
 };
+
+export type SaveItem = { proposal: LessonProposal; edited: boolean };
 
 type LessonStoreDeps = { now: () => number; secrets: () => Promise<string[]>; newId: () => string };
 type LessonFile = { version: 1; lessons: Lesson[]; counters: LessonCounters; offered: Record<string, string> };
@@ -41,6 +45,9 @@ const emptyFile = (): LessonFile => ({
   counters: { offered: 0, saved: 0, edited: 0, discarded: 0 },
   offered: {},
 });
+
+/** Thrown by parseFile for content that is not a lesson file we can trust. */
+class CorruptFileError extends Error {}
 
 const fail = (code: LessonStoreErrorCode): never => {
   throw Object.assign(new Error(`JR_LESSON_${code.toUpperCase()}`), { code });
@@ -81,8 +88,13 @@ const validLesson = (raw: unknown): raw is Lesson =>
   (raw.scope.kind === 'general' || (raw.scope.kind === 'task' && typeof raw.scope.skill === 'string'));
 
 const parseFile = (text: string): LessonFile => {
-  const value: unknown = JSON.parse(text);
-  if (!record(value) || value.version !== 1 || !Array.isArray(value.lessons)) return emptyFile();
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    throw new CorruptFileError('invalid json');
+  }
+  if (!record(value) || value.version !== 1 || !Array.isArray(value.lessons)) throw new CorruptFileError('bad shape');
   const base = emptyFile();
   const counters = record(value.counters) ? value.counters : {};
   for (const key of Object.keys(base.counters) as (keyof LessonCounters)[]) {
@@ -95,6 +107,9 @@ const parseFile = (text: string): LessonFile => {
   }
   return { version: 1, lessons: value.lessons.filter(validLesson), counters: base.counters, offered };
 };
+
+/** One line of plain text: newlines and runs of spaces become one space (no stray `## ` headings). */
+export const normalizeLessonText = (text: string): string => text.replace(/\s+/g, ' ').trim();
 
 const sameScope = (a: LessonScope, b: LessonScope): boolean =>
   a.kind === b.kind && (a.kind === 'general' || (b.kind === 'task' && a.skill === b.skill));
@@ -110,12 +125,24 @@ export function createLessonStore(userDataDir: string, deps: LessonStoreDeps): L
     return run;
   };
 
+  /**
+   * Only a missing file is empty. A corrupt one is moved aside (kept for recovery) and the store
+   * starts empty; any other read error throws so the next write cannot overwrite real lessons.
+   */
   const load = async (): Promise<LessonFile> => {
+    let text: string;
     try {
-      const text = await readFile(file, 'utf8');
-      if (text.length > MAX_FILE_BYTES) return emptyFile();
+      text = await readFile(file, 'utf8');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return emptyFile();
+      throw error;
+    }
+    try {
+      if (text.length > MAX_FILE_BYTES) throw new CorruptFileError('too large');
       return parseFile(text);
-    } catch {
+    } catch (error) {
+      if (!(error instanceof CorruptFileError)) throw error;
+      await rename(file, `${file}.corrupt-${deps.now()}`);
       return emptyFile();
     }
   };
@@ -146,9 +173,12 @@ export function createLessonStore(userDataDir: string, deps: LessonStoreDeps): L
       return result;
     });
 
-  const checkText = async (text: string): Promise<void> => {
+  /** The normalized text, or a too_long / secret failure. */
+  const checkText = async (raw: string): Promise<string> => {
+    const text = normalizeLessonText(raw);
     if (text.length > MAX_LESSON_CHARS) fail('too_long');
     if (containsSecret(text, await deps.secrets())) fail('secret');
+    return text;
   };
 
   const checkScope = (scope: LessonScope): void => {
@@ -170,40 +200,49 @@ export function createLessonStore(userDataDir: string, deps: LessonStoreDeps): L
     lesson.text = text;
   };
 
+  /** Applies one approved proposal to `data` in memory (an update keeps the lesson's own scope). */
+  const saveInto = async (data: LessonFile, p: LessonProposal, edited: boolean): Promise<Lesson> => {
+    checkScope(p.scope);
+    const text = await checkText(p.text);
+    let lesson: Lesson;
+    if (p.updateId) {
+      lesson = find(data, p.updateId);
+      pushVersion(lesson, text);
+    } else {
+      checkLimit(data, p.scope);
+      lesson = {
+        id: deps.newId(),
+        scope: p.scope,
+        text,
+        active: true,
+        createdAt: deps.now(),
+        sourceQuote: p.sourceQuote,
+        versions: [],
+      };
+      data.lessons.push(lesson);
+    }
+    data.counters.saved += 1;
+    if (edited) data.counters.edited += 1;
+    return lesson;
+  };
+
   return {
     list: () => serialize(async () => (await load()).lessons),
 
-    save: (p, edited) =>
+    save: (p, edited) => mutate((data) => saveInto(data, p, edited)),
+
+    // mutate writes nothing when one item throws, so the batch is all-or-nothing.
+    saveMany: (items) =>
       mutate(async (data) => {
-        checkScope(p.scope);
-        await checkText(p.text);
-        let lesson: Lesson;
-        if (p.updateId) {
-          lesson = find(data, p.updateId);
-          pushVersion(lesson, p.text);
-        } else {
-          checkLimit(data, p.scope);
-          lesson = {
-            id: deps.newId(),
-            scope: p.scope,
-            text: p.text,
-            active: true,
-            createdAt: deps.now(),
-            sourceQuote: p.sourceQuote,
-            versions: [],
-          };
-          data.lessons.push(lesson);
-        }
-        data.counters.saved += 1;
-        if (edited) data.counters.edited += 1;
-        return lesson;
+        const saved: Lesson[] = [];
+        for (const { proposal, edited } of items) saved.push(await saveInto(data, proposal, edited));
+        return saved;
       }),
 
-    update: (id, text) =>
+    update: (id, raw) =>
       mutate(async (data) => {
         const lesson = find(data, id);
-        await checkText(text);
-        pushVersion(lesson, text);
+        pushVersion(lesson, await checkText(raw));
         return lesson;
       }),
 
@@ -216,11 +255,12 @@ export function createLessonStore(userDataDir: string, deps: LessonStoreDeps): L
       }),
 
     revert: (id, versionIndex) =>
-      mutate((data) => {
+      mutate(async (data) => {
         const lesson = find(data, id);
         const target = lesson.versions[versionIndex];
         if (!target) return fail('not_found');
-        pushVersion(lesson, target.text);
+        // An old version is screened like new text: the vault may hold that value by now.
+        pushVersion(lesson, await checkText(target.text));
         return lesson;
       }),
 

@@ -5,6 +5,7 @@
  */
 
 import { ipcBridge } from '@/common';
+import type { Lesson } from '@/common/types/agent/lessonTypes';
 import { getSecureInputBroker, getTeachServices, getTeachSession } from '../registry';
 import { getSkillsDir } from '@process/utils/initStorage';
 import { TEACH_ERRORS } from '../recording/teachSession';
@@ -70,7 +71,8 @@ export function initTeachBridge(): void {
   ipcBridge.teach.saveTask.provider(async (input) =>
     writeTaughtTask(await userSkillsDir(), {
       ...input,
-      body: withTaskLessons(input.body, await activeLessonsFor(input.name)),
+      // Editing a task never depends on the lesson store being readable.
+      body: withTaskLessons(input.body, await activeLessonsFor(input.name).catch((): Lesson[] => [])),
     })
   );
 }

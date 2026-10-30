@@ -1,4 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Lesson, LessonProposal } from '@/common/types/agent/lessonTypes';
 
 vi.mock('@/common', () => ({ ipcBridge: {} }));
@@ -10,6 +13,12 @@ vi.mock('@process/services/teach/lessons/lessonRuntime', () => ({
 }));
 
 import { createLessonsHandlers, type LessonsIpcDeps } from '@/process/services/teach/lessons/lessonsIpc';
+import { createLessonStore, type SaveItem } from '@/process/services/teach/lessons/lessonStore';
+
+const roots: string[] = [];
+afterEach(async () => {
+  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+});
 
 const task = (skill: string, id = 'l1'): Lesson => ({
   id,
@@ -31,6 +40,9 @@ function setup(overrides: Partial<LessonsIpcDeps> = {}, stored: Lesson[] = []) {
   const store = {
     list: vi.fn(async () => stored),
     save: vi.fn(async (p: LessonProposal) => stored.find((l) => l.text === p.text) ?? task('jr-tarefa-a')),
+    saveMany: vi.fn(async (items: SaveItem[]) =>
+      items.map(({ proposal: p }) => stored.find((l) => l.text === p.text) ?? task('jr-tarefa-a'))
+    ),
     update: vi.fn(async () => stored[0]),
     setActive: vi.fn(async () => stored[0]),
     revert: vi.fn(async () => stored[0]),
@@ -103,7 +115,7 @@ describe('lessons IPC handlers', () => {
 
   it('save propagates a store error carrying its code and does not mark offered', async () => {
     const { handlers, store } = setup();
-    store.save.mockRejectedValueOnce(Object.assign(new Error('secret'), { code: 'secret' }));
+    store.saveMany.mockRejectedValueOnce(Object.assign(new Error('secret'), { code: 'secret' }));
     await expect(
       handlers.save({
         conversationId: 'c',
@@ -113,6 +125,38 @@ describe('lessons IPC handlers', () => {
       })
     ).rejects.toMatchObject({ code: 'secret' });
     expect(store.markOffered).not.toHaveBeenCalled();
+  });
+
+  it('save stores nothing when item 2 of the batch passes the task limit', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'jr-lessons-ipc-'));
+    roots.push(dir);
+    let n = 0;
+    const real = createLessonStore(dir, { now: () => 1, secrets: async () => [], newId: () => `id${++n}` });
+    const scope = { kind: 'task' as const, skill: 'jr-tarefa-a' };
+    for (let i = 0; i < 19; i++) await real.save({ text: `t${i}`, scope, sourceQuote: 'q' }, false);
+    const { deps } = setup();
+    const handlers = createLessonsHandlers({ ...deps, store: real });
+    const input = {
+      conversationId: 'c',
+      upToMessageId: 'm2',
+      accepted: [
+        { proposal: { text: 'cabe', scope, sourceQuote: 'q' }, edited: false },
+        { proposal: { text: 'não cabe', scope, sourceQuote: 'q' }, edited: false },
+      ],
+      discarded: 0,
+    };
+    await expect(handlers.save(input)).rejects.toMatchObject({ code: 'limit_task' });
+    expect(await real.list()).toHaveLength(19);
+    expect((await real.counters()).saved).toBe(19);
+    expect(await real.lastOffered('c')).toBeNull();
+    expect(deps.syncTask).not.toHaveBeenCalled();
+  });
+
+  it('sends only active lessons to the extractor as existing', async () => {
+    const off = { ...general(), id: 'g2', active: false };
+    const { handlers, deps } = setup({}, [general(), off]);
+    await handlers.extract({ conversationId: 'c', messages });
+    expect(vi.mocked(deps.extract).mock.calls[0][0].existing.map((l) => l.id)).toEqual(['g1']);
   });
 
   it('setActive on a task lesson syncs its skill', async () => {
