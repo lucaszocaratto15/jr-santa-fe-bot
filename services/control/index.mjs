@@ -18,6 +18,8 @@ try {
     attemptMs: process.env.ATTEMPT_MS,
     compactionBudgetMs: process.env.COMPACTION_BUDGET_MS,
     compactionEnabled: process.env.COMPACTION_ENABLED,
+    brainUrl: process.env.BRAIN_URL,
+    brainSecret: process.env.BRAIN_SECRET,
   });
   control.server.once('error', () => {
     process.stderr.write('Não foi possível iniciar o controle de acesso.\n');

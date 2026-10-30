@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { handleBrain } from './brain.mjs';
 import { handleHandbook } from './handbook.mjs';
 import { createModelProxy } from './proxy.mjs';
 import { createStore } from './store.mjs';
@@ -97,6 +98,19 @@ export function createControlServer(options = {}) {
             json,
             httpError,
             reauth: authenticate,
+          })
+        )
+          return;
+        if (
+          await handleBrain({
+            request,
+            response,
+            session,
+            config,
+            readJson,
+            json,
+            reauth: authenticate,
+            brainFetch: config.brainFetch,
           })
         )
           return;

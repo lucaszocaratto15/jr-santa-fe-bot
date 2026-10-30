@@ -29,6 +29,18 @@ export function textField(value, minimum, maximum) {
   return value.trim();
 }
 
+/** Internal brain service: both URL and secret, or neither (feature off). */
+function parseBrain(options) {
+  const secret = optionalSecret(options.brainSecret);
+  const raw = options.brainUrl;
+  if (!secret && (raw == null || raw === '')) return null;
+  if (!secret || typeof raw !== 'string') throw new Error();
+  const url = new URL(raw);
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash)
+    throw new Error();
+  return { url: url.toString().replace(/\/$/u, ''), secret };
+}
+
 /** Validate service configuration without including secrets in errors. */
 export function validateConfiguration(options) {
   try {
@@ -58,6 +70,7 @@ export function validateConfiguration(options) {
       throw new Error();
     return {
       ...options,
+      brain: parseBrain(options),
       upstreamUrl: url.toString().replace(/\/$/u, ''),
       fallback: fallbackProviders(options),
       attemptMs: parseBoundedInteger(options.attemptMs, DEFAULT_ATTEMPT_MS, 1_000, 600_000),
