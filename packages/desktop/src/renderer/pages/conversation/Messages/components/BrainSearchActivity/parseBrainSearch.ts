@@ -10,6 +10,8 @@
  * Fact text and ids are never returned from here.
  */
 
+import type { NormalizedToolStatus } from '@/common/chat/normalizeToolCall';
+
 export type BrainSearchOutcome = { kind: 'found'; count: number } | { kind: 'unavailable' };
 
 const BRAIN_UNAVAILABLE_MARKER = 'Cérebro indisponível';
@@ -25,4 +27,19 @@ export function parseBrainSearchOutput(output: string | undefined): BrainSearchO
   const text = output ?? '';
   if (text.includes(BRAIN_UNAVAILABLE_MARKER)) return { kind: 'unavailable' };
   return { kind: 'found', count: text.split('\n').filter((line) => FACT_LINE.test(line)).length };
+}
+
+type BrainCall = { status: NormalizedToolStatus; output?: string };
+
+/**
+ * Folds every brain_search of one bot reply into a single animation: running while any call
+ * runs, then the facts of all calls that answered. Unavailable only when no call answered.
+ */
+export function mergeBrainSearchCalls(calls: BrainCall[]): BrainCall {
+  if (calls.some((call) => call.status === 'pending' || call.status === 'running')) return { status: 'running' };
+  const completed = calls.filter((call) => call.status === 'completed');
+  if (completed.length === 0) return calls[0] ?? { status: 'error' };
+  const answered = completed.filter((call) => parseBrainSearchOutput(call.output).kind === 'found');
+  if (answered.length === 0) return completed[0];
+  return { status: 'completed', output: answered.map((call) => call.output ?? '').join('\n') };
 }

@@ -10,7 +10,7 @@ import type { NormalizedToolCall, NormalizedToolStatus, ToolMessage } from '@/co
 import { normalizeToolMessages, summarizeToolProgress } from '@/common/chat/normalizeToolCall';
 import { getToolDescriptionPayload, localizeToolName } from '../acp/toolPresentation';
 import BrainSearchActivity from './BrainSearchActivity/BrainSearchActivity';
-import { isBrainSearchTool } from './BrainSearchActivity/parseBrainSearch';
+import { isBrainSearchTool, mergeBrainSearchCalls } from './BrainSearchActivity/parseBrainSearch';
 import LocalImageView from '@/renderer/components/media/LocalImageView';
 import { downloadFileFromPath } from '@/renderer/utils/file/download';
 import './MessageToolGroupSummary.css';
@@ -148,7 +148,16 @@ const ToolItemDetail: React.FC<{ item: NormalizedToolCall }> = ({ item }) => {
   );
 };
 
-const MessageToolGroupSummary: React.FC<{ messages: ToolMessage[] }> = ({ messages }) => {
+type Props = {
+  messages: ToolMessage[];
+  /**
+   * Tool messages whose brain_search calls feed this row's single brain animation; the message
+   * list passes the whole reply's calls to its first row and null to the rest. Defaults to `messages`.
+   */
+  brainMessages?: ToolMessage[] | null;
+};
+
+const MessageToolGroupSummary: React.FC<Props> = ({ messages, brainMessages }) => {
   const { t } = useTranslation();
   // Collapsed by default, even while running: the live line below says what is happening now.
   const [showMore, setShowMore] = useState(false);
@@ -156,8 +165,12 @@ const MessageToolGroupSummary: React.FC<{ messages: ToolMessage[] }> = ({ messag
   const tools = useMemo(() => normalizeToolMessages(messages), [messages]);
   const { doneCount, current } = summarizeToolProgress(tools);
   const count = current ? doneCount : tools.length;
-  // Brain lookups get their own animation; their generic rows stay in the expanded list.
-  const brainCalls = tools.filter((item) => isBrainSearchTool(item.name));
+  // Brain lookups get one animation per reply; their generic rows stay in the expanded list.
+  const brainCall = useMemo(() => {
+    const source = brainMessages === undefined ? messages : brainMessages;
+    const calls = source ? normalizeToolMessages(source).filter((item) => isBrainSearchTool(item.name)) : [];
+    return calls.length > 0 ? mergeBrainSearchCalls(calls) : null;
+  }, [messages, brainMessages]);
 
   return (
     <div className='tool-group-summary'>
@@ -176,9 +189,7 @@ const MessageToolGroupSummary: React.FC<{ messages: ToolMessage[] }> = ({ messag
           ))}
         </div>
       )}
-      {brainCalls.map((item) => (
-        <BrainSearchActivity key={item.key} status={item.status} output={item.output} />
-      ))}
+      {brainCall && <BrainSearchActivity status={brainCall.status} output={brainCall.output} />}
       {current && !isBrainSearchTool(current.name) && (
         <div className='tool-group-summary__live' data-testid='tool-group-live-step'>
           <Spin size={12} />

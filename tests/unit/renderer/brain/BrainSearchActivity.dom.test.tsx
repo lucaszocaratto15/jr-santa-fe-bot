@@ -6,8 +6,10 @@ import MessageToolGroupSummary from '@renderer/pages/conversation/Messages/compo
 import BrainSearchActivity from '@renderer/pages/conversation/Messages/components/BrainSearchActivity/BrainSearchActivity';
 import {
   isBrainSearchTool,
+  mergeBrainSearchCalls,
   parseBrainSearchOutput,
 } from '@renderer/pages/conversation/Messages/components/BrainSearchActivity/parseBrainSearch';
+import { brainRowsPerReply } from '@renderer/pages/conversation/Messages/components/BrainSearchActivity/brainRows';
 import { localeNames, ptBR, readCommon, withI18n } from '../teach/learn/i18nTestUtils';
 
 vi.mock('@/renderer/components/media/LocalImageView', () => ({ __esModule: true, default: () => null }));
@@ -118,10 +120,71 @@ describe('MessageToolGroupSummary dispatch', () => {
     expect(screen.getByText(/brain_search/)).toBeTruthy();
   });
 
+  it('shows one animation for several brain_search calls and counts all their facts', () => {
+    const lines = FACTS.split('\n');
+    mount([
+      { ...call('brain_search', 'completed', lines[0]), id: 'm-a' },
+      { ...call('brain_search', 'completed', lines.slice(1).join('\n')), id: 'm-b' },
+    ]);
+    expect(screen.getAllByTestId('brain-search-activity')).toHaveLength(1);
+    expect(screen.getByRole('status').textContent).toBe('Consultou o cérebro da empresa · 3 fatos');
+  });
+
+  it('draws no animation when the reply already showed it on an earlier row', () => {
+    render(
+      withI18n(i18n, <MessageToolGroupSummary messages={[call('brain_search', 'completed', FACTS)]} brainMessages={null} />)
+    );
+    expect(screen.queryByTestId('brain-search-activity')).toBeNull();
+  });
+
   it('leaves other tool calls on the generic row', () => {
     mount([call('Read', 'running')]);
     expect(screen.queryByTestId('brain-search-activity')).toBeNull();
     expect(screen.getByTestId('tool-group-live-step')).toBeTruthy();
+  });
+});
+
+describe('one brain animation per reply', () => {
+  const tool = (id: string, name: string): IMessageToolCall => ({
+    id,
+    conversation_id: 'c1',
+    type: 'tool_call',
+    content: { call_id: `call-${id}`, name, args: {}, status: 'completed', output: '' },
+  });
+  const summary = (id: string, ...messages: IMessageToolCall[]) => ({ type: 'tool_summary', id, messages });
+
+  it('gives the first brain row of a reply every call of that reply and null to later rows', () => {
+    const rows = brainRowsPerReply([
+      { type: 'text', position: 'right' },
+      summary('s1', tool('a', 'Read')),
+      summary('s2', tool('b', 'brain_search')),
+      { type: 'text', position: 'left' },
+      summary('s3', tool('c', 'mcp__jr-teach__brain_search'), tool('d', 'Grep')),
+      { type: 'text', position: 'right' },
+      summary('s4', tool('e', 'brain_search')),
+    ]);
+    expect(rows.has('s1')).toBe(false);
+    expect(rows.get('s2')?.map((message) => message.id)).toEqual(['b', 'c']);
+    expect(rows.get('s3')).toBeNull();
+    expect(rows.get('s4')?.map((message) => message.id)).toEqual(['e']);
+  });
+
+  it('stays running while any call runs and reports unavailable only when none answered', () => {
+    expect(mergeBrainSearchCalls([{ status: 'completed', output: FACTS }, { status: 'running' }]).status).toBe(
+      'running'
+    );
+    const unavailable = 'Cérebro indisponível agora.';
+    expect(
+      parseBrainSearchOutput(
+        mergeBrainSearchCalls([
+          { status: 'completed', output: unavailable },
+          { status: 'completed', output: FACTS },
+        ]).output
+      )
+    ).toEqual({ kind: 'found', count: 3 });
+    expect(parseBrainSearchOutput(mergeBrainSearchCalls([{ status: 'completed', output: unavailable }]).output)).toEqual(
+      { kind: 'unavailable' }
+    );
   });
 });
 
