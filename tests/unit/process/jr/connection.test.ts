@@ -177,7 +177,13 @@ it('lets the read-only bot tools run without a prompt but keeps vault_fill askin
   try {
     const config = await readFile(join(await createJrWorkspace(root), '.aionrs.toml'), 'utf8');
     const allow = config.match(/^allow_list = \[(.*)\]$/m)?.[1] ?? '';
-    for (const tool of ['"brain_search"', '"handbook_lookup"', '"mcp__jr-teach__brain_search"', '"Read"'])
+    for (const tool of [
+      '"brain_search"',
+      '"handbook_lookup"',
+      '"mcp__jr-teach__brain_search"',
+      '"Read"',
+      '"ToolSearch"',
+    ])
       expect(allow).toContain(tool);
     expect(allow).not.toContain('vault_fill');
     expect(config).toContain('autocompact_threshold_pct = 55');
@@ -206,6 +212,10 @@ it('upgrades only the exact config an older app version wrote', async () => {
     await configureJrWorkspaceContext(root, old);
     await configureJrWorkspaceContext(root, edited);
     expect(await readFile(join(old, '.aionrs.toml'), 'utf8')).toContain('"brain_search"');
+    const v1 = (await readFile(join(old, '.aionrs.toml'), 'utf8')).replace(', "ToolSearch"', '');
+    await writeFile(join(old, '.aionrs.toml'), v1);
+    await configureJrWorkspaceContext(root, old);
+    expect(await readFile(join(old, '.aionrs.toml'), 'utf8')).toContain('"ToolSearch"');
     expect(await readFile(join(edited, '.aionrs.toml'), 'utf8')).toBe(`${legacy}# mine\n`);
   } finally {
     await rm(root, { recursive: true, force: true });

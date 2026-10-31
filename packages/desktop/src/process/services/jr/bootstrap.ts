@@ -27,17 +27,21 @@ const JR_TRUSTED_TEACH_TOOLS = [
   'brain_search',
   'brain_wrong',
 ];
-const JR_ALLOW_LIST = [
-  'Read',
-  'Grep',
-  'Glob',
-  ...JR_TRUSTED_TEACH_TOOLS,
-  ...JR_TRUSTED_TEACH_TOOLS.map((tool) => `mcp__${BUILTIN_TEACH_MCP_NAME}__${tool}`),
-];
-const JR_AIONRS_CONFIG = `${JR_AIONRS_COMPACT}
+const allowListConfig = (builtins: readonly string[]): string => {
+  const tools = [
+    ...builtins,
+    ...JR_TRUSTED_TEACH_TOOLS,
+    ...JR_TRUSTED_TEACH_TOOLS.map((tool) => `mcp__${BUILTIN_TEACH_MCP_NAME}__${tool}`),
+  ];
+  return `${JR_AIONRS_COMPACT}
 [tools]
-allow_list = [${JR_ALLOW_LIST.map((tool) => `"${tool}"`).join(', ')}]
+allow_list = [${tools.map((tool) => `"${tool}"`).join(', ')}]
 `;
+};
+/** Engine built-ins that only read: files, search, and looking up its own deferred tools. */
+const JR_AIONRS_CONFIG = allowListConfig(['Read', 'Grep', 'Glob', 'ToolSearch']);
+/** Configs earlier app versions wrote; only these are ever rewritten. */
+const JR_MANAGED_CONFIGS: readonly string[] = [JR_AIONRS_COMPACT, allowListConfig(['Read', 'Grep', 'Glob'])];
 
 function isWithin(parent: string, candidate: string): boolean {
   const path = relative(parent, candidate);
@@ -48,11 +52,11 @@ function hasErrorCode(error: unknown, code: string): boolean {
   return Boolean(error && typeof error === 'object' && 'code' in error && error.code === code);
 }
 
-/** Rewrite a config the app wrote before the tool allow list existed; never touch any other. */
+/** Rewrite a config an older app version wrote; never touch any other. */
 async function upgradeManagedConfig(configPath: string): Promise<void> {
   const info = await lstat(configPath);
   if (!info.isFile()) return;
-  if ((await readFile(configPath, 'utf8')) !== JR_AIONRS_COMPACT) return;
+  if (!JR_MANAGED_CONFIGS.includes(await readFile(configPath, 'utf8'))) return;
   await writeFile(configPath, JR_AIONRS_CONFIG, { encoding: 'utf8', mode: 0o600 });
 }
 
