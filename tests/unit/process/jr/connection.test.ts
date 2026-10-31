@@ -172,6 +172,46 @@ it('preserves a workspace-owned AionRS config and rejects workspaces outside the
   }
 });
 
+it('lets the read-only bot tools run without a prompt but keeps vault_fill asking', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'jr-workspace-tools-'));
+  try {
+    const config = await readFile(join(await createJrWorkspace(root), '.aionrs.toml'), 'utf8');
+    const allow = config.match(/^allow_list = \[(.*)\]$/m)?.[1] ?? '';
+    for (const tool of ['"brain_search"', '"handbook_lookup"', '"mcp__jr-teach__brain_search"', '"Read"'])
+      expect(allow).toContain(tool);
+    expect(allow).not.toContain('vault_fill');
+    expect(config).toContain('autocompact_threshold_pct = 55');
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it('upgrades only the exact config an older app version wrote', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'jr-workspace-upgrade-'));
+  const legacy = [
+    '# Gerenciado pelo JR Bot: compacte o contexto antes do limite do provedor.',
+    '[compact]',
+    'enabled = true',
+    'context_window = 200000',
+    'autocompact_threshold_pct = 55',
+    '',
+  ].join('\n');
+  try {
+    const old = join(root, 'jr-workspaces', 'old-bot');
+    const edited = join(root, 'jr-workspaces', 'edited-bot');
+    await mkdir(old, { recursive: true });
+    await mkdir(edited, { recursive: true });
+    await writeFile(join(old, '.aionrs.toml'), legacy);
+    await writeFile(join(edited, '.aionrs.toml'), `${legacy}# mine\n`);
+    await configureJrWorkspaceContext(root, old);
+    await configureJrWorkspaceContext(root, edited);
+    expect(await readFile(join(old, '.aionrs.toml'), 'utf8')).toContain('"brain_search"');
+    expect(await readFile(join(edited, '.aionrs.toml'), 'utf8')).toBe(`${legacy}# mine\n`);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 it('does not activate a development relay unless local pilot mode is explicit', () => {
   expect(getJrRelayConfig({ ...env, JR_LOCAL_PILOT: undefined })).toBeNull();
 });

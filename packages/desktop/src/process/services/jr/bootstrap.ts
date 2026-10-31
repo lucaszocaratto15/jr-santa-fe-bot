@@ -1,15 +1,42 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, open, realpath, unlink } from 'node:fs/promises';
+import { lstat, mkdir, open, readFile, realpath, unlink, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { BUILTIN_TEACH_MCP_NAME } from '@/common/config/constants';
 
 type RelayEnvironment = Record<string, string | undefined>;
 export type JrRelayConfig = { url: string; token: string; model: string };
 
-const JR_AIONRS_CONFIG = `# Gerenciado pelo JR Bot: compacte o contexto antes do limite do provedor.
+const JR_AIONRS_COMPACT = `# Gerenciado pelo JR Bot: compacte o contexto antes do limite do provedor.
 [compact]
 enabled = true
 context_window = 200000
 autocompact_threshold_pct = 55
+`;
+
+/**
+ * jr-teach tools that only read or show a card run without asking. vault_fill (types a saved
+ * password into a page) keeps the prompt. AionRS names MCP tools bare unless they collide.
+ */
+const JR_TRUSTED_TEACH_TOOLS = [
+  'vault_list',
+  'secure_input',
+  'secure_input_status',
+  'teach_submit_draft',
+  'handbook_lookup',
+  'handbook_show',
+  'brain_search',
+  'brain_wrong',
+];
+const JR_ALLOW_LIST = [
+  'Read',
+  'Grep',
+  'Glob',
+  ...JR_TRUSTED_TEACH_TOOLS,
+  ...JR_TRUSTED_TEACH_TOOLS.map((tool) => `mcp__${BUILTIN_TEACH_MCP_NAME}__${tool}`),
+];
+const JR_AIONRS_CONFIG = `${JR_AIONRS_COMPACT}
+[tools]
+allow_list = [${JR_ALLOW_LIST.map((tool) => `"${tool}"`).join(', ')}]
 `;
 
 function isWithin(parent: string, candidate: string): boolean {
@@ -19,6 +46,14 @@ function isWithin(parent: string, candidate: string): boolean {
 
 function hasErrorCode(error: unknown, code: string): boolean {
   return Boolean(error && typeof error === 'object' && 'code' in error && error.code === code);
+}
+
+/** Rewrite a config the app wrote before the tool allow list existed; never touch any other. */
+async function upgradeManagedConfig(configPath: string): Promise<void> {
+  const info = await lstat(configPath);
+  if (!info.isFile()) return;
+  if ((await readFile(configPath, 'utf8')) !== JR_AIONRS_COMPACT) return;
+  await writeFile(configPath, JR_AIONRS_CONFIG, { encoding: 'utf8', mode: 0o600 });
 }
 
 /** Add JR compaction defaults without overwriting a workspace-owned AionRS config. */
@@ -44,7 +79,7 @@ export async function configureJrWorkspaceContext(userDataPath: string, workspac
   } catch (error) {
     await file?.close().catch((): void => undefined);
     if (file) await unlink(configPath).catch((): void => undefined);
-    if (hasErrorCode(error, 'EEXIST')) return;
+    if (hasErrorCode(error, 'EEXIST')) return upgradeManagedConfig(configPath);
     throw error;
   }
 }
