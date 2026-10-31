@@ -9,7 +9,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { NormalizedToolStatus } from '@/common/chat/normalizeToolCall';
 import styles from './BrainSearchActivity.module.css';
-import { BRAIN_DOTS, BRAIN_POINT, CONVERSATION_POINT } from './brainShape';
+import { BRAIN_CENTER, BRAIN_DOTS, BRAIN_POINT, CONVERSATION_POINT } from './brainShape';
 import { parseBrainSearchOutput } from './parseBrainSearch';
 
 const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
@@ -33,8 +33,9 @@ type Props = {
 };
 
 /**
- * Chat feedback while a bot consults the company brain: dots form a brain and a small bot dot
- * fetches from it and returns to the conversation. Never shows fact text or ids.
+ * Chat feedback while a bot consults the company brain: dots assemble into a brain that pulses
+ * with signal waves while a small bot loops from the conversation to it and back. Never shows
+ * fact text or ids.
  */
 const BrainSearchActivity: React.FC<Props> = ({ status, output }) => {
   const { t } = useTranslation();
@@ -55,31 +56,39 @@ const BrainSearchActivity: React.FC<Props> = ({ status, output }) => {
   return (
     <div className={classNames(styles.root, animated && styles.animated)} data-testid='brain-search-activity'>
       <svg className={styles.svg} viewBox='0 0 120 64' aria-hidden='true' focusable='false'>
-        <line
+        <path
           className={styles.link}
-          x1={CONVERSATION_POINT.x + 8}
-          y1={CONVERSATION_POINT.y}
-          x2={BRAIN_POINT.x}
-          y2={BRAIN_POINT.y}
+          d={`M ${CONVERSATION_POINT.x + 10} ${CONVERSATION_POINT.y} Q ${(CONVERSATION_POINT.x + BRAIN_POINT.x) / 2} ${CONVERSATION_POINT.y - 10} ${BRAIN_POINT.x} ${BRAIN_POINT.y}`}
         />
-        <circle className={styles.conversation} cx={CONVERSATION_POINT.x} cy={CONVERSATION_POINT.y} r={6} />
+        {/* Conversation: a small chat bubble with a tail. */}
+        <path
+          className={styles.conversation}
+          d={`M ${CONVERSATION_POINT.x - 8} ${CONVERSATION_POINT.y - 6} h 16 a 3 3 0 0 1 3 3 v 6 a 3 3 0 0 1 -3 3 h -10 l -4 4 v -4 h -2 a 3 3 0 0 1 -3 -3 v -6 a 3 3 0 0 1 3 -3 z`}
+        />
+        <circle className={styles.pulse} cx={BRAIN_CENTER.x} cy={BRAIN_CENTER.y} r={22} />
         {BRAIN_DOTS.map((dot, index) => (
           <circle
             key={index}
             className={styles.dot}
             cx={dot.x}
             cy={dot.y}
-            r={1.6}
+            r={1.5}
             style={
               {
                 '--from-x': `${dot.fromX}px`,
                 '--from-y': `${dot.fromY}px`,
-                '--delay': `${dot.delay}s`,
+                '--rise': `${dot.rise}s`,
+                '--wave': `${dot.wave}s`,
               } as React.CSSProperties
             }
           />
         ))}
-        <circle className={styles.bot} cx={CONVERSATION_POINT.x + 10} cy={CONVERSATION_POINT.y} r={3.2} />
+        {/* Bot: outer group moves across, inner group bends the path into a loop. */}
+        <g className={styles.botTrack}>
+          <g className={styles.botLift}>
+            <circle className={styles.bot} cx={CONVERSATION_POINT.x + 10} cy={CONVERSATION_POINT.y} r={3} />
+          </g>
+        </g>
       </svg>
       <span className={styles.label} role='status'>
         {label}
