@@ -42,7 +42,7 @@ describe('BrainSearchActivity', () => {
     const root = screen.getByTestId('brain-search-activity');
     expect(root.className).toMatch(/animated/);
     expect(root.querySelector('svg')).not.toBeNull();
-    expect(root.querySelectorAll('circle').length).toBeGreaterThan(20);
+    expect(root.querySelectorAll('circle')).toHaveLength(4);
     expect(screen.getByRole('status').textContent).toBe('Consultando o cérebro da empresa…');
   });
 

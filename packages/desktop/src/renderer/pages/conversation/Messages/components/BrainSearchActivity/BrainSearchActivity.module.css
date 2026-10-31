@@ -3,7 +3,7 @@
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 10px;
+  gap: 8px;
   margin: 4px 0;
   color: var(--text-secondary);
   font-size: 13px;
@@ -11,47 +11,15 @@
 
 .svg {
   flex-shrink: 0;
-  width: 120px;
-  height: 64px;
-  overflow: visible;
+  width: 16px;
+  height: 16px;
 }
 
 .dot {
   fill: var(--primary);
-  fill-opacity: 0.8;
+  opacity: 0.55;
   transform-box: fill-box;
   transform-origin: center;
-}
-
-.link {
-  fill: none;
-  stroke: var(--text-secondary);
-  stroke-width: 1;
-  stroke-dasharray: 2 4;
-  stroke-linecap: round;
-  opacity: 0.35;
-}
-
-.conversation {
-  fill: none;
-  stroke: var(--text-secondary);
-  stroke-width: 1.3;
-  stroke-linejoin: round;
-}
-
-.pulse {
-  fill: none;
-  stroke: var(--primary);
-  stroke-width: 1;
-  opacity: 0;
-  transform-box: fill-box;
-  transform-origin: center;
-}
-
-.bot {
-  fill: var(--primary);
-  stroke: var(--bg-base);
-  stroke-width: 1.2;
 }
 
 .label {
@@ -60,136 +28,25 @@
 
 /* Looping animation only while the lookup is pending (class set by the component). */
 .animated .dot {
-  animation:
-    assemble 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) var(--rise) both,
-    signal 2.4s ease-in-out calc(var(--rise) + var(--wave)) infinite;
+  animation: pulse 1.2s ease-in-out infinite;
+  animation-delay: calc(var(--step) * 0.15s);
 }
 
-.animated .link {
-  animation: flow 1.2s linear infinite;
-}
-
-.animated .pulse {
-  animation: pulse 2.4s ease-out 0.9s infinite;
-}
-
-.animated .botTrack {
-  animation: track 2.4s ease-in-out 0.6s infinite;
-}
-
-.animated .botLift {
-  animation: lift 2.4s ease-in-out 0.6s infinite;
-}
-
-.animated .bot {
-  animation: spark 2.4s ease-in-out 0.6s infinite;
-}
-
-/* Dots rise from near the center into place: a brain forming, not dots flying in from anywhere. */
-@keyframes assemble {
-  from {
-    opacity: 0;
-    transform: translate(var(--from-x), var(--from-y)) scale(0.2);
-  }
-  to {
-    opacity: 1;
-    transform: translate(0, 0) scale(1);
-  }
-}
-
-/* A signal sweeps front to back: each dot brightens and swells briefly. */
-@keyframes signal {
+@keyframes pulse {
   0%,
   60%,
   100% {
-    fill-opacity: 0.55;
+    opacity: 0.35;
+    transform: scale(0.75);
+  }
+  25% {
+    opacity: 1;
     transform: scale(1);
-  }
-  20% {
-    fill-opacity: 1;
-    transform: scale(1.5);
-  }
-}
-
-@keyframes flow {
-  to {
-    stroke-dashoffset: -12;
-  }
-}
-
-/* Brain answers when the bot arrives. */
-@keyframes pulse {
-  0%,
-  35% {
-    opacity: 0;
-    transform: scale(0.8);
-  }
-  42% {
-    opacity: 0.45;
-  }
-  70%,
-  100% {
-    opacity: 0;
-    transform: scale(1.25);
-  }
-}
-
-/* Bot: conversation -> brain -> conversation. */
-@keyframes track {
-  0%,
-  8% {
-    transform: translateX(0);
-  }
-  38%,
-  52% {
-    transform: translateX(30px);
-  }
-  84%,
-  100% {
-    transform: translateX(0);
-  }
-}
-
-/* Out over the top, back underneath: a loop instead of a straight shuttle. */
-@keyframes lift {
-  0%,
-  8%,
-  38%,
-  52%,
-  84%,
-  100% {
-    transform: translateY(0);
-  }
-  23% {
-    transform: translateY(-9px);
-  }
-  68% {
-    transform: translateY(7px);
-  }
-}
-
-/* The bot carries a spark of context back to the conversation. */
-@keyframes spark {
-  0%,
-  38% {
-    filter: none;
-  }
-  52%,
-  80% {
-    filter: drop-shadow(0 0 3px var(--primary));
-  }
-  100% {
-    filter: none;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .animated .dot,
-  .animated .link,
-  .animated .pulse,
-  .animated .botTrack,
-  .animated .botLift,
-  .animated .bot {
+  .animated .dot {
     animation: none;
   }
 }
