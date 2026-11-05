@@ -152,3 +152,13 @@ When opening a PR, fill in the PR body using [.github/pull_request_template.md](
 | **bump-version** | Version bump workflow: update package.json, checks, branch, PR, tag release | Bumping version, `/bump-version`                                                                       |
 
 > Skills are located in `.claude/skills/` and contain project conventions that apply to **all** agents and contributors.
+
+## Cursor Cloud specific instructions
+
+- Node.js 22 is already on the image. Bun is linked at `/usr/local/bin/bun` because non-interactive login shells do not load `~/.bashrc`.
+- Dependencies: `bun install --frozen-lockfile`. That lifecycle runs the Electron rebuild of `better-sqlite3`.
+- The desktop backend is the pinned release in `package.json` `aioncoreVersion`. Download it with `node scripts/prepareAioncore.js` into `resources/bundled-aioncore/`. Point `AIONUI_BACKEND_BIN` at that binary, or rely on the `/usr/local/bin/aioncore` link created by environment install. Do not clone AionCore for the default cloud setup.
+- Checks that do not need company secrets: `bunx vitest run`, `bun run test:jr`, `bun run lint`, and `bunx tsc --noEmit`. Lint warnings are pre-existing; a non-zero exit means failure.
+- `bun run webui` builds the renderer and serves port 25809. If Node hits its heap limit, set `NODE_OPTIONS=--max-old-space-size=6144`. WebUI does not complete company activation; that flow is the Electron app.
+- Company desktop dev: `bunx electron-vite dev --config packages/desktop/electron.vite.config.ts` with `JR_CONTROL_URL`. Plain HTTP is accepted only for `http://127.0.0.1:<port>` when `JR_ALLOW_INSECURE_CONTROL_TEST=1`. The control service is `node services/control/index.mjs` and also needs `JR_ADMIN_CODE`, `JR_UPSTREAM_KEY`, and an HTTPS `JR_UPSTREAM_URL` ending in `/v1`. Keep those out of the repo and out of environment config.
+- Electron stores the company session only when safeStorage uses gnome-libsecret. Boot start opens a session bus at `/tmp/cursor-session-bus` and unlocks the local login keyring. Login shells export `DBUS_SESSION_BUS_ADDRESS` and `XDG_CURRENT_DESKTOP=GNOME` from `/etc/profile.d/jr-cloud-session.sh`. The keyring password is the local value `dev-keyring`, not a company credential. Without that session, the access screen stays on “serviço ainda não está configurado”.
