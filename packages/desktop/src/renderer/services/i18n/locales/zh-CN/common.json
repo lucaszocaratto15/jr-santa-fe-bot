@@ -751,9 +751,10 @@
         "status": {
           "active": "On",
           "paused": "Paused",
-          "unavailable": "Unavailable"
+          "unavailable": "Unavailable",
+          "disabled": "已停用"
         },
-        "pause": "Pause for 15 min",
+        "pause": "暂停收集",
         "resume": "Resume",
         "unavailableEncryption": "Unavailable: this computer does not offer system encryption, so nothing can be stored safely.",
         "unavailablePlatform": "Unavailable on this system.",
@@ -762,7 +763,7 @@
         "samplerError": "Observation stopped because of an error.",
         "retry": "Try again",
         "actionFailed": "Could not finish that. Try again.",
-        "intro": "Aprender looks at which programs and pages you use to understand your work and help you. It is always on, and raw records stay on this computer only. See the Data Notice for what is collected.",
+        "intro": "学习仅在您授权后开始。它使用私密的应用元数据、您的手动标记、已完成的 ERP 查询和浏览器下载来建议候选工作流程。您可以暂停或关闭收集。",
         "readNotice": "View the Data Notice"
       },
       "insights": {
@@ -774,8 +775,8 @@
         "timePerApp": "Time per program",
         "minutesShort": "{{value}} min",
         "hoursMinutes": "{{hours}}h{{minutes}}",
-        "repetitive": "Repetitive",
-        "times": "{{times}}× · {{minutes}} min",
+        "repetitive": "例行工作假设",
+        "times": "未经确认的估算：{{times}} 次 · {{minutes}} 分钟",
         "tip": "Tip",
         "teach": "Teach this task",
         "delete": "Delete",
@@ -814,6 +815,76 @@
         "rawHours": "Raw records: {{count}} h stored (deleted within 48 h)",
         "wipeNow": "Delete now",
         "wipeConfirm": "Delete the raw records stored on this computer now?"
+      },
+      "consent": {
+        "title": "从我的工作中学习",
+        "body": "授权使用私密的应用与窗口元数据、您标记的工作流程节点、成功的 ERP 查询和 JR 浏览器中完成的下载。对于实际事件，只保存操作类别与时间，不保存查询参数、返回数据、文件名或地址。记录仅在此计算机上私密保存；汇总摘要可能发送给公司的 AI。不收集页面内容、表单、密码或文档。观察到一次操作并不能证明完整的工作流程。",
+        "enable": "授权从工作中学习",
+        "disable": "停用数据收集",
+        "weakEvidence": "应用程序和窗口信号只能作为弱证据。这些建议需要确认。",
+        "eventsRequired": "您之前的授权不会启用实际事件学习。请查看更新后的说明，以授权使用这些新增来源。",
+        "eventsEnable": "授权实际工作事件"
+      },
+      "workflow": {
+        "title": "我的工作流程",
+        "privacy": "仅供您查看。请只使用通用步骤名称，不要包含人员、文档、地址或凭据。",
+        "name": "通用工作流程名称",
+        "start": "开始工作流程",
+        "step": "通用步骤名称",
+        "addStep": "完成步骤",
+        "complete": "完成工作流程",
+        "source": "涉及的系统",
+        "action": "操作类型",
+        "review": "待审核的例行工作",
+        "confirm": "确认例行工作并保存修正",
+        "reject": "舍弃例行工作",
+        "eventual": "偶发活动",
+        "exclude": "不纳入月度汇总",
+        "suppress": "不再建议",
+        "notes": "私有备注",
+        "status": {
+          "candidate": "等待确认",
+          "confirmed": "员工已确认",
+          "rejected": "已舍弃"
+        },
+        "sources": {
+          "erp": "ERP",
+          "web": "门户网站或系统",
+          "desktop": "应用程序或电子表格",
+          "integration": "集成",
+          "manual": "其他工具"
+        },
+        "actions": {
+          "consulta": "查询",
+          "exportacao": "导出",
+          "preenchimento": "填写",
+          "envio": "发送",
+          "aprovacao": "审批",
+          "outro": "其他"
+        },
+        "month": "月份（YYYY-MM）",
+        "monthly": "生成私有月度工作图谱",
+        "insufficient": "请确认本月至少一项已完成的例行工作，以生成工作图谱。",
+        "frequency": "已记录 {{count}} 次执行",
+        "pending": "{{count}} 项例行工作等待验证",
+        "saveNotes": "保存备注",
+        "manual": "编写私有手册草稿",
+        "draft": "私有草稿，请在使用前审核。任何内容都不会发布到公司大脑。",
+        "responsibilities": "职责与已确认的例行工作",
+        "systems": "涉及的系统",
+        "steps": "已确认的步骤",
+        "exceptions": "例外情况与备注",
+        "opportunities": "待验证的自动化机会",
+        "opportunity": "审核重复步骤是否可以自动化，不执行任何操作。",
+        "error": "无法保存。请使用通用名称，不要包含个人数据、地址或凭据。",
+        "inputs": "已知输入（仅类别，不含文档）",
+        "outputs": "已知输出（仅类别，不含文档）",
+        "automationCandidate": "可能的自动化：你记录了 {{count}} 个步骤。请检查此序列是否构成一项例行工作，以及哪些步骤可以自动化。",
+        "manualEvidence": "证据：由你输入的工作节点；在将其作为岗位知识之前，请先确认该例行工作。",
+        "observedName": "JR 中观察到的操作序列",
+        "observedEvidence": "这些操作已由 ERP 或浏览器确认。操作序列仅是候选工作流程；将其用于岗位职责图谱前，请先检查其目的和步骤。",
+        "observedQuery": "ERP 查询已完成",
+        "observedDownload": "浏览器下载已完成"
       }
     },
     "handbook": {
@@ -902,28 +973,28 @@
       "updatedNotice": "Your Handbook was updated — review it if you like"
     },
     "dataNotice": {
-      "title": "Aviso de uso de dados",
-      "intro": "Para você saber como o JR Bot usa as informações do seu trabalho, aqui vai uma explicação simples. Este é um aviso, não um pedido de autorização: ele vale para todos os colaboradores da empresa.",
-      "collectedTitle": "O que é coletado",
-      "collectedBody": "Trechos das suas conversas com os bots, para o cérebro da empresa, incluindo os resultados de ferramentas que o bot usou na conversa (por exemplo, páginas e dados de sistemas); amostras da sua tela (aplicativo e título da janela), para o recurso Aprender; e as tarefas que você ensinar ao bot, para o Manual da função.",
-      "purposeTitle": "Para que serve",
-      "purposeBody": "Entender como o trabalho é feito para ajudar você: os bots passam a saber o que a empresa já sabe. Não serve para avaliar desempenho nem para controlar horário.",
-      "whoTitle": "Quem vê o quê",
-      "whoBody": "O que o cérebro aprende fica disponível por área e por nível: cada pessoa vê o conhecimento das suas áreas e o que for geral para a empresa. Informações sensíveis, como valores, contratos e dados de clientes, só aparecem para gestores da área e para a diretoria.",
-      "blockedTitle": "O que fica de fora",
-      "blockedBody": "Removemos os valores do seu Cofre antes do envio, e o servidor descarta fatos com CPF, CNPJ, cartão, chave de acesso ou e-mail.",
-      "retentionTitle": "Por quanto tempo",
-      "retentionBody": "As amostras de tela são apagadas em 48 horas. Os trechos de conversa não ficam guardados no servidor: só os fatos extraídos deles e, junto de cada fato, uma citação curta da conversa (até 120 caracteres).",
-      "providerTitle": "Quem processa",
-      "providerBody": "O processamento usa o provedor de IA da empresa (MiniMax), pelo servidor da empresa. Nada vai direto do seu computador para o provedor.",
-      "pauseTitle": "Pausar o Aprender",
-      "pauseBody": "Você pode pausar o Aprender por alguns minutos nas configurações dele, quando precisar de privacidade.",
-      "button": "Li e entendi",
-      "failed": "Não foi possível registrar agora. O aviso aparece de novo na próxima abertura."
+      "title": "数据使用告知",
+      "intro": "本告知说明两项独立授权：使用所选摘录提出公司笔记建议，以及选择启用私有的工作学习功能。确认已阅读本告知不代表授予其中任何一项授权。",
+      "collectedTitle": "收集哪些数据",
+      "collectedBody": "公司笔记仅使用您明确授权的摘录。从工作中学习功能仅在您选择启用后记录应用程序和窗口元数据，以及工作流程关键节点。它不收集页面内容、表单、凭据或连续屏幕截图。",
+      "purposeTitle": "数据用途",
+      "purposeBody": "帮助您回顾已验证的知识并识别可能的自动化机会。私有的学习数据不用于员工排名或绩效评估。",
+      "whoTitle": "谁能查看哪些内容",
+      "whoBody": "对话和工作流程记录默认保持私有。只有经过审核的笔记和获得授权的来源摘录才能与所选受众共享。受限搜索需要 ERP 授权。",
+      "blockedTitle": "排除哪些内容",
+      "blockedBody": "保管库中的机密信息会在处理前被遮盖。请勿在摘录或工作流程名称中包含敏感个人数据。过滤器提供额外保护，但仍需审核。",
+      "retentionTitle": "数据保留多久",
+      "retentionBody": "原始活动样本在 48 小时内过期，私有洞察在 90 天内过期。历史对话队列不会自动重新处理。共享笔记会保留已批准的内容和版本历史记录。",
+      "providerTitle": "由谁处理数据",
+      "providerBody": "只有明确获得授权的摘录才会通过公司后端发送给 AI 服务提供商。自动工作建议使用汇总数据。授权分析与授权共享相互独立。",
+      "pauseTitle": "暂停从工作中学习",
+      "pauseBody": "私有的工作学习功能在您选择启用后才会启动。暂停后会停止收集，直到您恢复。您也可以停用数据收集。任何内容都不会自动发布到公司大脑。",
+      "button": "我已阅读并理解",
+      "failed": "目前无法记录。下次打开应用程序时会再次显示此告知。"
     },
     "brainManage": {
       "title": "Cérebro da empresa",
-      "subtitle": "Os fatos que os bots da empresa aprenderam. Revise, corrija e decida o que fica disponível para cada área.",
+      "subtitle": "审核共享笔记和正式规程，以及其已批准的来源、访问权限和版本历史记录。",
       "loadFailed": "Não foi possível carregar o cérebro agora.",
       "exEmployee": "ex-funcionário",
       "facts": {
@@ -1026,7 +1097,8 @@
         "conflict": "Conflito: o item já existe, ou o fato faz parte de uma cadeia de versões e não pode mudar de área ou risco.",
         "forbidden": "Você não tem permissão para isso.",
         "notFound": "Este item não existe mais."
-      }
+      },
+      "erpPermissions": "知识访问和审批权限由 Strata Certa 管理。JR 管理员身份不授予 ERP 访问权限。"
     },
     "brain": {
       "activity": {
@@ -1036,6 +1108,61 @@
         "doneNone": "已查询公司大脑 · 未找到内容",
         "unavailable": "大脑暂不可用"
       }
+    },
+    "brainNotes": {
+      "create": "创建笔记",
+      "authorizeExcerpt": "仅使用此摘录",
+      "revise": "更新版本以供审核",
+      "shareVersion": "授权共享此版本",
+      "excerptNotice": "只有下方摘录会在您确认后发送给知识整理员。您可以编辑摘录，删除不想使用的内容。",
+      "reviewNotice": "请审核正文、来源和受众。共享此笔记不会公开原始对话。编辑后，请先更新版本，再授权共享。",
+      "excerpt": "已授权的摘录",
+      "text": "笔记正文",
+      "source": "已授权的来源摘录",
+      "audience": "已授权的受众",
+      "kind": "知识类型",
+      "sharedNote": "共享笔记",
+      "officialProcedure": "正式规程",
+      "officialNotice": "此内容将发送给负责的审核人进行审批。在获得批准前，它不会出现在搜索结果中。",
+      "pending": "提案已送审，尚未发布。",
+      "shared": "笔记已与授权受众共享。",
+      "failed": "无法完成此操作。请检查连接、ERP 授权和提案版本，然后重试。",
+      "reviews": "待审核的规程",
+      "noReviews": "没有待审核的规程。",
+      "approve": "批准规程",
+      "reject": "拒绝提案",
+      "authorizationRequired": "审核需要经过验证的 ERP 关联和授权。",
+      "edit": "提出新版本",
+      "validUntil": "有效期至（可选）",
+      "status": {
+        "draft": "草稿",
+        "active": "有效",
+        "pending_review": "等待批准",
+        "rejected": "已拒绝",
+        "superseded": "已替代",
+        "suspended": "已暂停"
+      }
+    },
+    "strata": {
+      "title": "Strata Certa",
+      "description": "连接您现有的 ERP 账户。工具将使用您当前的权限。",
+      "connect": "连接 Strata Certa",
+      "disconnect": "断开账户连接",
+      "refresh": "刷新关联",
+      "unconfigured": "管理员尚需配置 Strata 连接。",
+      "notLinked": "尚未连接 Strata 账户。",
+      "linkedAs": "已连接账户：{{name}}",
+      "organization": "ERP 公司",
+      "chooseOrganization": "选择您有权访问的公司",
+      "failed": "无法完成操作。请检查您的 Strata 访问权限后重试。",
+      "browserOpened": "请在浏览器中继续登录，然后在此刷新关联。",
+      "permissions": "ERP 会在每次操作时检查权限。",
+      "consent": "当 ERP 要求确认时，请在 Strata 安全页面上完成确认。",
+      "disconnectTitle": "断开 Strata 账户连接？",
+      "disconnectBody": "后续 ERP 查询和操作将需要重新连接。",
+      "disconnected": "Strata 账户已断开连接。",
+      "connecting": "等待 Strata 登录",
+      "unavailable": "目前无法验证关联。"
     }
   }
 }

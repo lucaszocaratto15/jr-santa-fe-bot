@@ -153,7 +153,10 @@
     "tabLimitReached": "Limite d'onglets atteinte ({{count}}). L'onglet le plus ancien a été réutilisé.",
     "agentFirstUseTitle": "L'agent utilise le navigateur intégré",
     "agentFirstUseContent": "Il peut ouvrir des pages, cliquer et lire du contenu dans ce panneau. Votre connexion est conservée.",
-    "agentFirstUseAction": "Ouvrir les paramètres"
+    "agentFirstUseAction": "Ouvrir les paramètres",
+    "tabProtected": "Ce navigateur est en cours d’utilisation. Terminez la tâche, l’enregistrement ou la connexion sécurisée, ou rendez le contrôle au bot avant de fermer ou de remplacer cet onglet.",
+    "sessionLimitReached": "Le navigateur a déjà {{count}} sessions ouvertes. Fermez un onglet inutilisé avant d’en ouvrir une autre ; les sessions des autres projets restent ouvertes.",
+    "popupBlocked": "Un nouvel onglet a été bloqué, car son navigateur d’origine n’est pas actif dans ce projet. Ouvrez le lien depuis le navigateur du projet actuel."
   },
   "saveConflict": "Échec de l'enregistrement : ce fichier a changé sur le disque depuis que vous l'avez ouvert. Rechargez pour voir les autres modifications — vos modifications sont toujours là, non enregistrées.",
   "persistQuotaExceeded": "Le stockage local est plein : les onglets ouverts de ce projet ne peuvent plus être mémorisés. Fermez des onglets ou effacez les données du site.",

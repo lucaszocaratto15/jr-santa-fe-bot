@@ -11,11 +11,13 @@ import { DEFAULT_EXCLUSIONS } from './privacyFilter';
 import { ensurePrivateDir, writePrivateFile } from './sampleStore';
 
 export type LearnSettingsData = {
-  /**
-   * Local date (YYYY-MM-DD) of the last pause: the only trace of it, kept just to refuse a
-   * second pause on the same day. No time, no duration; never logged or sent anywhere.
-   */
+  /** Legacy date retained for existing installations; pauses no longer use a daily quota. */
   pauseDay: string | null;
+  consentUserId: string | null;
+  consentedAt: number | null;
+  workEventsConsentVersion: number;
+  enabled: boolean;
+  paused: boolean;
   exclusions: LearnExclusion[];
   /** Last successful insights run. */
   lastSummaryAt: number | null;
@@ -35,6 +37,11 @@ export const MAX_CUSTOM_RULES = 20;
 
 export const defaultLearnSettings = (): LearnSettingsData => ({
   pauseDay: null,
+  consentUserId: null,
+  consentedAt: null,
+  workEventsConsentVersion: 0,
+  enabled: false,
+  paused: false,
   exclusions: [...DEFAULT_EXCLUSIONS],
   lastSummaryAt: null,
   attempts: { day: '', count: 0 },
@@ -79,6 +86,12 @@ function parseSettings(value: unknown): LearnSettingsData {
   if (!record(value)) return defaults;
   const attempts = record(value.attempts) ? value.attempts : {};
   return {
+    consentUserId: typeof value.consentUserId === 'string' ? value.consentUserId : null,
+    consentedAt: finiteOrNull(value.consentedAt),
+    workEventsConsentVersion: value.workEventsConsentVersion === 1 ? 1 : 0,
+    enabled:
+      value.enabled === true && typeof value.consentUserId === 'string' && finiteOrNull(value.consentedAt) !== null,
+    paused: value.paused === true,
     pauseDay: typeof value.pauseDay === 'string' && DAY_PATTERN.test(value.pauseDay) ? value.pauseDay : null,
     exclusions: Array.isArray(value.exclusions) ? sanitizeExclusions(value.exclusions) : defaults.exclusions,
     lastSummaryAt: finiteOrNull(value.lastSummaryAt),

@@ -8,7 +8,7 @@ vi.mock('@process/services/teach/lessons/lessonRuntime', () => ({ vaultSecrets: 
 
 import { createBrainCapture, MAX_PAYLOAD_BYTES, MAX_QUEUE_ITEMS } from '@process/services/brain/brainCapture';
 import { createBrainService } from '@process/services/brain/brainIpc';
-import type { BrainCapturePayload } from '@/common/types/agent/brainTypes';
+import { BRAIN_TERM_VERSION, type BrainCapturePayload } from '@/common/types/agent/brainTypes';
 
 let dir: string;
 beforeEach(async () => {
@@ -131,20 +131,20 @@ describe('brain service notice', () => {
       },
     });
 
-  it('starts unacknowledged, records 1.4 locally and survives a server failure', async () => {
+  it('starts unacknowledged, records the current notice locally and survives a server failure', async () => {
     const consent = vi.fn(async () => {
       throw new Error('offline');
     });
     const s = service(consent);
     await s.bindProfile('ana');
     expect((await s.consentState()).current).toBe(false);
-    const state = await s.accept('1.4');
-    expect(state).toMatchObject({ acknowledgedVersion: '1.4', current: true });
+    const state = await s.accept(BRAIN_TERM_VERSION);
+    expect(state).toMatchObject({ acknowledgedVersion: BRAIN_TERM_VERSION, current: true });
     const restarted = service(consent);
     await restarted.bindProfile('ana');
     expect((await restarted.consentState()).current).toBe(true);
     // Resent when the server is back.
-    consent.mockResolvedValueOnce({ version: '1.4', at: 'x' });
+    consent.mockResolvedValueOnce({ version: BRAIN_TERM_VERSION, at: 'x' });
     await s.resume();
     expect(consent).toHaveBeenCalledTimes(2);
     await s.resume();
@@ -163,13 +163,13 @@ describe('brain service notice', () => {
     const s = service(consent);
     // Nobody is bound yet: no acknowledgement can be recorded.
     expect((await s.consentState()).current).toBe(false);
-    await expect(s.accept('1.4')).rejects.toThrow('unavailable');
+    await expect(s.accept(BRAIN_TERM_VERSION)).rejects.toThrow('unavailable');
     await s.bindProfile('ana');
-    await s.accept('1.4');
+    await s.accept(BRAIN_TERM_VERSION);
     expect(consent).toHaveBeenCalledTimes(1);
     await s.bindProfile('bia');
     expect((await s.consentState()).current).toBe(false);
-    await s.accept('1.4');
+    await s.accept(BRAIN_TERM_VERSION);
     expect(consent).toHaveBeenCalledTimes(2);
     expect((await s.consentState()).current).toBe(true);
     await s.bindProfile('ana');
@@ -179,8 +179,8 @@ describe('brain service notice', () => {
   });
 
   it('ignores an old single-user notice.json, so its unknown owner acknowledges nobody', async () => {
-    await writeFile(join(dir, 'notice.json'), JSON.stringify({ version: '1.4', at: 'x', synced: true }));
-    const s = service(async () => ({ version: '1.4', at: 'x' }));
+    await writeFile(join(dir, 'notice.json'), JSON.stringify({ version: BRAIN_TERM_VERSION, at: 'x', synced: true }));
+    const s = service(async () => ({ version: BRAIN_TERM_VERSION, at: 'x' }));
     await s.bindProfile('ana');
     expect((await s.consentState()).current).toBe(false);
   });

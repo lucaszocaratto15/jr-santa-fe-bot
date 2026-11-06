@@ -67,7 +67,7 @@ test('scope: a colaborador never sees high; manager sees high of the managed are
     ['low']
   );
   const gestor = store.facts.search({ low: new Set([general.id, frota, compras]), high: new Set([frota]) }, 'caminhao');
-  assert.deepEqual(gestor.map((f) => f.text).sort(), [
+  assert.deepEqual(gestor.map((f) => f.text).toSorted(), [
     'Caminhao placa alpha custa caro',
     'Caminhao placa beta revisao feita',
   ]);
@@ -98,7 +98,7 @@ test('suspended, inactive and superseded facts are excluded', () => {
   const texts = store.facts
     .search(lowScope(general.id), 'alfa')
     .map((f) => f.text)
-    .sort();
+    .toSorted();
   assert.deepEqual(texts, ['palavra alfa cinco', 'palavra alfa quatro']);
 });
 
@@ -173,7 +173,7 @@ test('listForManager respects scope and includes suspended facts', () => {
     store.facts
       .listForManager(scope)
       .map((f) => f.text)
-      .sort(),
+      .toSorted(),
     ['tres', 'um']
   );
   assert.deepEqual(
@@ -336,6 +336,7 @@ test('search returns a public projection only', () => {
   const [found] = store.facts.search({ all: true }, 'fornecedor');
   assert.deepEqual(found, {
     id: found.id,
+    companyId: 'jr',
     text: 'Fornecedor Z entrega rapido',
     kind: 'fato',
     area: 'Frota',
@@ -343,6 +344,8 @@ test('search returns a public projection only', () => {
     date: '2026-10-30',
     confidence: 8,
     erpRef: 'obra:1',
+    noteType: 'shared_note',
+    version: 1,
   });
   assert.equal('sourceQuote' in store.facts.listForManager({ all: true })[0], true);
 });

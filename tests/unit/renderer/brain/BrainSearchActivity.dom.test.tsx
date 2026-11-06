@@ -132,7 +132,10 @@ describe('MessageToolGroupSummary dispatch', () => {
 
   it('draws no animation when the reply already showed it on an earlier row', () => {
     render(
-      withI18n(i18n, <MessageToolGroupSummary messages={[call('brain_search', 'completed', FACTS)]} brainMessages={null} />)
+      withI18n(
+        i18n,
+        <MessageToolGroupSummary messages={[call('brain_search', 'completed', FACTS)]} brainMessages={null} />
+      )
     );
     expect(screen.queryByTestId('brain-search-activity')).toBeNull();
   });
@@ -182,9 +185,9 @@ describe('one brain animation per reply', () => {
         ]).output
       )
     ).toEqual({ kind: 'found', count: 3 });
-    expect(parseBrainSearchOutput(mergeBrainSearchCalls([{ status: 'completed', output: unavailable }]).output)).toEqual(
-      { kind: 'unavailable' }
-    );
+    expect(
+      parseBrainSearchOutput(mergeBrainSearchCalls([{ status: 'completed', output: unavailable }]).output)
+    ).toEqual({ kind: 'unavailable' });
   });
 });
 

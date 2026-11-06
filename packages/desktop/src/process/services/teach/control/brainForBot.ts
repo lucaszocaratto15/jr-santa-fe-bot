@@ -22,7 +22,8 @@ export function formatBrainFacts(facts: readonly BrainFact[]): string {
     .map((fact) => {
       const date = fact.date ? fact.date.slice(0, 10) : 'sem data';
       const area = fact.area ? ` (${fact.area})` : '';
-      return `- [${date} · confiança ${Math.round(fact.confidence)}] ${fact.text}${area} {id: ${fact.id}}`;
+      const kind = fact.noteType ? ` [${fact.noteType}]` : '';
+      return `- [${date} · confiança ${Math.round(fact.confidence)}] ${fact.text}${area}${kind} {id: ${fact.id}}`;
     })
     .join('\n');
 }

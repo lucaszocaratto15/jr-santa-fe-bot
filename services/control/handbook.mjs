@@ -298,51 +298,14 @@ export function createHandbookStore(db, now, httpError) {
 }
 
 /**
- * What a non-admin caller may read besides their own role, from the brain's `/peers` (user ids that share an
- * area with the caller, plus the caller's level in each shared area). Titles come from the control users
- * table. Returns role key -> `{ indicators }`; brain off, down or malformed gives an empty map, so the
- * caller falls back to their own role only. Indicators are owner-only (owner decision 2026-10-30: with one
- * person in a role they are that person's time), so peers never unlock them.
- */
-async function peerRoles(store, session, brainPeers) {
-  const roles = new Map();
-  let reply = null;
-  try {
-    reply = brainPeers ? await brainPeers(session) : null;
-  } catch {
-    reply = null;
-  }
-  if (!Array.isArray(reply?.peers)) return roles;
-  const peers = reply.peers.filter((peer) => typeof peer?.userId === 'string' && Array.isArray(peer.areas));
-  const keys = store.roleKeysOf(peers.map((peer) => peer.userId));
-  for (const peer of peers) {
-    const key = keys.get(peer.userId);
-    if (!key) continue;
-    roles.set(key, { indicators: false });
-  }
-  return roles;
-}
-
-/**
  * Route `/handbook/*` and `/admin/handbook/*`. Returns true when the request was handled.
  * Admins only read: there is no admin write route and no approval queue.
  */
-export async function handleHandbook({
-  request,
-  response,
-  path,
-  session,
-  store,
-  readJson,
-  json,
-  httpError,
-  reauth,
-  brainPeers,
-}) {
+export async function handleHandbook({ request, response, path, session, store, readJson, json, httpError, reauth }) {
   if (!path) return false;
   const isAdmin = session.user.role === 'admin';
   const userId = session.user.id;
-  // Diretoria is the user id 'owner' only: other admins are employees on the area-based routes.
+  // Diretoria is the user id 'owner' only: other admins read their own role on these routes.
   const isOwner = userId === 'owner';
   if (path === '/admin/handbook/roles' || path.startsWith('/admin/handbook/')) {
     if (!isAdmin) throw httpError(403, 'forbidden');
@@ -388,9 +351,7 @@ export async function handleHandbook({
       return true;
     }
     const own = store.ownRoleKey(userId);
-    const visible = await peerRoles(store, session, brainPeers);
-    if (own && !visible.has(own)) visible.set(own, { indicators: false });
-    json(response, 200, { roles: store.roles().filter((role) => visible.has(role.key)) });
+    json(response, 200, { roles: store.roles().filter((role) => role.key === own) });
     return true;
   }
   const role = /^\/handbook\/roles\/([^/]{1,240})$/u.exec(path);
@@ -405,19 +366,15 @@ export async function handleHandbook({
       json(response, 200, store.forRole(key));
       return true;
     }
-    // Own role is always readable; indicators are owner-only.
-    const visible = await peerRoles(store, session, brainPeers);
-    const allowed = visible.get(key) ?? (key === store.ownRoleKey(userId) ? { indicators: false } : null);
-    if (!allowed) throw httpError(403, 'forbidden');
-    json(response, 200, store.forRole(key, allowed.indicators));
+    // Shared knowledge is authorized by ERP; legacy local areas cannot grant role-handbook access.
+    if (key !== store.ownRoleKey(userId)) throw httpError(403, 'forbidden');
+    json(response, 200, store.forRole(key, false));
     return true;
   }
   const media = /^\/handbook\/media\/([0-9a-f-]{36})$/u.exec(path);
   if (request.method === 'GET' && media) {
     const mediaRole = store.mediaRoleKey(media[1]);
-    if (!isAdmin && mediaRole !== store.ownRoleKey(userId)) {
-      if (!(await peerRoles(store, session, brainPeers)).has(mediaRole)) throw httpError(403, 'forbidden');
-    }
+    if (!isAdmin && mediaRole !== store.ownRoleKey(userId)) throw httpError(403, 'forbidden');
     json(response, 200, store.media(media[1]));
     return true;
   }

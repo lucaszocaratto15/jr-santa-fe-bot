@@ -754,9 +754,10 @@
         "status": {
           "active": "On",
           "paused": "Paused",
-          "unavailable": "Unavailable"
+          "unavailable": "Unavailable",
+          "disabled": "Вимкнено"
         },
-        "pause": "Pause for 15 min",
+        "pause": "Призупинити збирання даних",
         "resume": "Resume",
         "unavailableEncryption": "Unavailable: this computer does not offer system encryption, so nothing can be stored safely.",
         "unavailablePlatform": "Unavailable on this system.",
@@ -765,7 +766,7 @@
         "samplerError": "Observation stopped because of an error.",
         "retry": "Try again",
         "actionFailed": "Could not finish that. Try again.",
-        "intro": "Aprender looks at which programs and pages you use to understand your work and help you. It is always on, and raw records stay on this computer only. See the Data Notice for what is collected.",
+        "intro": "Навчання починається лише з вашого дозволу. Воно використовує приватні метадані застосунків, ваші ручні позначки, виконані запити до ERP і завантаження браузера, щоб пропонувати кандидатів на робочі процедури. Збирання можна призупинити або вимкнути.",
         "readNotice": "View the Data Notice"
       },
       "insights": {
@@ -777,8 +778,8 @@
         "timePerApp": "Time per program",
         "minutesShort": "{{value}} min",
         "hoursMinutes": "{{hours}}h{{minutes}}",
-        "repetitive": "Repetitive",
-        "times": "{{times}}× · {{minutes}} min",
+        "repetitive": "Гіпотеза про регулярне завдання",
+        "times": "Непідтверджена оцінка: повторів — {{times}} · {{minutes}} хв",
         "tip": "Tip",
         "teach": "Teach this task",
         "delete": "Delete",
@@ -817,6 +818,76 @@
         "rawHours": "Raw records: {{count}} h stored (deleted within 48 h)",
         "wipeNow": "Delete now",
         "wipeConfirm": "Delete the raw records stored on this computer now?"
+      },
+      "consent": {
+        "title": "Навчатися на моїй роботі",
+        "body": "Дозвольте використання приватних метаданих застосунків і вікон, ваших позначок етапів роботи, успішних запитів до ERP і завершених завантажень у браузері JR. Для реальних подій зберігаються лише категорії дій і час, а не параметри запитів, отримані дані, назви файлів чи адреси. Записи залишаються приватними на цьому комп’ютері; узагальнені підсумки можуть надсилатися корпоративному ШІ. Вміст сторінок, форми, паролі та документи не збираються. Спостережувана дія не доводить виконання повної робочої процедури.",
+        "enable": "Дозволити навчання на моїй роботі",
+        "disable": "Вимкнути збирання даних",
+        "weakEvidence": "Сигнали застосунків і вікон — слабкі свідчення. Ці пропозиції потребують підтвердження.",
+        "eventsRequired": "Ваш попередній дозвіл не вмикає навчання на реальних подіях. Перегляньте оновлене повідомлення, щоб дозволити ці додаткові джерела.",
+        "eventsEnable": "Дозволити реальні робочі події"
+      },
+      "workflow": {
+        "title": "Мої робочі процеси",
+        "privacy": "Приватно. Використовуйте лише загальні назви кроків; не вказуйте людей, документи, адреси чи облікові дані.",
+        "name": "Загальна назва робочого процесу",
+        "start": "Почати робочий процес",
+        "step": "Загальна назва кроку",
+        "addStep": "Завершити крок",
+        "complete": "Завершити робочий процес",
+        "source": "Залучена система",
+        "action": "Тип дії",
+        "review": "Регулярні завдання для перевірки",
+        "confirm": "Підтвердити регулярне завдання та зберегти виправлення",
+        "reject": "Відкинути регулярне завдання",
+        "eventual": "Нерегулярна діяльність",
+        "exclude": "Виключити з місячного звіту",
+        "suppress": "Більше не пропонувати",
+        "notes": "Приватні нотатки",
+        "status": {
+          "candidate": "Очікує на підтвердження",
+          "confirmed": "Підтверджено працівником",
+          "rejected": "Відкинуто"
+        },
+        "sources": {
+          "erp": "ERP",
+          "web": "Вебпортал або система",
+          "desktop": "Застосунок або електронна таблиця",
+          "integration": "Інтеграція",
+          "manual": "Інший інструмент"
+        },
+        "actions": {
+          "consulta": "Запит",
+          "exportacao": "Експорт",
+          "preenchimento": "Заповнення",
+          "envio": "Надсилання",
+          "aprovacao": "Схвалення",
+          "outro": "Інше"
+        },
+        "month": "Місяць (YYYY-MM)",
+        "monthly": "Створити приватну мапу за місяць",
+        "insufficient": "Щоб створити мапу, підтвердьте принаймні одне регулярне завдання, виконане цього місяця.",
+        "frequency": "Зафіксовано виконань: {{count}}",
+        "pending": "Регулярні завдання, що очікують перевірки: {{count}}",
+        "saveNotes": "Зберегти нотатки",
+        "manual": "Підготувати приватну чернетку вручну",
+        "draft": "Приватна чернетка — перевірте перед використанням. Нічого не буде опубліковано в «Мозку».",
+        "responsibilities": "Обов’язки та підтверджені регулярні завдання",
+        "systems": "Залучені системи",
+        "steps": "Підтверджені кроки",
+        "exceptions": "Винятки та нотатки",
+        "opportunities": "Можливості автоматизації для перевірки",
+        "opportunity": "Перевірте, чи можна автоматизувати повторювані кроки, без виконання дій.",
+        "error": "Не вдалося зберегти. Використовуйте загальні назви без персональних даних, адрес чи облікових даних.",
+        "inputs": "Відомі вхідні дані (категорії, без документів)",
+        "outputs": "Відомі вихідні дані (категорії, без документів)",
+        "automationCandidate": "Можлива автоматизація: ви записали {{count}} крок(ів). Перевірте, чи є ця послідовність регулярною роботою та які кроки можна автоматизувати.",
+        "manualEvidence": "Підстава: етапи, введені вами. Підтвердьте регулярну роботу, перш ніж вважати її знанням про вашу посаду.",
+        "observedName": "Послідовність дій, виявлена в JR",
+        "observedEvidence": "Ці дії підтверджено ERP або браузером. Їхня послідовність — лише кандидат на робочу процедуру; перевірте її мету й етапи, перш ніж включати до карти посадових обов’язків.",
+        "observedQuery": "Запит до ERP виконано",
+        "observedDownload": "Завантаження в браузері завершено"
       }
     },
     "handbook": {
@@ -905,28 +976,28 @@
       "updatedNotice": "Your Handbook was updated — review it if you like"
     },
     "dataNotice": {
-      "title": "Aviso de uso de dados",
-      "intro": "Para você saber como o JR Bot usa as informações do seu trabalho, aqui vai uma explicação simples. Este é um aviso, não um pedido de autorização: ele vale para todos os colaboradores da empresa.",
-      "collectedTitle": "O que é coletado",
-      "collectedBody": "Trechos das suas conversas com os bots, para o cérebro da empresa, incluindo os resultados de ferramentas que o bot usou na conversa (por exemplo, páginas e dados de sistemas); amostras da sua tela (aplicativo e título da janela), para o recurso Aprender; e as tarefas que você ensinar ao bot, para o Manual da função.",
-      "purposeTitle": "Para que serve",
-      "purposeBody": "Entender como o trabalho é feito para ajudar você: os bots passam a saber o que a empresa já sabe. Não serve para avaliar desempenho nem para controlar horário.",
-      "whoTitle": "Quem vê o quê",
-      "whoBody": "O que o cérebro aprende fica disponível por área e por nível: cada pessoa vê o conhecimento das suas áreas e o que for geral para a empresa. Informações sensíveis, como valores, contratos e dados de clientes, só aparecem para gestores da área e para a diretoria.",
-      "blockedTitle": "O que fica de fora",
-      "blockedBody": "Removemos os valores do seu Cofre antes do envio, e o servidor descarta fatos com CPF, CNPJ, cartão, chave de acesso ou e-mail.",
-      "retentionTitle": "Por quanto tempo",
-      "retentionBody": "As amostras de tela são apagadas em 48 horas. Os trechos de conversa não ficam guardados no servidor: só os fatos extraídos deles e, junto de cada fato, uma citação curta da conversa (até 120 caracteres).",
-      "providerTitle": "Quem processa",
-      "providerBody": "O processamento usa o provedor de IA da empresa (MiniMax), pelo servidor da empresa. Nada vai direto do seu computador para o provedor.",
-      "pauseTitle": "Pausar o Aprender",
-      "pauseBody": "Você pode pausar o Aprender por alguns minutos nas configurações dele, quando precisar de privacidade.",
-      "button": "Li e entendi",
-      "failed": "Não foi possível registrar agora. O aviso aparece de novo na próxima abertura."
+      "title": "Повідомлення про використання даних",
+      "intro": "Це повідомлення пояснює два окремі дозволи: використання вибраного уривка для пропозиції нотатки компанії та згоду на приватне навчання на вашій роботі. Підтвердження прочитання цього повідомлення не надає жодного з цих дозволів.",
+      "collectedTitle": "Які дані збираються",
+      "collectedBody": "Нотатки компанії використовують лише уривок, на використання якого ви явно надали дозвіл. Навчання на вашій роботі записує метадані застосунків і вікон та ключові етапи робочих процесів лише після вашої згоди. Воно не збирає вміст сторінок, форми, облікові дані чи безперервні знімки екрана.",
+      "purposeTitle": "Для чого це потрібно",
+      "purposeBody": "Допомагати вам пригадувати перевірені знання та знаходити можливості автоматизації. Приватне навчання не використовується для ранжування працівників чи оцінювання їхньої роботи.",
+      "whoTitle": "Хто що бачить",
+      "whoBody": "Розмови та записи робочих процесів за замовчуванням залишаються приватними. З вибраною аудиторією можна поділитися лише перевіреною нотаткою та дозволеним вихідним уривком. Пошук з обмеженим доступом потребує авторизації в ERP.",
+      "blockedTitle": "Що виключається",
+      "blockedBody": "Секрети зі сховища приховуються перед обробкою. Не додавайте конфіденційні персональні дані до уривків чи назв робочих процесів. Фільтри забезпечують додатковий захист; перевірка залишається обов’язковою.",
+      "retentionTitle": "Як довго зберігаються дані",
+      "retentionBody": "Необроблені зразки активності видаляються протягом 48 годин, а приватні висновки — протягом 90 днів. Історичні черги розмов не обробляються повторно автоматично. Спільні нотатки зберігають схвалений вміст та історію версій.",
+      "providerTitle": "Хто обробляє дані",
+      "providerBody": "Постачальнику ШІ через сервер компанії надсилаються лише уривки, на використання яких ви явно надали дозвіл. Автоматичні пропозиції щодо роботи використовують агреговані дані. Дозвіл на аналіз і дозвіл на поширення надаються окремо.",
+      "pauseTitle": "Призупинення навчання на вашій роботі",
+      "pauseBody": "Приватне навчання на вашій роботі починається після вашої згоди. Пауза зупиняє збирання даних до відновлення. Ви також можете вимкнути збирання даних. Нічого не публікується в «Мозку» автоматично.",
+      "button": "Я прочитав(-ла) і зрозумів(-ла)",
+      "failed": "Зараз не вдалося записати підтвердження. Повідомлення з’явиться знову під час наступного відкриття застосунку."
     },
     "brainManage": {
       "title": "Cérebro da empresa",
-      "subtitle": "Os fatos que os bots da empresa aprenderam. Revise, corrija e decida o que fica disponível para cada área.",
+      "subtitle": "Перевіряйте спільні нотатки й офіційні процедури, їхні схвалені джерела, доступ та історію версій.",
       "loadFailed": "Não foi possível carregar o cérebro agora.",
       "exEmployee": "ex-funcionário",
       "facts": {
@@ -1029,7 +1100,8 @@
         "conflict": "Conflito: o item já existe, ou o fato faz parte de uma cadeia de versões e não pode mudar de área ou risco.",
         "forbidden": "Você não tem permissão para isso.",
         "notFound": "Este item não existe mais."
-      }
+      },
+      "erpPermissions": "Доступ до знань і права затвердження керуються в Strata Certa. Статус адміністратора JR не надає доступу до ERP."
     },
     "brain": {
       "activity": {
@@ -1039,6 +1111,61 @@
         "doneNone": "Звернення до мозку компанії · нічого не знайдено",
         "unavailable": "Мозок недоступний"
       }
+    },
+    "brainNotes": {
+      "create": "Створити нотатку",
+      "authorizeExcerpt": "Використати лише цей уривок",
+      "revise": "Оновити версію для перевірки",
+      "shareVersion": "Дозволити поширення цієї версії",
+      "excerptNotice": "Після підтвердження куратору буде надіслано лише уривок нижче. Відредагуйте його, видаливши вміст, який ви не хочете використовувати.",
+      "reviewNotice": "Перевірте текст, джерело та аудиторію. Поширення цієї нотатки не розкриває початкову розмову. Після редагування оновіть версію, перш ніж дозволяти поширення.",
+      "excerpt": "Дозволений уривок",
+      "text": "Текст нотатки",
+      "source": "Дозволений вихідний уривок",
+      "audience": "Дозволена аудиторія",
+      "kind": "Тип знань",
+      "sharedNote": "Спільна нотатка",
+      "officialProcedure": "Офіційна процедура",
+      "officialNotice": "Це буде надіслано на схвалення відповідальному рецензенту. До схвалення в пошуку не з’явиться.",
+      "pending": "Пропозицію надіслано на перевірку. Її ще не опубліковано.",
+      "shared": "Нотатка доступна дозволеній аудиторії.",
+      "failed": "Не вдалося виконати дію. Перед повторною спробою перевірте з’єднання, авторизацію в ERP і версію пропозиції.",
+      "reviews": "Процедури, що очікують перевірки",
+      "noReviews": "Немає процедур, що очікують перевірки.",
+      "approve": "Схвалити процедуру",
+      "reject": "Відхилити пропозицію",
+      "authorizationRequired": "Для перевірки потрібні підтверджений зв’язок з ERP та авторизація.",
+      "edit": "Запропонувати нову версію",
+      "validUntil": "Чинна до (необов’язково)",
+      "status": {
+        "draft": "Чернетка",
+        "active": "Активна",
+        "pending_review": "Очікує схвалення",
+        "rejected": "Відхилена",
+        "superseded": "Замінена",
+        "suspended": "Призупинена"
+      }
+    },
+    "strata": {
+      "title": "Strata Certa",
+      "description": "Підключіть наявний обліковий запис ERP. Інструменти використовують ваші поточні дозволи.",
+      "connect": "Підключити Strata Certa",
+      "disconnect": "Відключити обліковий запис",
+      "refresh": "Оновити підключення",
+      "unconfigured": "Адміністратору ще потрібно налаштувати підключення до Strata.",
+      "notLinked": "Обліковий запис Strata не підключено.",
+      "linkedAs": "Підключений обліковий запис: {{name}}",
+      "organization": "Компанія в ERP",
+      "chooseOrganization": "Виберіть доступну компанію",
+      "failed": "Не вдалося завершити операцію. Перевірте доступ до Strata та повторіть спробу.",
+      "browserOpened": "Продовжте вхід у браузері. Потім оновіть підключення тут.",
+      "permissions": "ERP перевіряє дозволи під час кожної операції.",
+      "consent": "Коли ERP запитає підтвердження, виконайте його на захищеній сторінці Strata.",
+      "disconnectTitle": "Відключити обліковий запис Strata?",
+      "disconnectBody": "Для наступних запитів і дій в ERP знадобиться нове підключення.",
+      "disconnected": "Обліковий запис Strata відключено.",
+      "connecting": "Очікування входу до Strata",
+      "unavailable": "Зараз не вдалося перевірити підключення."
     }
   }
 }

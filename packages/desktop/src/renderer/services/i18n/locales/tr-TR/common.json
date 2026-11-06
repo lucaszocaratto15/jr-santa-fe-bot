@@ -751,9 +751,10 @@
         "status": {
           "active": "On",
           "paused": "Paused",
-          "unavailable": "Unavailable"
+          "unavailable": "Unavailable",
+          "disabled": "Devre dışı"
         },
-        "pause": "Pause for 15 min",
+        "pause": "Veri toplamayı duraklat",
         "resume": "Resume",
         "unavailableEncryption": "Unavailable: this computer does not offer system encryption, so nothing can be stored safely.",
         "unavailablePlatform": "Unavailable on this system.",
@@ -762,7 +763,7 @@
         "samplerError": "Observation stopped because of an error.",
         "retry": "Try again",
         "actionFailed": "Could not finish that. Try again.",
-        "intro": "Aprender looks at which programs and pages you use to understand your work and help you. It is always on, and raw records stay on this computer only. See the Data Notice for what is collected.",
+        "intro": "Öğrenme yalnızca izninizle başlar. Rutin adayları önermek için özel uygulama meta verilerini, manuel işaretlerinizi, tamamlanan ERP sorgularını ve tarayıcı indirmelerini kullanır. Veri toplamayı duraklatabilir veya kapatabilirsiniz.",
         "readNotice": "View the Data Notice"
       },
       "insights": {
@@ -774,8 +775,8 @@
         "timePerApp": "Time per program",
         "minutesShort": "{{value}} min",
         "hoursMinutes": "{{hours}}h{{minutes}}",
-        "repetitive": "Repetitive",
-        "times": "{{times}}× · {{minutes}} min",
+        "repetitive": "Rutin varsayımı",
+        "times": "Doğrulanmamış tahmin: {{times}} kez · {{minutes}} dk",
         "tip": "Tip",
         "teach": "Teach this task",
         "delete": "Delete",
@@ -814,6 +815,76 @@
         "rawHours": "Raw records: {{count}} h stored (deleted within 48 h)",
         "wipeNow": "Delete now",
         "wipeConfirm": "Delete the raw records stored on this computer now?"
+      },
+      "consent": {
+        "title": "Çalışmalarımdan öğren",
+        "body": "Özel uygulama ve pencere meta verilerini, iş akışı işaretlerinizi, başarılı ERP sorgularını ve JR tarayıcısında tamamlanan indirmeleri kullanmaya izin verin. Gerçek olaylardan yalnızca işlem kategorileri ve zamanları kaydedilir; sorgu parametreleri, dönen veriler, dosya adları veya adresler asla kaydedilmez. Kayıtlar bu bilgisayarda özel olarak kalır; toplu özetler şirketin yapay zekâsına gönderilebilir. Sayfa içerikleri, formlar, parolalar veya belgeler toplanmaz. Gözlemlenen bir işlem, eksiksiz bir iş rutinini kanıtlamaz.",
+        "enable": "Çalışmalardan öğrenmeye izin ver",
+        "disable": "Veri toplamayı devre dışı bırak",
+        "weakEvidence": "Uygulama ve pencere sinyalleri zayıf kanıtlardır. Bu önerilerin doğrulanması gerekir.",
+        "eventsRequired": "Önceki izniniz gerçek olaylardan öğrenmeyi etkinleştirmez. Bu ek kaynaklara izin vermek için güncellenmiş bildirimi inceleyin.",
+        "eventsEnable": "Gerçek iş olaylarına izin ver"
+      },
+      "workflow": {
+        "title": "İş akışlarım",
+        "privacy": "Özel. Yalnızca genel adım adları kullanın; kişi, belge, adres veya kimlik bilgisi eklemeyin.",
+        "name": "Genel iş akışı adı",
+        "start": "İş akışını başlat",
+        "step": "Genel adım adı",
+        "addStep": "Adımı tamamla",
+        "complete": "İş akışını tamamla",
+        "source": "Kullanılan sistem",
+        "action": "Eylem türü",
+        "review": "İncelenecek rutinler",
+        "confirm": "Rutini doğrula ve düzeltmeleri kaydet",
+        "reject": "Rutini reddet",
+        "eventual": "Ara sıra yapılan etkinlik",
+        "exclude": "Aylık özetten hariç tut",
+        "suppress": "Bir daha önerme",
+        "notes": "Özel notlar",
+        "status": {
+          "candidate": "Doğrulama bekliyor",
+          "confirmed": "Çalışan tarafından doğrulandı",
+          "rejected": "Reddedildi"
+        },
+        "sources": {
+          "erp": "ERP",
+          "web": "Web portalı veya sistemi",
+          "desktop": "Uygulama veya hesap tablosu",
+          "integration": "Entegrasyon",
+          "manual": "Diğer araç"
+        },
+        "actions": {
+          "consulta": "Sorgulama",
+          "exportacao": "Dışa aktarma",
+          "preenchimento": "Doldurma",
+          "envio": "Gönderme",
+          "aprovacao": "Onay",
+          "outro": "Diğer"
+        },
+        "month": "Ay (YYYY-MM)",
+        "monthly": "Özel aylık harita oluştur",
+        "insufficient": "Haritayı oluşturmak için bu ay tamamlanmış en az bir rutini doğrulayın.",
+        "frequency": "{{count}} kayıtlı çalıştırma",
+        "pending": "Doğrulama bekleyen {{count}} rutin",
+        "saveNotes": "Notları kaydet",
+        "manual": "Özel manuel taslak hazırla",
+        "draft": "Özel taslak — kullanmadan önce inceleyin. Beyin’de hiçbir şey yayımlanmayacak.",
+        "responsibilities": "Sorumluluklar ve doğrulanmış rutinler",
+        "systems": "Kullanılan sistemler",
+        "steps": "Doğrulanmış adımlar",
+        "exceptions": "İstisnalar ve notlar",
+        "opportunities": "Doğrulanacak otomasyon fırsatları",
+        "opportunity": "Herhangi bir eylem gerçekleştirmeden, tekrarlanan adımların otomatikleştirilip otomatikleştirilemeyeceğini inceleyin.",
+        "error": "Kaydedilemedi. Kişisel veri, adres veya kimlik bilgisi içermeyen genel adlar kullanın.",
+        "inputs": "Bilinen girdiler (kategoriler, belge içermez)",
+        "outputs": "Bilinen çıktılar (kategoriler, belge içermez)",
+        "automationCandidate": "Olası otomasyon: {{count}} adım kaydettiniz. Bu sıranın bir rutini temsil edip etmediğini ve hangi adımların otomatikleştirilebileceğini inceleyin.",
+        "manualEvidence": "Kanıt: sizin girdiğiniz kilometre taşları; rutini görevinize ilişkin bilgi olarak değerlendirmeden önce doğrulayın.",
+        "observedName": "JR’de gözlemlenen işlem dizisi",
+        "observedEvidence": "Bu işlemler ERP veya tarayıcı tarafından doğrulandı. İşlem dizisi yalnızca bir rutin adayıdır; görev haritanızda kullanmadan önce amacını ve adımlarını gözden geçirin.",
+        "observedQuery": "ERP sorgusu tamamlandı",
+        "observedDownload": "Tarayıcı indirmesi tamamlandı"
       }
     },
     "handbook": {
@@ -902,28 +973,28 @@
       "updatedNotice": "Your Handbook was updated — review it if you like"
     },
     "dataNotice": {
-      "title": "Aviso de uso de dados",
-      "intro": "Para você saber como o JR Bot usa as informações do seu trabalho, aqui vai uma explicação simples. Este é um aviso, não um pedido de autorização: ele vale para todos os colaboradores da empresa.",
-      "collectedTitle": "O que é coletado",
-      "collectedBody": "Trechos das suas conversas com os bots, para o cérebro da empresa, incluindo os resultados de ferramentas que o bot usou na conversa (por exemplo, páginas e dados de sistemas); amostras da sua tela (aplicativo e título da janela), para o recurso Aprender; e as tarefas que você ensinar ao bot, para o Manual da função.",
-      "purposeTitle": "Para que serve",
-      "purposeBody": "Entender como o trabalho é feito para ajudar você: os bots passam a saber o que a empresa já sabe. Não serve para avaliar desempenho nem para controlar horário.",
-      "whoTitle": "Quem vê o quê",
-      "whoBody": "O que o cérebro aprende fica disponível por área e por nível: cada pessoa vê o conhecimento das suas áreas e o que for geral para a empresa. Informações sensíveis, como valores, contratos e dados de clientes, só aparecem para gestores da área e para a diretoria.",
-      "blockedTitle": "O que fica de fora",
-      "blockedBody": "Removemos os valores do seu Cofre antes do envio, e o servidor descarta fatos com CPF, CNPJ, cartão, chave de acesso ou e-mail.",
-      "retentionTitle": "Por quanto tempo",
-      "retentionBody": "As amostras de tela são apagadas em 48 horas. Os trechos de conversa não ficam guardados no servidor: só os fatos extraídos deles e, junto de cada fato, uma citação curta da conversa (até 120 caracteres).",
-      "providerTitle": "Quem processa",
-      "providerBody": "O processamento usa o provedor de IA da empresa (MiniMax), pelo servidor da empresa. Nada vai direto do seu computador para o provedor.",
-      "pauseTitle": "Pausar o Aprender",
-      "pauseBody": "Você pode pausar o Aprender por alguns minutos nas configurações dele, quando precisar de privacidade.",
-      "button": "Li e entendi",
-      "failed": "Não foi possível registrar agora. O aviso aparece de novo na próxima abertura."
+      "title": "Veri kullanımı bildirimi",
+      "intro": "Bu bildirim iki ayrı izni açıklar: şirket notu önermek için seçilen bir alıntıyı kullanmak ve çalışmalardan özel öğrenmeye katılmak. Bu bildirimi okuduğunuzu belirtmeniz, bu izinlerden hiçbirini vermez.",
+      "collectedTitle": "Toplanan veriler",
+      "collectedBody": "Şirket notları yalnızca açıkça izin verdiğiniz alıntıyı kullanır. Çalışmalardan öğrenme, uygulama ve pencere meta verilerini ve iş akışı dönüm noktalarını yalnızca katılım izninizden sonra kaydeder. Sayfa içeriklerini, formları, kimlik bilgilerini veya sürekli ekran görüntülerini toplamaz.",
+      "purposeTitle": "Kullanım amacı",
+      "purposeBody": "Doğrulanmış bilgileri hatırlamanıza ve olası otomasyonları belirlemenize yardımcı olmak. Özel öğrenme, çalışanları sıralamak veya performanslarını değerlendirmek için kullanılmaz.",
+      "whoTitle": "Kim neyi görür",
+      "whoBody": "Görüşmeler ve iş akışı kayıtları varsayılan olarak özel kalır. Yalnızca incelenmiş not ve izin verilen kaynak alıntısı, seçilen kitleyle paylaşılabilir. Kısıtlı arama için ERP yetkisi gerekir.",
+      "blockedTitle": "Hariç tutulanlar",
+      "blockedBody": "Kasa sırları işlenmeden önce gizlenir. Alıntılara veya iş akışı adlarına hassas kişisel veriler eklemeyin. Filtreler ek koruma sağlar; inceleme yine de gereklidir.",
+      "retentionTitle": "Saklama süresi",
+      "retentionBody": "Ham etkinlik örneklerinin süresi 48 saat, özel çıkarımların süresi ise 90 gün içinde dolar. Geçmiş görüşme kuyrukları otomatik olarak yeniden işlenmez. Paylaşılan notlar, onaylanmış içeriği ve sürüm geçmişini korur.",
+      "providerTitle": "Verileri kim işler",
+      "providerBody": "Yalnızca açıkça izin verilen alıntılar, şirketin arka ucu üzerinden yapay zekâ sağlayıcısına gönderilir. Otomatik çalışma önerileri toplu verileri kullanır. Analize izin vermek ile paylaşıma izin vermek birbirinden ayrıdır.",
+      "pauseTitle": "Çalışmalardan öğrenmeyi duraklatma",
+      "pauseBody": "Çalışmalardan özel öğrenme, katılım izninizden sonra başlar. Duraklatma, siz devam ettirene kadar veri toplamayı durdurur. Veri toplamayı devre dışı da bırakabilirsiniz. Beyin’de hiçbir şey otomatik olarak yayımlanmaz.",
+      "button": "Okudum ve anladım",
+      "failed": "Şu anda kaydedilemedi. Uygulamayı bir sonraki açışınızda bildirim tekrar gösterilecek."
     },
     "brainManage": {
       "title": "Cérebro da empresa",
-      "subtitle": "Os fatos que os bots da empresa aprenderam. Revise, corrija e decida o que fica disponível para cada área.",
+      "subtitle": "Paylaşılan notları ve resmî prosedürleri, onaylanmış kaynaklarını, erişim izinlerini ve sürüm geçmişini inceleyin.",
       "loadFailed": "Não foi possível carregar o cérebro agora.",
       "exEmployee": "ex-funcionário",
       "facts": {
@@ -1026,7 +1097,8 @@
         "conflict": "Conflito: o item já existe, ou o fato faz parte de uma cadeia de versões e não pode mudar de área ou risco.",
         "forbidden": "Você não tem permissão para isso.",
         "notFound": "Este item não existe mais."
-      }
+      },
+      "erpPermissions": "Bilgiye erişim ve onay izinleri Strata Certa’da yönetilir. JR yöneticisi olmak ERP erişimi sağlamaz."
     },
     "brain": {
       "activity": {
@@ -1036,6 +1108,61 @@
         "doneNone": "Şirket beynine danışıldı · bir şey bulunamadı",
         "unavailable": "Beyin kullanılamıyor"
       }
+    },
+    "brainNotes": {
+      "create": "Not oluştur",
+      "authorizeExcerpt": "Yalnızca bu alıntıyı kullan",
+      "revise": "Sürümü inceleme için güncelle",
+      "shareVersion": "Bu sürümün paylaşılmasına izin ver",
+      "excerptNotice": "Onayladığınızda yalnızca aşağıdaki alıntı küratöre gönderilecek. Kullanmak istemediğiniz içerikleri kaldırmak için düzenleyin.",
+      "reviewNotice": "Metni, kaynağı ve hedef kitleyi inceleyin. Bu notu paylaşmak, asıl görüşmeyi açığa çıkarmaz. Düzenledikten sonra, paylaşıma izin vermeden önce sürümü güncelleyin.",
+      "excerpt": "İzin verilen alıntı",
+      "text": "Not metni",
+      "source": "İzin verilen kaynak alıntısı",
+      "audience": "İzin verilen hedef kitle",
+      "kind": "Bilgi türü",
+      "sharedNote": "Paylaşılan not",
+      "officialProcedure": "Resmî prosedür",
+      "officialNotice": "Bu öneri, onay için sorumlu bir inceleyiciye gönderilecek. Onaylanana kadar aramalarda görünmeyecek.",
+      "pending": "Öneri inceleme için gönderildi. Henüz yayımlanmadı.",
+      "shared": "Not, izin verilen hedef kitleyle paylaşıldı.",
+      "failed": "Bu eylem tamamlanamadı. Tekrar denemeden önce bağlantıyı, ERP yetkisini ve öneri sürümünü kontrol edin.",
+      "reviews": "İnceleme bekleyen prosedürler",
+      "noReviews": "İnceleme bekleyen prosedür yok.",
+      "approve": "Prosedürü onayla",
+      "reject": "Öneriyi reddet",
+      "authorizationRequired": "İnceleme için doğrulanmış bir ERP bağlantısı ve yetki gerekir.",
+      "edit": "Yeni sürüm öner",
+      "validUntil": "Geçerlilik tarihi (isteğe bağlı)",
+      "status": {
+        "draft": "Taslak",
+        "active": "Etkin",
+        "pending_review": "Onay bekliyor",
+        "rejected": "Reddedildi",
+        "superseded": "Yerine yenisi geçti",
+        "suspended": "Askıya alındı"
+      }
+    },
+    "strata": {
+      "title": "Strata Certa",
+      "description": "Mevcut ERP hesabınızı bağlayın. Araçlar güncel izinlerinizi kullanır.",
+      "connect": "Strata Certa’yı bağla",
+      "disconnect": "Hesabın bağlantısını kes",
+      "refresh": "Bağlantıyı yenile",
+      "unconfigured": "Strata bağlantısının henüz bir yönetici tarafından yapılandırılması gerekiyor.",
+      "notLinked": "Bağlı Strata hesabı yok.",
+      "linkedAs": "Bağlı hesap: {{name}}",
+      "organization": "ERP şirketi",
+      "chooseOrganization": "İzin verilen bir şirket seçin",
+      "failed": "İşlem tamamlanamadı. Strata erişiminizi kontrol edip tekrar deneyin.",
+      "browserOpened": "Tarayıcıda oturum açmaya devam edin. Ardından bağlantıyı burada yenileyin.",
+      "permissions": "İzinler her işlemde ERP tarafından kontrol edilir.",
+      "consent": "ERP onay istediğinde, işlemi güvenli Strata sayfasında tamamlayın.",
+      "disconnectTitle": "Strata hesabının bağlantısı kesilsin mi?",
+      "disconnectBody": "Sonraki ERP sorguları ve işlemleri için yeniden bağlantı kurulması gerekecek.",
+      "disconnected": "Strata hesabının bağlantısı kesildi.",
+      "connecting": "Strata oturum açma işlemi bekleniyor",
+      "unavailable": "Bağlantı şu anda doğrulanamadı."
     }
   }
 }

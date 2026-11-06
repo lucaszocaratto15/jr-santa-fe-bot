@@ -284,8 +284,8 @@ describe('encrypted session store', () => {
     roots.push(root);
     const encryption = {
       isEncryptionAvailable: () => true,
-      encryptString: (text: string) => Buffer.from(text.split('').reverse().join('')),
-      decryptString: (buffer: Buffer) => buffer.toString().split('').reverse().join(''),
+      encryptString: (text: string) => Buffer.from(text.split('').toReversed().join('')),
+      decryptString: (buffer: Buffer) => buffer.toString().split('').toReversed().join(''),
     };
     const store = createJrSessionStore(root, encryption);
     await store.write(stored);
@@ -610,4 +610,50 @@ it('does not restore access when response JSON arrives after a concurrent logout
   await pending;
   expect(controller.state.status).toBe('signed-out');
   expect(configureCore).not.toHaveBeenCalled();
+});
+
+describe('employee assistant identity', () => {
+  it('requires a live authenticated JR session', async () => {
+    const { controller } = setup(stored);
+    expect(() => controller.employeeAssistantIdentity()).toThrow('JR_ACCESS_REQUIRED');
+    await controller.initialize();
+    const identity = controller.employeeAssistantIdentity();
+    await controller.logout();
+    expect(() => controller.employeeAssistantIdentity()).toThrow('JR_ACCESS_REQUIRED');
+    expect(JSON.stringify(identity)).not.toContain(token);
+  });
+
+  it('keeps the same employee assistant across sessions while changing its session generation', async () => {
+    const { controller } = setup(stored);
+    await controller.initialize();
+    const before = controller.employeeAssistantIdentity();
+    await controller.logout();
+    await controller.login({ code: 'a-company-invite' });
+    const after = controller.employeeAssistantIdentity();
+    expect(after.assistantId).toBe(before.assistantId);
+    expect(after.ownerAccountId).toBe(before.ownerAccountId);
+    expect(after.generation).not.toBe(before.generation);
+  });
+
+  it('qualifies the employee id by issuer instead of matching names or the reused owner id', async () => {
+    const { controller } = setup(stored);
+    await controller.initialize();
+    const otherUrl = 'https://another-company.example/bot';
+    const other = new JrAccessController({
+      url: otherUrl,
+      store: { read: async () => ({ ...stored, issuer: otherUrl }), write: async () => {} },
+      request: async (input) =>
+        String(input).endsWith('/v1/models')
+          ? Response.json({ data: [{ id: 'MiniMax-M3.1-Flash' }] })
+          : Response.json({ user }),
+      configureCore: async () => {},
+      stopCore: async () => {},
+      onChange: () => {},
+    });
+    await other.initialize();
+    expect(other.employeeAssistantIdentity().ownerAccountId).not.toBe(
+      controller.employeeAssistantIdentity().ownerAccountId
+    );
+    expect(other.employeeAssistantIdentity().assistantId).not.toBe(controller.employeeAssistantIdentity().assistantId);
+  });
 });

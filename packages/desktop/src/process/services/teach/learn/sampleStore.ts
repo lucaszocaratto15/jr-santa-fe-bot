@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { appendFile, chmod, lstat, mkdir, readdir, readFile, rename, rm, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { LearnInsightBatch, LearnSample } from '@/common/types/agent/learnTypes';
@@ -55,10 +55,11 @@ export async function ensurePrivateDir(dir: string): Promise<void> {
 }
 
 /** Atomic private write: tmp file (0o600) then rename. */
-export async function writePrivateFile(file: string, data: string): Promise<void> {
+export async function writePrivateFile(file: string, data: string, beforeCommit?: () => void): Promise<void> {
   const tmp = `${file}.${randomUUID()}.tmp`;
   try {
     await writeFile(tmp, data, { mode: 0o600, flag: 'wx' });
+    beforeCommit?.();
     await rename(tmp, file);
   } catch (error) {
     await unlink(tmp).catch(() => {});
@@ -214,4 +215,9 @@ export function createInsightStore(root: string, encryption: OsEncryption): Insi
       }),
     wipe: () => serialize(() => rm(file, { force: true })),
   };
+}
+
+/** New observations are profile-scoped; legacy root samples are only expired or explicitly wiped, never replayed. */
+export function learnProfileDir(root: string, userId: string): string {
+  return join(root, 'profiles', createHash('sha256').update(userId).digest('hex'));
 }

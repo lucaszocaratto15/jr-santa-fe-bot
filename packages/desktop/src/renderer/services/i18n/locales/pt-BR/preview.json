@@ -153,7 +153,10 @@
     "tabLimitReached": "Limite de abas atingido ({{count}}). A aba mais antiga foi reutilizada.",
     "agentFirstUseTitle": "O agente está usando o navegador interno",
     "agentFirstUseContent": "Ele pode abrir páginas, clicar e ler conteúdo neste painel. Seu login é preservado.",
-    "agentFirstUseAction": "Abrir configurações"
+    "agentFirstUseAction": "Abrir configurações",
+    "tabProtected": "Este navegador está em uso. Conclua a tarefa, a gravação ou o login seguro, ou devolva o controle ao bot antes de fechar ou substituir a aba.",
+    "sessionLimitReached": "O navegador já tem {{count}} sessões abertas. Feche uma aba sem uso antes de abrir outra; as sessões dos outros projetos continuam abertas.",
+    "popupBlocked": "Uma nova aba foi bloqueada porque o navegador de origem não está ativo neste projeto. Abra o link pelo navegador do projeto atual."
   },
   "saveConflict": "Não foi possível salvar: este arquivo mudou no disco depois que você o abriu. Recarregue para ver as outras alterações — suas edições continuam aqui, não salvas.",
   "persistQuotaExceeded": "O armazenamento local está cheio, então as abas abertas deste projeto não podem mais ser lembradas. Feche algumas abas ou limpe os dados do site.",

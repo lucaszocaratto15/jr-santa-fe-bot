@@ -32,7 +32,17 @@ test('search returns the public projection and respects the scope', async (t) =>
   const { status, body } = await call('/search', { user: 'bia', method: 'POST', body: { query: 'caminhao' } });
   assert.equal(status, 200);
   assert.equal(body.facts.length, 1);
-  assert.deepEqual(Object.keys(body.facts[0]).sort(), ['area', 'confidence', 'date', 'erpRef', 'id', 'risk', 'text']);
+  assert.deepEqual(Object.keys(body.facts[0]).toSorted(), [
+    'area',
+    'confidence',
+    'date',
+    'erpRef',
+    'id',
+    'noteType',
+    'risk',
+    'text',
+    'version',
+  ]);
   assert.equal(body.facts[0].area, 'Frota');
   assert.equal(body.facts[0].erpRef, 'obra:123');
 });
@@ -62,7 +72,7 @@ test('reads of high facts are logged without the query; low reads are not', asyn
   assert.ok(!JSON.stringify(log).includes('secretissima'));
 });
 
-test('colaborador cannot PATCH; gestor patches only their own area', async (t) => {
+test('colaborador cannot PATCH; gestor can suspend only their own area and cannot bypass consent', async (t) => {
   const { call, store, areas, fact } = await startBrain(t);
   const compras = fact(areas.compras, 'Compras fecha pedidos na sexta');
   const frota = fact(areas.frota, 'Frota revisa caminhoes no mes');
@@ -71,22 +81,24 @@ test('colaborador cannot PATCH; gestor patches only their own area', async (t) =
   const patch = (user, id, body) => call(`/manage/facts/${id}`, { method: 'PATCH', user, body });
   assert.equal((await patch('col', compras, { text: 'x y z' })).status, 404);
   assert.equal((await patch('gil', frota, { suspended: true })).status, 404);
-  const ok = await patch('gil', compras, { text: 'Compras fecha pedidos na quinta' });
-  assert.equal(ok.status, 200);
-  assert.equal(store.facts.get(compras).text, 'Compras fecha pedidos na quinta');
+  const edit = await patch('gil', compras, { text: 'Compras fecha pedidos na quinta' });
+  assert.deepEqual([edit.status, edit.body.error.code], [409, 'consent_required']);
+  assert.equal(store.facts.get(compras).text, 'Compras fecha pedidos na sexta');
+  assert.equal((await patch('gil', compras, { suspended: true })).status, 200);
+  assert.equal(store.facts.get(compras).suspended, true);
   assert.equal(store.facts.get(frota).suspended, false);
   assert.equal((await call('/manage/facts', { user: 'col' })).status, 403);
 });
 
-test('owner demotes high to low and a colaborador then sees it; promoting back hides it', async (t) => {
+test('owner cannot expose high facts by reclassifying through the legacy PATCH route', async (t) => {
   const { call, store, areas, fact } = await startBrain(t);
   const id = fact(areas.compras, 'Desconto maximo ao cliente e de cinco por cento', { risk: 'high' });
   member(store, 'col', areas.compras);
   const search = () => call('/search', { user: 'col', method: 'POST', body: { query: 'desconto cliente' } });
   assert.equal((await search()).body.facts.length, 0);
-  assert.equal((await call(`/manage/facts/${id}`, { method: 'PATCH', body: { risk: 'low' } })).status, 200);
-  assert.equal((await search()).body.facts.length, 1);
-  assert.equal((await call(`/manage/facts/${id}`, { method: 'PATCH', body: { risk: 'high' } })).status, 200);
+  const demotion = await call(`/manage/facts/${id}`, { method: 'PATCH', body: { risk: 'low' } });
+  assert.deepEqual([demotion.status, demotion.body.error.code], [409, 'consent_required']);
+  assert.equal(store.facts.get(id).risk, 'high');
   assert.equal((await search()).body.facts.length, 0);
 });
 
@@ -102,7 +114,7 @@ test('member changes are reflected on the very next search', async (t) => {
   assert.equal((await search()).body.facts.length, 0);
 });
 
-test('PATCH validation: nulls, secrets, risk/area rules, supersession chains', async (t) => {
+test('legacy PATCH validates shape and refuses content, source-area and risk changes without reviewed consent', async (t) => {
   const { call, store, areas, fact } = await startBrain(t);
   member(store, 'gil', areas.compras, 'gestor');
   member(store, 'gil', areas.frota, 'gestor', false);
@@ -114,21 +126,24 @@ test('PATCH validation: nulls, secrets, risk/area rules, supersession chains', a
   assert.equal((await patch('gil', id, { areaId: null })).status, 400);
   assert.equal((await patch('gil', id, { bogus: 1 })).status, 400);
   const secret = await patch('gil', id, { text: 'Contato fulano@empresa.com.br para cotacao' });
-  assert.deepEqual([secret.status, secret.body.error.code], [400, 'secret']);
+  assert.deepEqual([secret.status, secret.body.error.code], [409, 'consent_required']);
+  assert.equal(store.facts.get(id).text, 'Compras usa cotacao com tres fornecedores');
 
-  // moving needs management of both source and target
-  assert.equal((await patch('hal', id, { areaId: areas.frota })).status, 403);
-  assert.equal((await patch('gil', id, { areaId: areas.frota })).status, 200);
-  assert.equal(store.facts.get(id).areaId, areas.frota);
+  // Even a manager of both areas must use the reviewed proposal flow.
+  for (const user of ['hal', 'gil']) {
+    const moved = await patch(user, id, { areaId: areas.frota });
+    assert.deepEqual([moved.status, moved.body.error.code], [409, 'consent_required']);
+  }
+  assert.equal(store.facts.get(id).areaId, areas.compras);
 
-  // promote to Geral: low only; high is refused
+  // Neither high nor low facts may be promoted to a broader audience by a legacy patch.
   const high = fact(areas.compras, 'Salario do cargo de comprador', { risk: 'high' });
   const promoteHigh = await patch('hal', high, { general: true });
-  assert.deepEqual([promoteHigh.status, promoteHigh.body.error.code], [400, 'promote_requires_low']);
+  assert.deepEqual([promoteHigh.status, promoteHigh.body.error.code], [409, 'consent_required']);
   const low = fact(areas.compras, 'Compras fica no segundo andar');
-  assert.equal((await patch('hal', low, { general: true })).status, 200);
-  assert.equal(store.facts.get(low).areaId, areas.general);
-  assert.equal((await patch('hal', low, { text: 'Compras fica no terceiro andar' })).status, 404);
+  assert.equal((await patch('hal', low, { general: true })).status, 409);
+  assert.equal(store.facts.get(low).areaId, areas.compras);
+  assert.equal((await patch('hal', low, { text: 'Compras fica no terceiro andar' })).status, 409);
 
   // a fact in a supersession chain cannot change area or risk
   const old = fact(areas.compras, 'Prazo de pagamento padrao e trinta dias');
@@ -142,9 +157,10 @@ test('PATCH validation: nulls, secrets, risk/area rules, supersession chains', a
   });
   for (const target of [old, next]) {
     const moved = await patch('owner', target, { risk: 'high' });
-    assert.deepEqual([moved.status, moved.body.error.code], [409, 'in_supersession_chain']);
+    assert.deepEqual([moved.status, moved.body.error.code], [409, 'consent_required']);
   }
-  assert.equal((await patch('owner', next, { text: 'Prazo de pagamento padrao e quarenta e cinco dias' })).status, 200);
+  assert.equal((await patch('owner', next, { text: 'Prazo de pagamento padrao e quarenta e cinco dias' })).status, 409);
+  assert.equal(store.facts.get(next).text, 'Prazo de pagamento padrao e quarenta dias');
 });
 
 test('feedback: gestor/owner suspend immediately, colaborador does not', async (t) => {
@@ -177,6 +193,24 @@ test('feedback on a fact the user cannot read answers like a missing id', async 
   assert.equal(store.facts.get(hidden).suspended, false);
 });
 
+test('JR management alone cannot suspend a fact without ERP review authorization', async (t) => {
+  const { call, store, areas, fact } = await startBrain(t, {
+    resolveAuthorization: async (identity) => ({
+      jrUserId: identity.userId,
+      erpUserId: `erp_${identity.userId}`,
+      organizationId: 'jr',
+      scope: { all: true },
+      publishAreaIds: [],
+      reviewAreaIds: [],
+    }),
+  });
+  member(store, 'gil', areas.compras, 'gestor');
+  const id = fact(areas.compras, 'Regra de cotacao revisada');
+  const result = await call('/feedback', { user: 'gil', method: 'POST', body: { factId: id } });
+  assert.deepEqual(result.body, { recorded: true, suspended: false });
+  assert.equal(store.facts.get(id).suspended, false);
+});
+
 test('/me and /peers shapes', async (t) => {
   const { call, store, areas } = await startBrain(t);
   member(store, 'gil', areas.compras, 'gestor');
@@ -196,7 +230,7 @@ test('/me and /peers shapes', async (t) => {
   assert.equal((await call('/me')).body.isDirector, true);
   const peers = await call('/peers', { user: 'col' });
   assert.deepEqual(
-    peers.body.peers.sort((a, b) => a.userId.localeCompare(b.userId)),
+    peers.body.peers.toSorted((a, b) => a.userId.localeCompare(b.userId)),
     [
       { userId: 'fro', areas: [{ areaId: areas.frota, level: 'colaborador' }] },
       { userId: 'gil', areas: [{ areaId: areas.compras, level: 'colaborador' }] },
@@ -217,7 +251,7 @@ test('/peers ignores Geral and the fallback area memberships', async (t) => {
   assert.deepEqual((await call('/peers', { user: 'only' })).body.peers, []);
 });
 
-test('capture returns 202, hands off to the curator and persists no raw text', async (t) => {
+test('legacy capture requires explicit consent, never invokes the curator and persists no raw text', async (t) => {
   const seen = [];
   const curator = { enqueue: (identity, payload) => seen.push({ identity, payload }), drain: async () => {} };
   const { call, directory, store } = await startBrain(t, { curator });
@@ -234,10 +268,8 @@ test('capture returns 202, hands off to the curator and persists no raw text', a
       ],
     },
   });
-  assert.equal(status, 202);
-  assert.equal(seen.length, 1);
-  assert.equal(seen[0].identity.userId, 'ana');
-  assert.equal(seen[0].payload.messages[0].text, marker);
+  assert.equal(status, 503);
+  assert.equal(seen.length, 0);
   store.log.add({ userId: 'x', action: 'noop' });
   for (const file of await readdir(directory)) {
     assert.ok(!(await readFile(join(directory, file))).includes(marker), `${file} holds raw text`);
@@ -246,19 +278,22 @@ test('capture returns 202, hands off to the curator and persists no raw text', a
     method: 'POST',
     body: { conversationRef: 'c', bot: 'b', messages: [{ role: 'x', text: 'y' }] },
   });
-  assert.equal(bad.status, 400);
+  assert.deepEqual([bad.status, bad.body.error.code], [503, 'consent_required']);
 });
 
-test('capture failure in the curator is dropped silently', async (t) => {
+test('legacy capture is refused before a failing curator can run', async (t) => {
+  let calls = 0;
   const curator = {
     enqueue: () => {
+      calls += 1;
       throw new Error('boom');
     },
     drain: async () => {},
   };
   const { call } = await startBrain(t, { curator });
   const { status } = await call('/capture', { method: 'POST', body: { conversationRef: 'c', bot: 'b', messages: [] } });
-  assert.equal(status, 202);
+  assert.equal(status, 503);
+  assert.equal(calls, 0);
 });
 
 test('consent round-trip', async (t) => {
@@ -307,7 +342,7 @@ test('manager listing is limited to managed areas and filters', async (t) => {
   store.facts.update(suspended, { suspended: true }, 'gil');
   fact(areas.frota, 'Frota qualquer');
   const list = async (query, user = 'gil') => (await call(`/manage/facts${query}`, { user })).body.facts;
-  assert.deepEqual((await list('')).map((f) => f.text).sort(), ['Compras alto', 'Compras baixo']);
+  assert.deepEqual((await list('')).map((f) => f.text).toSorted(), ['Compras alto', 'Compras baixo']);
   assert.equal((await list('?risk=high')).length, 1);
   assert.equal((await list('?kind=regra')).length, 1);
   assert.equal((await list('?suspended=true'))[0].text, 'Compras baixo');
@@ -376,7 +411,7 @@ test('a Geral gestor (non-owner) manages nothing in Geral', async (t) => {
   assert.equal((await call('/manage/facts', { user: 'gg' })).status, 403);
   assert.equal(
     (await call(`/manage/facts/${id}`, { method: 'PATCH', body: { text: 'Regra nova geral' } })).status,
-    200
+    409
   );
 });
 
@@ -405,16 +440,18 @@ test('read_high is logged for manager list, history and PATCH, deduped, non-owne
   );
   await call(`/manage/facts/${id}/history`, { user: 'gil' });
   assert.equal(reads().length, 2);
-  await call(`/manage/facts/${id}`, { user: 'gil', method: 'PATCH', body: { text: 'Contrato alto revisado' } });
+  await call(`/manage/facts/${id}`, { user: 'gil', method: 'PATCH', body: { active: true } });
   assert.equal(reads().length, 3);
   await call('/manage/facts');
   await call('/search', { method: 'POST', body: { query: 'contrato' } });
   assert.equal(reads().length, 3);
 });
 
-test('an async curator rejection is swallowed and the log view is capped newest first', async (t) => {
+test('legacy capture cannot trigger an async curator rejection and the log view stays capped newest first', async (t) => {
+  let calls = 0;
   const curator = {
     enqueue: async () => {
+      calls += 1;
       throw new Error('async boom');
     },
     drain: async () => {},
@@ -422,8 +459,9 @@ test('an async curator rejection is swallowed and the log view is capped newest 
   const { call, store } = await startBrain(t, { curator });
   assert.equal(
     (await call('/capture', { method: 'POST', body: { conversationRef: 'c', bot: 'b', messages: [] } })).status,
-    202
+    503
   );
+  assert.equal(calls, 0);
   for (let i = 0; i < 1100; i += 1) store.log.add({ userId: 'u', action: 'x', factId: i });
   const log = (await call('/manage/log')).body.log;
   assert.equal(log.length, 1000);

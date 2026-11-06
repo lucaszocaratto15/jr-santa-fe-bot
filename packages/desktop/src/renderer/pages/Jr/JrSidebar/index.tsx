@@ -13,7 +13,7 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Peoples, Plus, Pushpin, Search, SettingTwo } from '@icon-park/react';
+import { Peoples, Pushpin, Search, SettingTwo } from '@icon-park/react';
 import { useAuth } from '@renderer/hooks/context/AuthContext';
 import { loadLatestConversationMessages } from '@renderer/utils/chat/messagePagination';
 import React, { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useState } from 'react';
@@ -161,7 +161,11 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
   }, []);
   const [previews, setPreviews] = useState<Record<string, string>>({});
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
-  const { data: bots, error, mutate: refreshBots } = useSWR<JrBot[]>('jr.bots', listJrBots);
+  const {
+    data: bots,
+    error,
+    mutate: refreshBots,
+  } = useSWR<JrBot[]>(state.user?.id ? ['jr.bots', state.user.id] : null, listJrBots);
   const teamUserId = user?.id ?? 'system_default_user';
   const { data: teams, mutate: refreshTeams } = useSWR<TTeam[]>(['jr.teams', teamUserId], () =>
     ipcBridge.team.list.invoke({ user_id: teamUserId })
@@ -275,13 +279,6 @@ const JrSidebar: React.FC<{ onSessionClick?: () => void; collapsed?: boolean }> 
             onClick={onClick}
           />
         )}
-      />
-      <Button
-        type='text'
-        className={`${styles.iconButton} ${styles.softIcon}`}
-        aria-label={t('common.jr.newBot')}
-        icon={<Plus size={18} />}
-        onClick={() => open('/guid?create=1')}
       />
     </div>
   );

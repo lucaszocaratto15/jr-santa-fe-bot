@@ -375,3 +375,59 @@ describe('brain tools', () => {
     expect(await down.brain_wrong({ reason: 'r' })).toEqual({ ok: false, error: 'pedido inválido' });
   });
 });
+
+describe('Strata MCP tools', () => {
+  const build = (strata?: unknown) =>
+    buildTeachHandlers({
+      ...makeDeps(),
+      ...(strata === undefined ? {} : { strata: () => strata }),
+    } as unknown as Parameters<typeof buildTeachHandlers>[0]);
+
+  it('lists the ERP schemas without inventing access grants', async () => {
+    const tools = [{ name: 'compras.listar', inputSchema: { type: 'object' } }];
+    expect(await build({ tools: vi.fn(async () => tools) }).strata_list_tools({})).toEqual({ ok: true, tools });
+  });
+
+  it('preserves ERP tool errors for the model instead of reporting success', async () => {
+    const result = { content: [{ type: 'text', text: 'permission_denied' }], isError: true };
+    const callTool = vi.fn(async () => result);
+    expect(await build({ callTool }).strata_call_tool({ name: 'compras.listar', arguments: { page: 1 } })).toEqual(
+      result
+    );
+    expect(callTool).toHaveBeenCalledWith({ name: 'compras.listar', arguments: { page: 1 } });
+  });
+
+  it('preserves the ERP consent URL without approving the action', async () => {
+    const result = {
+      content: [{ type: 'text', text: 'pending_consent' }],
+      structuredContent: { consent_url: 'https://erp.example/mcp/consent/request-1' },
+    };
+    const callTool = vi.fn(async () => result);
+    expect(await build({ callTool }).strata_call_tool({ name: 'compras.alterar', arguments: {} })).toEqual(result);
+    expect(callTool).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects malformed calls before contacting the ERP', async () => {
+    const callTool = vi.fn();
+    const handlers = build({ callTool });
+    for (const body of [
+      {},
+      { name: '../admin', arguments: {} },
+      { name: 'compras.listar', arguments: [] },
+      { name: 'compras.listar', arguments: null },
+    ]) {
+      expect(await handlers.strata_call_tool(body)).toEqual({ ok: false, error: 'pedido inválido' });
+    }
+    expect(callTool).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when Strata is missing or unavailable', async () => {
+    const unavailable = { ok: false, error: 'strata_unavailable' };
+    expect(await build().strata_list_tools({})).toEqual(unavailable);
+    expect(await build().strata_call_tool({ name: 'compras.listar', arguments: {} })).toEqual(unavailable);
+    const failure = vi.fn().mockRejectedValue(new Error('private upstream detail'));
+    const handlers = build({ tools: failure, callTool: failure });
+    expect(await handlers.strata_list_tools({})).toEqual(unavailable);
+    expect(await handlers.strata_call_tool({ name: 'compras.listar', arguments: {} })).toEqual(unavailable);
+  });
+});

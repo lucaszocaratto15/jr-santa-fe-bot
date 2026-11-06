@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
+import { BRAIN_TERM_VERSION } from '@/common/types/agent/brainTypes';
 import { ptBR, readCommon, localeNames, withI18n } from '../teach/learn/i18nTestUtils';
 
 const { consentState, accept } = vi.hoisted(() => ({ consentState: vi.fn(), accept: vi.fn() }));
@@ -16,7 +17,11 @@ vi.mock('@arco-design/web-react', async () => {
 import DataNoticeModal, { resetDataNoticeLaunch } from '@renderer/pages/Jr/JrSidebar/Brain/DataNoticeModal';
 
 const i18n = ptBR();
-const state = (current: boolean) => ({ acknowledgedVersion: current ? '1.4' : null, acknowledgedAt: null, current });
+const state = (current: boolean) => ({
+  acknowledgedVersion: current ? BRAIN_TERM_VERSION : null,
+  acknowledgedAt: null,
+  current,
+});
 const mount = () => render(withI18n(i18n, <DataNoticeModal />));
 
 describe('DataNoticeModal', () => {
@@ -26,24 +31,22 @@ describe('DataNoticeModal', () => {
     accept.mockReset();
   });
 
-  it('shows the notice when 1.4 was not acknowledged and the button acknowledges 1.4 once', async () => {
+  it('shows the notice when the current notice was not acknowledged and records that version once', async () => {
     consentState.mockResolvedValue(state(false));
     accept.mockResolvedValue(state(true));
     mount();
     const button = await screen.findByRole('button', { name: 'Li e entendi' });
     const text = screen.getByTestId('data-notice').textContent ?? '';
-    expect(text).toContain('MiniMax');
     expect(text).toContain('48 horas');
-    expect(text).not.toMatch(/limite|por dia|uma vez/i);
-    expect(text).toContain('resultados de ferramentas');
-    expect(text).toContain('Removemos os valores do seu Cofre');
+    expect(text).toContain('autoriza');
+    expect(text).toContain('trecho');
     expect(text).not.toContain('dados pessoais não são guardados');
     fireEvent.click(button);
-    await waitFor(() => expect(accept).toHaveBeenCalledWith({ termVersion: '1.4' }));
+    await waitFor(() => expect(accept).toHaveBeenCalledWith({ termVersion: BRAIN_TERM_VERSION }));
     await waitFor(() => expect(screen.queryByTestId('data-notice')).toBeNull());
   });
 
-  it('stays hidden when 1.4 is already acknowledged', async () => {
+  it('stays hidden when the current notice is acknowledged', async () => {
     consentState.mockResolvedValue(state(true));
     mount();
     await waitFor(() => expect(consentState).toHaveBeenCalled());
@@ -69,16 +72,17 @@ describe('DataNoticeModal', () => {
   });
 
   it('has the notice keys in every locale', () => {
-    const keys = Object.keys((readCommon('pt-BR').jr as { dataNotice: object }).dataNotice).sort();
+    const keys = Object.keys((readCommon('pt-BR').jr as { dataNotice: object }).dataNotice).toSorted();
     for (const lang of localeNames()) {
-      expect(Object.keys((readCommon(lang).jr as { dataNotice: object }).dataNotice).sort()).toEqual(keys);
+      expect(Object.keys((readCommon(lang).jr as { dataNotice: object }).dataNotice).toSorted()).toEqual(keys);
     }
   });
 
-  it('says what is kept: extracted facts and short quotes of up to 120 characters, not "never"', () => {
+  it('describes retention without promising that authorized source text is never stored', () => {
     for (const lang of ['pt-BR', 'en-US']) {
       const body = (readCommon(lang).jr as { dataNotice: { retentionBody: string } }).dataNotice.retentionBody;
-      expect(body).toContain('120');
+      expect(body).toContain('48');
+      expect(body).toContain('90');
       expect(body).not.toMatch(/nunca ficam guardados|never stored/u);
     }
   });

@@ -10,6 +10,8 @@ export type BrowserWindowDeps = {
   emitOpenTab(url: string, openerId: number): void;
   downloadsDir: string;
   onDownload(info: DownloadInfo): void;
+  /** Capture the employee and consent before the download can outlive that session. */
+  beginLearningDownload?(origin: string): (() => void | Promise<void>) | null;
 };
 
 /** `relatorio.pdf` -> `relatorio (1).pdf` when the name is taken. */
@@ -75,6 +77,13 @@ export function installBrowserWindowHandlers(contents: WebContents, deps: Browse
   if (installedSessions.has(ses)) return;
   installedSessions.add(ses);
   ses.on('will-download', (_event, item) => {
+    const origin = safeOrigin(item.getURL());
+    let completeLearning: (() => void | Promise<void>) | null = null;
+    try {
+      completeLearning = deps.beginLearningDownload?.(origin) ?? null;
+    } catch {
+      /* Optional learning must never prevent a download. */
+    }
     let dir = deps.downloadsDir;
     try {
       mkdirSync(dir, { recursive: true });
@@ -84,9 +93,13 @@ export function installBrowserWindowHandlers(contents: WebContents, deps: Browse
     const fileName = uniqueFileName(dir, item.getFilename(), existsSync);
     const savePath = path.join(dir, fileName);
     item.setSavePath(savePath);
-    const origin = safeOrigin(item.getURL());
     item.once('done', (_e, state) => {
-      if (state === 'completed') deps.onDownload({ fileName, path: savePath, origin });
+      if (state !== 'completed') return;
+      if (completeLearning)
+        void Promise.resolve()
+          .then(() => completeLearning?.())
+          .catch(() => {});
+      deps.onDownload({ fileName, path: savePath, origin });
     });
   });
 }

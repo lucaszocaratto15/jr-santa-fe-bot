@@ -112,6 +112,17 @@ const Harness: React.FC<{ showPanel: boolean }> = ({ showPanel }) => (
   </PreviewProvider>
 );
 
+it('explains why a browser performing a task cannot be closed', async () => {
+  const view = render(<Harness showPanel={false} />);
+  act(() => ctx.openBrowserTab('https://work.example.com'));
+  const id = ctx.activeTabId!;
+  act(() => ctx.updateTab(id, { metadata: { agentActive: true } }));
+  view.rerender(<Harness showPanel />);
+  act(() => ctx.closeTab(id));
+  await waitFor(() => expect(screen.getByText('preview.browser.tabProtected')).toBeTruthy());
+  expect(ctx.tabs.some((tab) => tab.id === id)).toBe(true);
+});
+
 /**
  * An oversized tab with no disk path — the explorer case. Downloading it would
  * write a 0-byte file, so the panel refuses and says why.

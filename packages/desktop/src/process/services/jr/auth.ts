@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import { chmod, lstat, mkdir, open, rename, unlink } from 'node:fs/promises';
 import { hostname } from 'node:os';
@@ -258,6 +258,13 @@ export class JrAccessController {
       user: this.current.user ? { ...this.current.user } : null,
       ...(this.current.notice ? { notice: this.current.notice } : {}),
     };
+  }
+  /** Native-only identity for the one employee assistant; callers cannot choose its owner or id. */
+  employeeAssistantIdentity(): { ownerAccountId: string; assistantId: string; generation: number } {
+    if (this.current.status !== 'authenticated' || !this.current.user || !this.saved?.token)
+      return fail('JR_ACCESS_REQUIRED');
+    const ownerAccountId = createHash('sha256').update(`${this.saved.issuer}\0${this.current.user.id}`).digest('hex');
+    return { ownerAccountId, assistantId: `jr-employee-${ownerAccountId}`, generation: this.generation };
   }
   /** Retry connectivity on demand while preserving explicit logout and revocation notices. */
   accessStatus(): Promise<JrAccessState> {
@@ -635,6 +642,10 @@ export class JrAccessController {
       return fail('JR_ACCESS_UNAVAILABLE');
     }
     if (epoch !== this.generation || token !== this.saved?.token) return fail('JR_ACCESS_REQUIRED');
+    if ((path.startsWith('/strata/') || path.startsWith('/api/brain/')) && !response.ok && response.status !== 401) {
+      const code = await responseCode(response.clone());
+      if (code && /^strata_[a-z_]{1,80}$/.test(code)) throw Object.assign(new Error(code), { status: response.status });
+    }
     if (response.status === 401) {
       await this.rejectSession(token);
       return fail('JR_ACCESS_REVOKED');
@@ -680,7 +691,24 @@ export class JrAccessController {
   async brainCall(path: string, init: RequestInit = {}, admin = false): Promise<unknown> {
     if (this.options.pilot || !this.options.url) return fail('JR_ACCESS_UNCONFIGURED');
     if (!path.startsWith('/api/brain/') || path.includes('..')) return fail('JR_ACCESS_INVALID_REQUEST');
-    return this.authorized(path, init, admin, false);
+    // Explicit draft generation can include a 60-second curator call plus the control hop.
+    const signal =
+      path === '/api/brain/proposals' && init.method === 'POST'
+        ? (init.signal ?? AbortSignal.timeout(70_000))
+        : init.signal;
+    return this.authorized(path, { ...init, ...(signal ? { signal } : {}) }, admin, false);
+  }
+  /** Strata is optional; authorization failures never invalidate the independent JR login. */
+  async strataCall(path: string, init: RequestInit = {}): Promise<unknown> {
+    if (this.options.pilot || !this.options.url) return fail('JR_ACCESS_UNCONFIGURED');
+    if (!/^\/strata\/(?:status|connect|organization|disconnect|mcp\/tools|mcp\/call)$/.test(path))
+      return fail('JR_ACCESS_INVALID_REQUEST');
+    const signal =
+      init.signal ??
+      AbortSignal.timeout(
+        path.startsWith('/strata/mcp/') || path === '/strata/connect' || path === '/strata/status' ? 70_000 : 10_000
+      );
+    return this.authorized(path, { ...init, signal }, false, false);
   }
   async setEmployeeTitle(input: { employeeId: string; title: string | null }): Promise<{ title: string | null }> {
     if (!validId(input?.employeeId)) return fail('JR_ACCESS_INVALID_EMPLOYEE');

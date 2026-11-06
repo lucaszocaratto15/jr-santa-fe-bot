@@ -751,9 +751,10 @@
         "status": {
           "active": "On",
           "paused": "Paused",
-          "unavailable": "Unavailable"
+          "unavailable": "Unavailable",
+          "disabled": "已停用"
         },
-        "pause": "Pause for 15 min",
+        "pause": "暫停收集",
         "resume": "Resume",
         "unavailableEncryption": "Unavailable: this computer does not offer system encryption, so nothing can be stored safely.",
         "unavailablePlatform": "Unavailable on this system.",
@@ -762,7 +763,7 @@
         "samplerError": "Observation stopped because of an error.",
         "retry": "Try again",
         "actionFailed": "Could not finish that. Try again.",
-        "intro": "Aprender looks at which programs and pages you use to understand your work and help you. It is always on, and raw records stay on this computer only. See the Data Notice for what is collected.",
+        "intro": "學習僅在您授權後開始。它使用私密的應用程式中繼資料、您的手動標記、已完成的 ERP 查詢和瀏覽器下載來建議候選工作流程。您可以暫停或關閉收集。",
         "readNotice": "View the Data Notice"
       },
       "insights": {
@@ -774,8 +775,8 @@
         "timePerApp": "Time per program",
         "minutesShort": "{{value}} min",
         "hoursMinutes": "{{hours}}h{{minutes}}",
-        "repetitive": "Repetitive",
-        "times": "{{times}}× · {{minutes}} min",
+        "repetitive": "例行工作假設",
+        "times": "未經確認的估計：{{times}} 次 · {{minutes}} 分鐘",
         "tip": "Tip",
         "teach": "Teach this task",
         "delete": "Delete",
@@ -814,6 +815,76 @@
         "rawHours": "Raw records: {{count}} h stored (deleted within 48 h)",
         "wipeNow": "Delete now",
         "wipeConfirm": "Delete the raw records stored on this computer now?"
+      },
+      "consent": {
+        "title": "從我的工作中學習",
+        "body": "授權使用私密的應用程式與視窗中繼資料、您標記的工作流程節點、成功的 ERP 查詢和 JR 瀏覽器中完成的下載。對於實際事件，只儲存操作類別與時間，不儲存查詢參數、傳回資料、檔案名稱或位址。紀錄僅在此電腦上私密儲存；彙總摘要可能傳送給公司的 AI。不收集網頁內容、表單、密碼或文件。觀察到一次操作並不能證明完整的工作流程。",
+        "enable": "授權從工作中學習",
+        "disable": "停用資料收集",
+        "weakEvidence": "應用程式和視窗訊號只能作為弱證據。這些建議需要確認。",
+        "eventsRequired": "您先前的授權不會啟用實際事件學習。請查看更新後的說明，以授權使用這些新增來源。",
+        "eventsEnable": "授權實際工作事件"
+      },
+      "workflow": {
+        "title": "我的工作流程",
+        "privacy": "僅供您查看。請只使用通用步驟名稱，不要包含人員、文件、地址或憑證。",
+        "name": "通用工作流程名稱",
+        "start": "開始工作流程",
+        "step": "通用步驟名稱",
+        "addStep": "完成步驟",
+        "complete": "完成工作流程",
+        "source": "涉及的系統",
+        "action": "操作類型",
+        "review": "待審核的例行工作",
+        "confirm": "確認例行工作並儲存修正",
+        "reject": "捨棄例行工作",
+        "eventual": "偶發活動",
+        "exclude": "不納入每月摘要",
+        "suppress": "不再建議",
+        "notes": "私人備註",
+        "status": {
+          "candidate": "等待確認",
+          "confirmed": "員工已確認",
+          "rejected": "已捨棄"
+        },
+        "sources": {
+          "erp": "ERP",
+          "web": "入口網站或系統",
+          "desktop": "應用程式或試算表",
+          "integration": "整合",
+          "manual": "其他工具"
+        },
+        "actions": {
+          "consulta": "查詢",
+          "exportacao": "匯出",
+          "preenchimento": "填寫",
+          "envio": "傳送",
+          "aprovacao": "核准",
+          "outro": "其他"
+        },
+        "month": "月份（YYYY-MM）",
+        "monthly": "產生私人每月工作圖譜",
+        "insufficient": "請確認本月至少一項已完成的例行工作，以產生工作圖譜。",
+        "frequency": "已記錄 {{count}} 次執行",
+        "pending": "{{count}} 項例行工作等待驗證",
+        "saveNotes": "儲存備註",
+        "manual": "編寫私人手冊草稿",
+        "draft": "私人草稿，請在使用前審核。任何內容都不會發佈到公司大腦。",
+        "responsibilities": "職責與已確認的例行工作",
+        "systems": "涉及的系統",
+        "steps": "已確認的步驟",
+        "exceptions": "例外情況與備註",
+        "opportunities": "待驗證的自動化機會",
+        "opportunity": "審核重複步驟是否可以自動化，不執行任何操作。",
+        "error": "無法儲存。請使用通用名稱，不要包含個人資料、地址或憑證。",
+        "inputs": "已知輸入（僅類別，不含文件）",
+        "outputs": "已知輸出（僅類別，不含文件）",
+        "automationCandidate": "可能的自動化：你記錄了 {{count}} 個步驟。請檢查此順序是否構成一項例行工作，以及哪些步驟可以自動化。",
+        "manualEvidence": "證據：由你輸入的工作節點；在將其作為職務知識之前，請先確認該例行工作。",
+        "observedName": "JR 中觀察到的操作序列",
+        "observedEvidence": "這些操作已由 ERP 或瀏覽器確認。操作序列僅是候選工作流程；將其用於職務職責圖譜前，請先檢查其目的和步驟。",
+        "observedQuery": "ERP 查詢已完成",
+        "observedDownload": "瀏覽器下載已完成"
       }
     },
     "handbook": {
@@ -902,28 +973,28 @@
       "updatedNotice": "Your Handbook was updated — review it if you like"
     },
     "dataNotice": {
-      "title": "Aviso de uso de dados",
-      "intro": "Para você saber como o JR Bot usa as informações do seu trabalho, aqui vai uma explicação simples. Este é um aviso, não um pedido de autorização: ele vale para todos os colaboradores da empresa.",
-      "collectedTitle": "O que é coletado",
-      "collectedBody": "Trechos das suas conversas com os bots, para o cérebro da empresa, incluindo os resultados de ferramentas que o bot usou na conversa (por exemplo, páginas e dados de sistemas); amostras da sua tela (aplicativo e título da janela), para o recurso Aprender; e as tarefas que você ensinar ao bot, para o Manual da função.",
-      "purposeTitle": "Para que serve",
-      "purposeBody": "Entender como o trabalho é feito para ajudar você: os bots passam a saber o que a empresa já sabe. Não serve para avaliar desempenho nem para controlar horário.",
-      "whoTitle": "Quem vê o quê",
-      "whoBody": "O que o cérebro aprende fica disponível por área e por nível: cada pessoa vê o conhecimento das suas áreas e o que for geral para a empresa. Informações sensíveis, como valores, contratos e dados de clientes, só aparecem para gestores da área e para a diretoria.",
-      "blockedTitle": "O que fica de fora",
-      "blockedBody": "Removemos os valores do seu Cofre antes do envio, e o servidor descarta fatos com CPF, CNPJ, cartão, chave de acesso ou e-mail.",
-      "retentionTitle": "Por quanto tempo",
-      "retentionBody": "As amostras de tela são apagadas em 48 horas. Os trechos de conversa não ficam guardados no servidor: só os fatos extraídos deles e, junto de cada fato, uma citação curta da conversa (até 120 caracteres).",
-      "providerTitle": "Quem processa",
-      "providerBody": "O processamento usa o provedor de IA da empresa (MiniMax), pelo servidor da empresa. Nada vai direto do seu computador para o provedor.",
-      "pauseTitle": "Pausar o Aprender",
-      "pauseBody": "Você pode pausar o Aprender por alguns minutos nas configurações dele, quando precisar de privacidade.",
-      "button": "Li e entendi",
-      "failed": "Não foi possível registrar agora. O aviso aparece de novo na próxima abertura."
+      "title": "資料使用告知",
+      "intro": "本告知說明兩項獨立授權：使用所選摘錄提出公司筆記建議，以及選擇啟用私人的工作學習功能。確認已閱讀本告知不代表授予其中任何一項授權。",
+      "collectedTitle": "收集哪些資料",
+      "collectedBody": "公司筆記僅使用您明確授權的摘錄。從工作中學習功能僅在您選擇啟用後記錄應用程式和視窗中繼資料，以及工作流程關鍵節點。它不收集頁面內容、表單、憑證或連續螢幕擷取畫面。",
+      "purposeTitle": "資料用途",
+      "purposeBody": "協助您回顧已驗證的知識並找出可能的自動化機會。私人的學習資料不會用於員工排名或績效評估。",
+      "whoTitle": "誰能查看哪些內容",
+      "whoBody": "對話和工作流程記錄預設保持私人。只有經過審核的筆記和獲得授權的來源摘錄才能與所選對象分享。受限搜尋需要 ERP 授權。",
+      "blockedTitle": "排除哪些內容",
+      "blockedBody": "保管庫中的機密資訊會在處理前被遮蔽。請勿在摘錄或工作流程名稱中包含敏感個人資料。篩選器提供額外保護，但仍需審核。",
+      "retentionTitle": "資料保留多久",
+      "retentionBody": "原始活動樣本會在 48 小時內到期，私人洞察會在 90 天內到期。歷史對話佇列不會自動重新處理。分享的筆記會保留已核准的內容和版本紀錄。",
+      "providerTitle": "由誰處理資料",
+      "providerBody": "只有明確獲得授權的摘錄才會透過公司後端傳送給 AI 服務供應商。自動工作建議使用彙總資料。授權分析與授權分享彼此獨立。",
+      "pauseTitle": "暫停從工作中學習",
+      "pauseBody": "私人的工作學習功能在您選擇啟用後才會啟動。暫停後會停止收集，直到您恢復。您也可以停用資料收集。任何內容都不會自動發佈到公司大腦。",
+      "button": "我已閱讀並理解",
+      "failed": "目前無法記錄。下次開啟應用程式時會再次顯示此告知。"
     },
     "brainManage": {
       "title": "Cérebro da empresa",
-      "subtitle": "Os fatos que os bots da empresa aprenderam. Revise, corrija e decida o que fica disponível para cada área.",
+      "subtitle": "審核分享的筆記和正式作業程序，以及其已核准的來源、存取權限和版本紀錄。",
       "loadFailed": "Não foi possível carregar o cérebro agora.",
       "exEmployee": "ex-funcionário",
       "facts": {
@@ -1026,7 +1097,8 @@
         "conflict": "Conflito: o item já existe, ou o fato faz parte de uma cadeia de versões e não pode mudar de área ou risco.",
         "forbidden": "Você não tem permissão para isso.",
         "notFound": "Este item não existe mais."
-      }
+      },
+      "erpPermissions": "知識存取與核准權限由 Strata Certa 管理。JR 管理員身分不會授予 ERP 存取權限。"
     },
     "brain": {
       "activity": {
@@ -1036,6 +1108,61 @@
         "doneNone": "已查詢公司大腦 · 未找到內容",
         "unavailable": "大腦暫時無法使用"
       }
+    },
+    "brainNotes": {
+      "create": "建立筆記",
+      "authorizeExcerpt": "僅使用此摘錄",
+      "revise": "更新版本以供審核",
+      "shareVersion": "授權分享此版本",
+      "excerptNotice": "只有下方摘錄會在您確認後傳送給知識整理員。您可以編輯摘錄，刪除不想使用的內容。",
+      "reviewNotice": "請審核內文、來源和分享對象。分享此筆記不會公開原始對話。編輯後，請先更新版本，再授權分享。",
+      "excerpt": "已授權的摘錄",
+      "text": "筆記內文",
+      "source": "已授權的來源摘錄",
+      "audience": "已授權的分享對象",
+      "kind": "知識類型",
+      "sharedNote": "分享的筆記",
+      "officialProcedure": "正式作業程序",
+      "officialNotice": "此內容將傳送給負責的審核人員核准。在獲得核准前，它不會出現在搜尋結果中。",
+      "pending": "提案已送審，尚未發佈。",
+      "shared": "筆記已與授權對象分享。",
+      "failed": "無法完成此操作。請檢查連線、ERP 授權和提案版本，然後重試。",
+      "reviews": "待審核的作業程序",
+      "noReviews": "沒有待審核的作業程序。",
+      "approve": "核准作業程序",
+      "reject": "拒絕提案",
+      "authorizationRequired": "審核需要經過驗證的 ERP 連結和授權。",
+      "edit": "提出新版本",
+      "validUntil": "有效期限至（選填）",
+      "status": {
+        "draft": "草稿",
+        "active": "有效",
+        "pending_review": "等待核准",
+        "rejected": "已拒絕",
+        "superseded": "已取代",
+        "suspended": "已暫停"
+      }
+    },
+    "strata": {
+      "title": "Strata Certa",
+      "description": "連結您現有的 ERP 帳戶。工具會使用您目前的權限。",
+      "connect": "連結 Strata Certa",
+      "disconnect": "解除帳戶連結",
+      "refresh": "更新連結",
+      "unconfigured": "管理員仍需設定與 Strata 的連線。",
+      "notLinked": "尚未連結 Strata 帳戶。",
+      "linkedAs": "已連結的帳戶：{{name}}",
+      "organization": "ERP 公司",
+      "chooseOrganization": "選擇您有權存取的公司",
+      "failed": "無法完成操作。請檢查您的 Strata 存取權限後再試一次。",
+      "browserOpened": "請在瀏覽器中繼續登入，然後在此更新連結。",
+      "permissions": "ERP 會在每次操作時檢查權限。",
+      "consent": "當 ERP 要求確認時，請在 Strata 安全頁面上完成確認。",
+      "disconnectTitle": "解除 Strata 帳戶連結？",
+      "disconnectBody": "後續 ERP 查詢和操作將需要重新連結。",
+      "disconnected": "已解除 Strata 帳戶連結。",
+      "connecting": "等候登入 Strata",
+      "unavailable": "目前無法驗證連結。"
     }
   }
 }

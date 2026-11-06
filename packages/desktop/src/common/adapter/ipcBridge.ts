@@ -164,6 +164,19 @@ export const shell = {
 };
 
 export const jr = {
+  assistant: {
+    identity: bridge.buildProvider<{ ownerAccountId: string; assistantId: string }, void>('jr-assistant-identity'),
+    create: bridge.buildProvider<{ ownerAccountId: string; assistantId: string }, { name: string }>(
+      'jr-assistant-create'
+    ),
+  },
+  strata: {
+    changed: bridge.buildEmitter<{ reason: 'organization' | 'connection' | 'disconnection' }>('jr-strata-changed'),
+    status: bridge.buildProvider<import('@/common/config/clientSettings').JrStrataStatus, void>('jr-strata-status'),
+    connect: bridge.buildProvider<{ expiresAt: string }, void>('jr-strata-connect'),
+    organization: bridge.buildProvider<void, { organizationId: string }>('jr-strata-organization'),
+    disconnect: bridge.buildProvider<void, void>('jr-strata-disconnect'),
+  },
   status: bridge.buildProvider<JrConnectionStatus, void>('jr-status'),
   createWorkspace: bridge.buildProvider<string, void>('jr-create-workspace'),
   configureWorkspace: bridge.buildProvider<void, { workspace: string }>('jr-configure-workspace'),
@@ -2675,10 +2688,31 @@ export const teach = {
 };
 
 // ---------------------------------------------------------------------------
-// Cérebro da empresa — silent capture, the data notice and the managers' screen (`manage.*`).
+// Company brain — explicit note consent, notice and manager review.
 // ---------------------------------------------------------------------------
 
 export const brain = {
+  notes: {
+    create: bridge.buildProvider<
+      import('@/common/types/agent/brainTypes').BrainProposalResult,
+      { excerpt?: string; factId?: number; sourceRole?: 'user' | 'assistant' }
+    >('brain:notes-create'),
+    revise: bridge.buildProvider<
+      import('@/common/types/agent/brainTypes').BrainProposalResult,
+      import('@/common/types/agent/brainTypes').BrainProposalPatch & { id: string }
+    >('brain:notes-revise'),
+    consent: bridge.buildProvider<
+      import('@/common/types/agent/brainTypes').BrainProposalResult,
+      import('@/common/types/agent/brainTypes').BrainProposalConsent
+    >('brain:notes-consent'),
+    pending: bridge.buildProvider<import('@/common/types/agent/brainTypes').BrainNoteProposal[], void>(
+      'brain:notes-pending'
+    ),
+    review: bridge.buildProvider<
+      import('@/common/types/agent/brainTypes').BrainProposalResult,
+      { id: string; version: number; decision: 'approve' | 'reject' }
+    >('brain:notes-review'),
+  },
   /** Notice state: which version was acknowledged. Nothing waits for it. */
   consentState: bridge.buildProvider<import('@/common/types/agent/brainTypes').BrainNoticeState, void>(
     'brain:consent-state'
@@ -2687,7 +2721,7 @@ export const brain = {
   accept: bridge.buildProvider<import('@/common/types/agent/brainTypes').BrainNoticeState, { termVersion: string }>(
     'brain:accept'
   ),
-  /** Hands a conversation stretch to main. Always resolves; failures are silent. */
+  /** Deprecated: inert compatibility endpoint. Old queue content is not replayed. */
   captureStretch: bridge.buildProvider<void, import('@/common/types/agent/brainTypes').BrainCaptureInput>(
     'brain:capture-stretch'
   ),
@@ -2740,9 +2774,25 @@ export type LearnGenerateResult = import('@/common/types/agent/learnTypes').Lear
 
 export const learn = {
   state: bridge.buildProvider<LearnState, void>('learn:state'),
+  setConsent: bridge.buildProvider<LearnState, { enabled: boolean }>('learn:set-consent'),
+  workflow: {
+    state: bridge.buildProvider<import('@/common/types/agent/learnTypes').WorkFlowState, void>('learn:workflow-state'),
+    start: bridge.buildProvider<void, { name: string }>('learn:workflow-start'),
+    step: bridge.buildProvider<void, Omit<import('@/common/types/agent/learnTypes').WorkStep, 'id'>>(
+      'learn:workflow-step'
+    ),
+    complete: bridge.buildProvider<void, void>('learn:workflow-complete'),
+    review: bridge.buildProvider<void, import('@/common/types/agent/learnTypes').WorkRoutineReview>(
+      'learn:workflow-review'
+    ),
+    monthly: bridge.buildProvider<import('@/common/types/agent/learnTypes').WorkMonthlyMap | null, { month: string }>(
+      'learn:workflow-monthly'
+    ),
+    observations: bridge.buildProvider<void, { month: string; text: string }>('learn:workflow-observations'),
+  },
   /** Main → renderer: every state change (status, pause, raw hours, sampler error). */
   stateChanged: bridge.buildEmitter<LearnState>('learn:state-changed'),
-  /** The one 15-minute pause of the local day; a second call the same day does nothing. */
+  /** Collection remains paused until the employee resumes it. */
   pause: bridge.buildProvider<LearnState, void>('learn:pause'),
   resume: bridge.buildProvider<LearnState, void>('learn:resume'),
   getExclusions: bridge.buildProvider<LearnExclusion[], void>('learn:get-exclusions'),

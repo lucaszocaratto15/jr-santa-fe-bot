@@ -12,6 +12,7 @@ import type { FillOptions, FillResult } from './secretFill';
 import { formatHandbookForBot, handbookEmptyText, HANDBOOK_UNAVAILABLE_TEXT } from './handbookForBot';
 import { BRAIN_UNAVAILABLE_TEXT, BRAIN_WRONG_RECORDED_TEXT, formatBrainFacts } from './brainForBot';
 import type { SecureInputBroker, SecureKind } from './secureInput';
+import type { createStrataClient } from '../../jr/strataClient';
 
 export type TeachHandlerDeps = {
   vault(): VaultStore | null;
@@ -33,6 +34,7 @@ export type TeachHandlerDeps = {
   } | null;
   /** Whether the signed-in JR user is an administrator (only admins may ask for another role). */
   isAdmin(): boolean;
+  strata?: () => ReturnType<typeof createStrataClient>;
 };
 
 const INVALID = { ok: false, error: 'pedido inválido' } as const;
@@ -69,6 +71,32 @@ export function buildTeachHandlers(deps: TeachHandlerDeps): TeachHandlers {
   let adminLookedUpRole: string | null = null;
 
   return {
+    strata_list_tools: async () => {
+      try {
+        if (!deps.strata) return { ok: false, error: 'strata_unavailable' };
+        return { ok: true, tools: await deps.strata().tools() };
+      } catch {
+        return { ok: false, error: 'strata_unavailable' };
+      }
+    },
+    strata_call_tool: async (body) => {
+      const name = field(body, 'name');
+      const args = field(body, 'arguments');
+      if (
+        typeof name !== 'string' ||
+        !/^[A-Za-z0-9_.-]{1,100}$/.test(name) ||
+        typeof args !== 'object' ||
+        args === null ||
+        Array.isArray(args)
+      )
+        return INVALID;
+      try {
+        if (!deps.strata) return { ok: false, error: 'strata_unavailable' };
+        return await deps.strata().callTool({ name, arguments: args as Record<string, unknown> });
+      } catch {
+        return { ok: false, error: 'strata_unavailable' };
+      }
+    },
     vault_list: async () => {
       const vault = usableVault();
       if (!vault) return UNAVAILABLE;

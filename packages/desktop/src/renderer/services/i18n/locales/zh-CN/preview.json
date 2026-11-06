@@ -153,7 +153,10 @@
     "tabLimitReached": "标签页数量已达上限（{{count}} 个），已复用最早打开的标签页。",
     "agentFirstUseTitle": "Agent 正在使用应用内浏览器",
     "agentFirstUseContent": "它可以在这个面板里打开网页、点击和读取内容。你的登录状态会被保留。",
-    "agentFirstUseAction": "前往设置"
+    "agentFirstUseAction": "前往设置",
+    "tabProtected": "此浏览器正在使用中。关闭或替换标签页前，请先完成任务、录制或安全登录，或将控制权交还给机器人。",
+    "sessionLimitReached": "浏览器已打开 {{count}} 个会话。打开新会话前，请关闭未使用的标签页；其他项目中的会话会保持打开。",
+    "popupBlocked": "新标签页已被阻止，因为发起打开操作的浏览器在此项目中未处于活动状态。请从当前项目的浏览器打开链接。"
   },
   "saveConflict": "保存失败：该文件在你打开后已被改动。可重新加载查看其他改动——你的编辑仍在，尚未保存。",
   "persistQuotaExceeded": "本地存储已满，无法再记住该项目打开的标签页。请关闭一些标签页或清理站点数据。",

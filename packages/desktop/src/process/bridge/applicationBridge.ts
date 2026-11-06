@@ -17,9 +17,15 @@ import { initApplicationBridgeCore } from './applicationBridgeCore';
 import type { IStartOnBootStatus } from '@/common/adapter/ipcBridge';
 import { restartApplication } from './restartApplication';
 import { getJrConnectionStatus } from '@process/services/jr/usage';
-import { configureJrWorkspaceContext, createJrWorkspace, readLoopbackProviders } from '@process/services/jr/bootstrap';
+import {
+  configureJrWorkspaceContext,
+  createJrWorkspace,
+  readLoopbackProviders,
+  createEmployeeAssistantRegistry,
+} from '@process/services/jr/bootstrap';
 import { getJrAccessController } from '@process/services/jr/auth';
 import { appendJrOpenLog } from '@process/services/jr/openLog';
+import { initStrataBridge } from '@process/services/jr/strataIpc';
 
 let mainWindowRef: BrowserWindow | null = null;
 
@@ -121,6 +127,20 @@ export function initApplicationBridge(): void {
     return configureJrWorkspaceContext(app.getPath('userData'), workspace);
   });
   ipcBridge.jr.accessStatus.provider(() => getJrAccessController().accessStatus());
+  ipcBridge.jr.assistant.identity.provider(() => {
+    const { ownerAccountId, assistantId } = getJrAccessController().employeeAssistantIdentity();
+    return { ownerAccountId, assistantId };
+  });
+  ipcBridge.jr.assistant.create.provider(
+    createEmployeeAssistantRegistry({
+      identity: () => getJrAccessController().employeeAssistantIdentity(),
+      list: () => ipcBridge.assistants.list.invoke(),
+      create: (input) => ipcBridge.assistants.create.invoke(input),
+      skills: async () =>
+        (await ipcBridge.fs.listAvailableSkills.invoke()).map((skill) => skill.name.trim()).filter(Boolean),
+    })
+  );
+  initStrataBridge();
   ipcBridge.jr.login.provider((input) => getJrAccessController().login(input));
   ipcBridge.jr.logout.provider(() => getJrAccessController().logout());
   ipcBridge.jr.ensureGateway.provider(() => getJrAccessController().ensureGateway());

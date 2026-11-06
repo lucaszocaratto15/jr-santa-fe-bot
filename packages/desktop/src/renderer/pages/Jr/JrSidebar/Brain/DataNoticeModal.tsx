@@ -21,8 +21,7 @@ type DataNoticeModalProps = {
 };
 
 /**
- * "Aviso de uso de dados" (BRAIN_TERM_VERSION). A notice, not a consent: the employee can only
- * acknowledge it, and capture and Aprender run whether or not they do.
+ * Data notice only. Per-note authorization and private work-learning opt-in are separate controls.
  */
 const DataNoticeModal: React.FC<DataNoticeModalProps> = ({ open, onClose }) => {
   const { t } = useTranslation();

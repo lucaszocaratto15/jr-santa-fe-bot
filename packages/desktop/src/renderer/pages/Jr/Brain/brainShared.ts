@@ -1,4 +1,26 @@
 import { BRAIN_FALLBACK_AREA_NAME, type BrainManagedFact } from '@/common/types/agent/brainTypes';
+import { ipcBridge } from '@/common';
+import { useSyncExternalStore } from 'react';
+
+let contextVersion = 0;
+const contextListeners = new Set<() => void>();
+const invalidateBrainContext = (): void => {
+  contextVersion++;
+  for (const listener of contextListeners) listener();
+};
+ipcBridge.jr?.strata?.changed?.on?.(invalidateBrainContext);
+ipcBridge.jr?.accessChanged?.on?.((state) => {
+  if (state.status !== 'authenticated') invalidateBrainContext();
+});
+const subscribeContext = (listener: () => void): (() => void) => {
+  contextListeners.add(listener);
+  return () => contextListeners.delete(listener);
+};
+export const getBrainContextVersion = (): number => contextVersion;
+
+/** A changed ERP account or company must never reuse a previous company's cached content. */
+export const useBrainContextVersion = (): number =>
+  useSyncExternalStore(subscribeContext, getBrainContextVersion, getBrainContextVersion);
 
 export type BrainAreaOption = { id: number; name: string; isGeneral: boolean; isFallback: boolean };
 

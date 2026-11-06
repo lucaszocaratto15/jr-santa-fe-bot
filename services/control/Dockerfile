@@ -8,6 +8,7 @@ ENV NODE_ENV=production \
 WORKDIR /app
 RUN mkdir /data && chown node:node /data
 COPY --chown=node:node index.mjs server.mjs store.mjs proxy.mjs validation.mjs compact.mjs handbook.mjs brain.mjs ./
+COPY --chown=node:node strata ./strata
 
 USER node
 EXPOSE 8787

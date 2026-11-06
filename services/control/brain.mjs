@@ -5,17 +5,52 @@
  * ever forwarded. Request and response bodies are never logged on this path.
  */
 import { httpError } from './validation.mjs';
+import { createHash, createHmac, randomUUID } from 'node:crypto';
 
 export const BRAIN_BODY_LIMIT = 256 * 1024;
 /** Forwarded requests: a hung brain answers 503 quickly instead of holding the employee's request. */
 export const BRAIN_TIMEOUT_MS = 4_000;
-/** `/peers` lookups gate handbook reads; they fall back to the caller's own role on failure. */
+/** Explicit draft extraction may wait for the configured curator model timeout. */
+export const BRAIN_PROPOSAL_TIMEOUT_MS = 65_000;
+/** Legacy timeout retained for compatibility; peer-based handbook access is disabled. */
 export const BRAIN_PEERS_TIMEOUT_MS = 2_000;
 const PREFIX = '/api/brain';
 const METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
 /** Characters allowed in a forwarded path; dot segments are rejected separately. */
 const SAFE_PATH = /^(?:\/[A-Za-z0-9._~%:@-]+)*\/?$/u;
 const SAFE_HEADER = /^[\x20-\x7e]*$/u;
+const PRINCIPAL_ID = /^[A-Za-z0-9._:@-]{1,128}$/u;
+
+/** Request-bound identity proof, never a grant of JR areas or an ERP bearer token. */
+export function brainPrincipalProof(secret, identity, principal, method, path, body, now = Date.now) {
+  if (
+    !principal ||
+    principal.jrUserId !== identity.id ||
+    !PRINCIPAL_ID.test(principal.erpUserId ?? '') ||
+    !PRINCIPAL_ID.test(principal.organizationId ?? '')
+  )
+    throw httpError(403, 'authorization_failed');
+  const issuedAt = now();
+  const payload = Buffer.from(
+    JSON.stringify({
+      v: principal.knowledgePolicy?.group ? 3 : principal.knowledgePolicy ? 2 : 1,
+      jrUserId: identity.id,
+      erpUserId: principal.erpUserId,
+      organizationId: principal.organizationId,
+      ...(principal.knowledgePolicy ? { knowledgePolicy: principal.knowledgePolicy } : {}),
+      method,
+      path,
+      bodyHash: createHash('sha256')
+        .update(body === undefined ? '' : JSON.stringify(body))
+        .digest('hex'),
+      issuedAt,
+      expiresAt: issuedAt + 30_000,
+      nonce: randomUUID(),
+    })
+  ).toString('base64url');
+  if (payload.length > 48_000) throw httpError(403, 'authorization_failed');
+  return `${payload}.${createHmac('sha256', secret).update(payload).digest('base64url')}`;
+}
 
 const hasDotSegment = (path) =>
   path.split('/').some((segment) => {
@@ -45,7 +80,8 @@ export async function brainRequest(
   path,
   body,
   brainFetch = fetch,
-  timeoutMs = BRAIN_TIMEOUT_MS
+  timeoutMs = BRAIN_TIMEOUT_MS,
+  principal
 ) {
   if (!config?.brain) throw httpError(404, 'not_found');
   if (identity?.id === 'curator') throw httpError(403, 'forbidden');
@@ -55,6 +91,8 @@ export async function brainRequest(
     'x-jr-role': headerValue(String(identity.role)),
   };
   if (identity.title) headers['x-jr-title'] = headerValue(String(identity.title));
+  if (principal)
+    headers['x-brain-erp-context'] = brainPrincipalProof(config.brain.secret, identity, principal, method, path, body);
   if (body !== undefined) headers['content-type'] = 'application/json';
   let result;
   try {
@@ -65,6 +103,17 @@ export async function brainRequest(
       redirect: 'manual',
       signal: AbortSignal.timeout(timeoutMs),
     });
+    if (
+      principal?.knowledgePolicy &&
+      reply.ok &&
+      (reply.headers.get('x-brain-authorization') !== (principal.knowledgePolicy.group ? 'erp-v3' : 'erp-v2') ||
+        (principal.knowledgePolicy.group &&
+          reply.headers.get('x-brain-group') !== principal.knowledgePolicy.group.id) ||
+        reply.headers.get('x-brain-organization') !== principal.organizationId)
+    ) {
+      await reply.body?.cancel();
+      throw httpError(503, 'brain_unavailable');
+    }
     const text = await reply.text();
     result = { status: reply.status, body: text ? JSON.parse(text) : null };
   } catch {
@@ -75,7 +124,17 @@ export async function brainRequest(
 }
 
 /** Handle `/api/brain/*`; returns true when the request was answered. */
-export async function handleBrain({ request, response, session, config, readJson, json, reauth, brainFetch }) {
+export async function handleBrain({
+  request,
+  response,
+  session,
+  config,
+  readJson,
+  json,
+  reauth,
+  brainFetch,
+  resolvePrincipal,
+}) {
   const url = request.url ?? '';
   const queryAt = url.indexOf('?');
   const path = queryAt === -1 ? url : url.slice(0, queryAt);
@@ -93,7 +152,24 @@ export async function handleBrain({ request, response, session, config, readJson
     body = await readJson(request, BRAIN_BODY_LIMIT);
     reauth(request);
   }
-  const result = await brainRequest(config, session.user, method, `${rest}${query}`, body, brainFetch);
+  const timeout = method === 'POST' && rest === '/proposals' ? BRAIN_PROPOSAL_TIMEOUT_MS : BRAIN_TIMEOUT_MS;
+  let principal;
+  if (resolvePrincipal && rest !== '/capture') {
+    principal = await resolvePrincipal(session, method === 'POST' && ['/search', '/feedback'].includes(rest));
+    reauth(request);
+  }
+  const result = await brainRequest(
+    config,
+    session.user,
+    method,
+    `${rest}${query}`,
+    body,
+    brainFetch,
+    timeout,
+    principal
+  );
+  reauth(request);
+  await principal?.assertCurrent?.();
   if (result.body === null) {
     response.writeHead(result.status, { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
     response.end();

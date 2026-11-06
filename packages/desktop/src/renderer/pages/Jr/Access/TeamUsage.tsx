@@ -25,7 +25,7 @@ export function teamUsageRows(people: JrAdminEmployee[], days: UsagePeriodDays):
       last5h: readUsageConsumption(person.usage).last5h,
       period: usagePeriod(person.usage, days),
     }))
-    .sort((a, b) => (b.period.tokens ?? -1) - (a.period.tokens ?? -1));
+    .toSorted((a, b) => (b.period.tokens ?? -1) - (a.period.tokens ?? -1));
 }
 
 const initials = (name: string) =>

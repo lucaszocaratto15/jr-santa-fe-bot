@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { readdir } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { join } from 'node:path';
 import type { spawn as nodeSpawn } from 'node:child_process';
 import {
   type LearnExclusion,
@@ -12,15 +15,17 @@ import {
   type LearnSample,
   type LearnState,
   type LearnStatus,
+  type ObservedWorkSource,
 } from '@/common/types/agent/learnTypes';
 import type { OsEncryption } from '@process/services/jr/auth';
 import type { JrRelayConfig } from '@process/services/jr/bootstrap';
 import { generateInsights } from './insights';
-import { createLearnSettings, sanitizeExclusions, type LearnSettingsData } from './learnSettings';
+import { createLearnSettings, sanitizeExclusions, type LearnSettingsData, type LearnSettings } from './learnSettings';
 import { DEFAULT_EXCLUSIONS, isExcluded, redactTitle, redactUrl } from './privacyFilter';
 import { createSampler, type Sampler } from './sampler';
-import { createInsightStore, createSampleStore, encryptionUsable } from './sampleStore';
+import { createInsightStore, createSampleStore, encryptionUsable, learnProfileDir } from './sampleStore';
 import { JR_APP_LABEL, LEARN_TICK_MS } from './summary';
+import { createWorkflows } from './workflow';
 
 export const LEARN_IDLE_SKIP_S = 120;
 export const LEARN_HOURLY_MS = 3_600_000;
@@ -29,8 +34,6 @@ const DAY_MS = 86_400_000;
 export const MIN_DAILY_SAMPLES = 120;
 export const MIN_MANUAL_SAMPLES = 20;
 export const MAX_DAILY_ATTEMPTS = 3;
-/** The single daily pause: it lasts this long and then sampling resumes by itself. */
-export const PAUSE_MINUTES = 15;
 /** darwin: this many title-less OS samples in a row with the permission granted → report app-only. */
 export const TITLELESS_SAMPLES_FOR_APP_ONLY = 20;
 
@@ -56,14 +59,19 @@ export type LearnServiceDeps = {
   emit: (state: LearnState) => void;
   /** Test seam for the model call. */
   request?: typeof fetch;
+  settings?: LearnSettings;
 };
 
 export type LearnService = {
   init(): Promise<LearnState>;
+  refreshProfile(): Promise<void>;
+  setConsent(enabled: boolean): Promise<LearnState>;
+  workflows: ReturnType<typeof createWorkflows>;
+  /** Main-only receipt closure. Capture before asynchronous work, complete only after a verified action. */
+  beginWorkEvent(source: ObservedWorkSource, context?: { origin: string }): (() => Promise<void>) | null;
   state(): LearnState;
   /**
-   * The one pause of the local day (PAUSE_MINUTES, auto-resume). A second call the same day is
-   * a silent no-op. Aprender has no off switch.
+   * Pause collection indefinitely; only an explicit resume restarts it.
    */
   pause(): Promise<LearnState>;
   /** Ends today's pause early, or restarts the sampler after it gave up. */
@@ -88,22 +96,29 @@ const localDay = (t: number): string => {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 };
 
-/**
- * Always-on observer: it samples from launch for every employee, with no consent step and no
- * off switch (the Data Notice informs; the stated purpose is understanding the work to help the
- * employee, never performance evaluation or time control). Only the one daily pause, a locked
- * screen or idleness stop sampling. Pause state lives in memory; the only thing persisted is the
- * local date of today's pause.
- */
+/** Work observation is opt-in per authenticated employee; pausing stops collection until resumed. */
 export function createLearnService(deps: LearnServiceDeps): LearnService {
-  const settings = createLearnSettings(deps.root);
-  const samples = createSampleStore(deps.root, deps.encryption);
+  const settings = deps.settings ?? createLearnSettings(deps.root);
+  const samplesFor = (id: string) => createSampleStore(learnProfileDir(deps.root, id), deps.encryption);
+  // Legacy observations are never attributed or replayed; their existing expiry and explicit wipe still apply.
+  const legacySamples = createSampleStore(deps.root, deps.encryption);
+  const purgeProfileSamples = async () => {
+    const profiles = join(deps.root, 'profiles');
+    const names = await readdir(profiles).catch((): string[] => []);
+    await Promise.all([
+      legacySamples.purge(deps.now()),
+      ...names
+        .filter((name) => /^[a-f0-9]{64}$/.test(name))
+        .map((name) => createSampleStore(join(profiles, name), deps.encryption).purge(deps.now())),
+    ]);
+  };
   const insights = createInsightStore(deps.root, deps.encryption);
 
   let data: LearnSettingsData | null = null;
-  /** Today's pause: memory only, a restart simply resumes. */
-  let pausedUntil: number | null = null;
+
   let rawHours = 0;
+  let rawHoursOwner: string | null = null;
+  let transitionStatus: 'disabled' | 'paused' | null = null;
   let samplerError = false;
   let sampler: Sampler | null = null;
   let tickTimer: unknown = null;
@@ -127,23 +142,29 @@ export function createLearnService(deps: LearnServiceDeps): LearnService {
 
   const deriveStatus = (): LearnStatus => {
     if (unavailableReason()) return 'unavailable';
-    if (pausedUntil !== null && deps.now() < pausedUntil) return 'paused';
+    if (transitionStatus) return transitionStatus;
+    if (!data?.enabled || !data.consentUserId || data.consentUserId !== deps.currentUser()?.id) return 'disabled';
+    if (data.paused) return 'paused';
     return 'active';
   };
 
   const computeState = (): LearnState => {
     const status = deriveStatus();
     return {
+      ownerId: deps.currentUser()?.id ?? null,
+      workEventsEnabled: Boolean(
+        data?.enabled && data.consentUserId === deps.currentUser()?.id && data.workEventsConsentVersion === 1
+      ),
       status,
       unavailableReason: status === 'unavailable' ? unavailableReason() : null,
-      pausedUntil: status === 'paused' ? pausedUntil : null,
-      pauseAvailable: status !== 'unavailable' && data?.pauseDay !== localDay(deps.now()),
+      pausedUntil: null,
+      pauseAvailable: status === 'active',
       titles:
         deps.platform === 'darwin' && (!deps.screenTitlesGranted() || titlelessRun >= TITLELESS_SAMPLES_FOR_APP_ONLY)
           ? 'app-only'
           : 'full',
       samplerError,
-      rawHours,
+      rawHours: rawHoursOwner === deps.currentUser()?.id ? rawHours : 0,
       lastInsightsAt: data?.lastSummaryAt ?? null,
       activeSince: status === 'active' ? activeSince : null,
     };
@@ -154,16 +175,16 @@ export function createLearnService(deps: LearnServiceDeps): LearnService {
     sampler = null;
   };
 
-  /** Tick timer runs while active or paused (to notice the end of a timed pause). */
+  /** No foreground polling runs before consent or while paused. */
   const syncTimers = (status: LearnStatus) => {
-    const wantsTick = !disposed && (status === 'active' || status === 'paused');
+    const wantsTick = !disposed && status === 'active';
     if (wantsTick && tickTimer === null) {
       tickTimer = deps.setInterval(() => void service.tick(), LEARN_TICK_MS);
     } else if (!wantsTick && tickTimer !== null) {
       deps.clearInterval(tickTimer);
       tickTimer = null;
     }
-    // The child lives while active or paused, and dies otherwise.
+    // Pausing or revoking consent also terminates the foreground sampler.
     if (!wantsTick) stopSampler();
   };
 
@@ -182,10 +203,19 @@ export function createLearnService(deps: LearnServiceDeps): LearnService {
   };
 
   const refreshRawHours = async () => {
+    const id = deps.currentUser()?.id;
+    if (!id) {
+      rawHours = 0;
+      rawHoursOwner = null;
+      return;
+    }
     try {
-      rawHours = await samples.hours();
+      const hours = await samplesFor(id).hours();
+      if (deps.currentUser()?.id !== id) return;
+      rawHoursOwner = id;
+      rawHours = hours;
     } catch {
-      // Keep the last value.
+      /* Keep only this profile's last count. */
     }
   };
 
@@ -207,7 +237,8 @@ export function createLearnService(deps: LearnServiceDeps): LearnService {
   const collect = async (gen: number): Promise<void> => {
     if (deriveStatus() !== 'active') return;
     // Only an employee who is logged in is observed.
-    if (!deps.currentUser()) {
+    const ownerId = deps.currentUser()?.id;
+    if (!ownerId) {
       stopSampler();
       return;
     }
@@ -232,12 +263,17 @@ export function createLearnService(deps: LearnServiceDeps): LearnService {
       sample = { app: foreground.app, title: foreground.title };
     }
     // Paused while the child answered: drop it.
-    if (gen !== generation || deriveStatus() !== 'active' || !data) return;
+    if (gen !== generation || deriveStatus() !== 'active' || !data || deps.currentUser()?.id !== ownerId) return;
     // Exclusions match the raw sample (an e-mail rule needs the address), then secrets are
     // redacted before anything is written: no codes, documents or url parameters on disk.
     if (isExcluded(sample, data.exclusions)) return;
     const url = redactUrl(sample.url);
-    await samples.append({ app: sample.app, title: redactTitle(sample.title), ...(url ? { url } : {}), t: deps.now() });
+    await samplesFor(ownerId).append({
+      app: sample.app,
+      title: redactTitle(sample.title),
+      ...(url ? { url } : {}),
+      t: deps.now(),
+    });
     await refreshRawHours();
     publish();
   };
@@ -248,12 +284,16 @@ export function createLearnService(deps: LearnServiceDeps): LearnService {
     const abort = new AbortController();
     runAbort = abort;
     const run = (async (): Promise<LearnGenerateResult> => {
+      const ownerId = deps.currentUser()?.id;
+      if (!ownerId || data?.consentUserId !== ownerId) return { ok: false, code: 'unavailable' };
       const now = deps.now();
       // Exclusions added after collection also cover what is already on disk.
       const exclusions = data?.exclusions ?? [];
-      const recent = (await samples.readSince(now - DAY_MS, now)).filter((sample) => !isExcluded(sample, exclusions));
+      const recent = (
+        await samplesFor(ownerId).readSince(Math.max(now - DAY_MS, data?.consentedAt ?? now), now)
+      ).filter((sample) => !isExcluded(sample, exclusions));
       if (recent.length < minSamples) return { ok: false, code: 'no-data' };
-      if (gen !== generation) return { ok: false, code: 'unavailable' };
+      if (gen !== generation || deps.currentUser()?.id !== ownerId) return { ok: false, code: 'unavailable' };
       const result = await generateInsights({
         samples: recent,
         connection: deps.connection(),
@@ -261,10 +301,15 @@ export function createLearnService(deps: LearnServiceDeps): LearnService {
         request: deps.request,
         signal: abort.signal,
       });
-      if (gen !== generation) return { ok: false, code: 'unavailable' };
+      if (gen !== generation || deps.currentUser()?.id !== ownerId) return { ok: false, code: 'unavailable' };
       if (!result.ok) return result;
+      result.batch.ownerUserId = ownerId;
+      if (!result.batch.ownerUserId || data?.consentUserId !== result.batch.ownerUserId)
+        return { ok: false, code: 'unavailable' };
       await insights.add(result.batch);
+      if (gen !== generation || deps.currentUser()?.id !== ownerId) return { ok: false, code: 'unavailable' };
       await write({ lastSummaryAt: result.batch.createdAt });
+      if (gen !== generation || deps.currentUser()?.id !== ownerId) return { ok: false, code: 'unavailable' };
       publish();
       return result;
     })();
@@ -279,45 +324,151 @@ export function createLearnService(deps: LearnServiceDeps): LearnService {
   };
 
   const dailyCheck = async () => {
-    if (!data || deriveStatus() === 'unavailable' || !deps.currentUser()) return;
+    if (!data || !['active', 'paused'].includes(deriveStatus()) || !deps.currentUser()) return;
     const now = deps.now();
     if (data.lastSummaryAt !== null && now - data.lastSummaryAt < DAY_MS) return;
     const day = localDay(now);
     const attempts = data.attempts.day === day ? data.attempts.count : 0;
     if (attempts >= MAX_DAILY_ATTEMPTS) return;
-    if ((await samples.count(now - DAY_MS, now)) < MIN_DAILY_SAMPLES) return;
+    if (
+      (await samplesFor(deps.currentUser()!.id).count(Math.max(now - DAY_MS, data.consentedAt ?? now), now)) <
+      MIN_DAILY_SAMPLES
+    )
+      return;
     await write({ attempts: { day, count: attempts + 1 } });
     await runInsights(MIN_DAILY_SAMPLES);
   };
 
+  const workflows = createWorkflows({
+    root: deps.root,
+    encryption: deps.encryption,
+    currentUser: deps.currentUser,
+    collecting: () => deriveStatus() === 'active',
+    now: deps.now,
+  });
   const service: LearnService = {
+    workflows,
+    beginWorkEvent(source, context) {
+      const ownerId = deps.currentUser()?.id;
+      let origin: string | undefined;
+      if (source === 'browser.download') {
+        try {
+          const url = new URL(context?.origin ?? '');
+          if (
+            !['https:', 'http:'].includes(url.protocol) ||
+            url.username ||
+            url.password ||
+            url.origin !== context?.origin
+          )
+            return null;
+          origin = url.origin;
+        } catch {
+          return null;
+        }
+      }
+      const excluded = () =>
+        isExcluded({ app: JR_APP_LABEL, title: null, ...(origin ? { url: origin } : {}) }, data?.exclusions ?? []);
+      if (
+        disposed ||
+        !ownerId ||
+        deriveStatus() !== 'active' ||
+        data?.workEventsConsentVersion !== 1 ||
+        !['erp.read', 'browser.download'].includes(source) ||
+        excluded()
+      )
+        return null;
+      const gen = generation;
+      const id = randomUUID();
+      let completed = false;
+      const current = () =>
+        !disposed &&
+        gen === generation &&
+        deps.currentUser()?.id === ownerId &&
+        deriveStatus() === 'active' &&
+        data?.workEventsConsentVersion === 1 &&
+        !excluded();
+      return async () => {
+        if (completed) return;
+        completed = true;
+        if (!current()) return;
+        try {
+          await workflows.observe(source, id, current);
+        } catch (error) {
+          if (!current() || (error instanceof Error && error.message === 'workflow_observation_stale')) return;
+          throw error;
+        }
+      };
+    },
     async init() {
       await load();
       await refreshRawHours();
       if (hourlyTimer === null && !disposed) {
         hourlyTimer = deps.setInterval(() => void service.hourly(), LEARN_HOURLY_MS);
       }
-      await Promise.all([samples.purge(deps.now()), insights.purge(deps.now())]).catch(() => {});
+      await Promise.all([purgeProfileSamples(), insights.purge(deps.now()), workflows.purge()]).catch(() => {});
       await refreshRawHours();
       return publish();
     },
 
     state: computeState,
 
-    async pause() {
+    async refreshProfile() {
+      const gen = ++generation;
+      runAbort?.abort();
+      stopSampler();
+      transitionStatus = 'disabled';
+      publish();
+      await load();
+      await refreshRawHours();
+      if (gen !== generation) return;
+      transitionStatus = null;
+      publish();
+    },
+
+    async setConsent(enabled) {
+      if (typeof enabled !== 'boolean') throw new Error('invalid_consent');
+      const id = deps.currentUser()?.id;
+      if (!id || unavailableReason()) throw new Error('learn_unavailable');
+      const gen = ++generation;
+      transitionStatus = 'disabled';
+      runAbort?.abort();
+      stopSampler();
+      publish();
       if (!data) await load();
-      const today = localDay(deps.now());
-      // One per local day; the control is hidden afterwards, so a refused call says nothing.
-      if (deriveStatus() !== 'active' || data!.pauseDay === today) return computeState();
-      // Set before the write is awaited, so a concurrent call sees the pause and cannot extend it.
-      pausedUntil = deps.now() + PAUSE_MINUTES * 60_000;
-      await write({ pauseDay: today });
+      if (deps.currentUser()?.id !== id) throw new Error('learn_identity_changed');
+      await write({
+        enabled,
+        consentUserId: id,
+        consentedAt: enabled ? deps.now() : data!.consentedAt,
+        workEventsConsentVersion: enabled ? 1 : 0,
+        paused: false,
+        lastSummaryAt: null,
+        attempts: { day: '', count: 0 },
+      });
+      if (gen !== generation || deps.currentUser()?.id !== id) throw new Error('learn_identity_changed');
+      transitionStatus = null;
+      return publish();
+    },
+
+    async pause() {
+      if (deriveStatus() !== 'active') return computeState();
+      const gen = ++generation;
+      transitionStatus = 'paused';
+      stopSampler();
+      publish();
+      await write({ paused: true });
+      if (gen === generation) transitionStatus = null;
       return publish();
     },
 
     async resume() {
-      pausedUntil = null;
-      // "Tentar de novo" after the sampler gave up: start a fresh child on the next tick.
+      if (!data?.enabled || data.consentUserId !== deps.currentUser()?.id) return publish();
+      const gen = ++generation;
+      transitionStatus = 'disabled';
+      publish();
+      await write({ paused: false });
+      if (gen !== generation) return computeState();
+      transitionStatus = null;
       if (samplerError) {
         stopSampler();
         samplerError = false;
@@ -344,21 +495,39 @@ export function createLearnService(deps: LearnServiceDeps): LearnService {
 
     async listInsights() {
       if (unavailableReason()) return [];
-      return insights.list();
+      const userId = deps.currentUser()?.id;
+      const gen = generation;
+      if (!userId) return [];
+      const batches = await insights.list();
+      if (gen !== generation || deps.currentUser()?.id !== userId) return [];
+      return batches.filter((batch) => batch.ownerUserId === userId);
     },
 
     async deleteInsight(id) {
+      const userId = deps.currentUser()?.id;
+      const gen = generation;
+      const mine = (await insights.list()).find((batch) => batch.id === id && batch.ownerUserId === userId);
+      if (!userId || gen !== generation || deps.currentUser()?.id !== userId || !mine)
+        throw new Error('insight_not_found');
       await insights.remove(id);
     },
 
     async generateNow() {
-      if (deriveStatus() === 'unavailable') return { ok: false, code: 'unavailable' };
+      if (!['active', 'paused'].includes(deriveStatus())) return { ok: false, code: 'unavailable' };
       return runInsights(MIN_MANUAL_SAMPLES);
     },
 
     async wipeSamples() {
+      const ownerId = deps.currentUser()?.id;
+      const gen = generation;
+      if (!ownerId) throw new Error('learn_unavailable');
       await tickInFlight?.catch(() => {});
-      await samples.wipe();
+      if (gen !== generation || deps.currentUser()?.id !== ownerId) throw new Error('learn_identity_changed');
+      await samplesFor(ownerId).wipe();
+      if (gen !== generation || deps.currentUser()?.id !== ownerId) throw new Error('learn_identity_changed');
+      await legacySamples.wipe();
+      if (gen !== generation || deps.currentUser()?.id !== ownerId) throw new Error('learn_identity_changed');
+      rawHoursOwner = ownerId;
       rawHours = 0;
       return publish();
     },
@@ -369,9 +538,8 @@ export function createLearnService(deps: LearnServiceDeps): LearnService {
       const run = (async () => {
         if (!data) await load();
         // Retention is enforced on every tick too, not only by the hourly timer.
-        await samples.purge(deps.now()).catch(() => {});
-        // The pause ended (also after sleep): resume, and let the daily pause come back at midnight.
-        if (pausedUntil !== null && deps.now() >= pausedUntil) pausedUntil = null;
+        await purgeProfileSamples().catch(() => {});
+        // A pause remains in effect until this employee explicitly resumes.
         publish();
         await collect(gen);
       })();
@@ -387,7 +555,7 @@ export function createLearnService(deps: LearnServiceDeps): LearnService {
 
     async hourly() {
       try {
-        await Promise.all([samples.purge(deps.now()), insights.purge(deps.now())]);
+        await Promise.all([purgeProfileSamples(), insights.purge(deps.now()), workflows.purge()]);
       } catch {
         // Retried next hour.
       }

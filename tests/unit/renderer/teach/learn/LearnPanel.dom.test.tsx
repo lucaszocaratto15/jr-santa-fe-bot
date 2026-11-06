@@ -10,6 +10,16 @@ const { learn, message } = vi.hoisted(() => {
   return {
     learn: {
       state: fn(),
+      setConsent: fn(),
+      workflow: {
+        state: fn(),
+        start: fn(),
+        step: fn(),
+        complete: fn(),
+        review: fn(),
+        monthly: fn(),
+        observations: fn(),
+      },
       stateChanged: { on: vi.fn(() => () => {}) },
       pause: fn(),
       resume: fn(),
@@ -66,6 +76,7 @@ import JrSettingsModal from '@renderer/pages/Jr/JrSidebar/SettingsModal';
 
 const base: LearnState = {
   status: 'active',
+  ownerId: 'test-owner',
   unavailableReason: null,
   pausedUntil: null,
   pauseAvailable: true,
@@ -119,18 +130,19 @@ beforeEach(() => {
     if ('invoke' in channel) channel.invoke.mockReset();
   }
   Object.values(message).forEach((fn) => fn.mockReset());
+  learn.workflow.state.invoke.mockResolvedValue({ active: null, routines: [] });
   learn.listInsights.invoke.mockResolvedValue([]);
   learn.getExclusions.invoke.mockResolvedValue(defaults);
 });
 
 describe('LearnPanel', () => {
-  it('has no Ativar, Desligar, Revogar or consent button: it is always on', async () => {
+  it('allows observation to be disabled independently of the data notice', async () => {
     renderPanel(active);
     await screen.findByText('Ligado');
     for (const name of ['Ativar', 'Desligar', 'Revogar consentimento e apagar tudo', 'Permitir', 'Revisar o termo']) {
       expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
     }
-    expect(screen.queryByText(/Termo aceito/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Desativar coleta' })).toBeInTheDocument();
   });
 
   it('opens the Data Notice from the link, reusing the notice text', async () => {
@@ -244,18 +256,26 @@ describe('LearnPanel', () => {
     expect(screen.queryByRole('button', { name: /Pausar/ })).not.toBeInTheDocument();
   });
 
-  it('Pausar por 15 min calls pause with no duration', async () => {
+  it('Pausar calls an indefinite pause with no duration', async () => {
     learn.pause.invoke.mockResolvedValue({ ...active, status: 'paused', pauseAvailable: false });
     renderPanel(active);
-    fireEvent.click(await screen.findByRole('button', { name: 'Pausar por 15 min' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Pausar coleta' }));
     await waitFor(() => expect(learn.pause.invoke).toHaveBeenCalledWith());
   });
 
-  it("once today's pause is used the button is gone, with no message about it", async () => {
-    renderPanel({ ...active, pauseAvailable: false });
-    await screen.findByText('Ligado');
+  it('a disabled employee sees the opt-in action and no collection controls', async () => {
+    renderPanel({ ...active, status: 'disabled', pauseAvailable: false });
+    expect(await screen.findByRole('button', { name: 'Autorizar aprendizado de trabalho' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Pausar/ })).not.toBeInTheDocument();
-    expect(screen.queryByText(/pausa|limite|amanhã|já pausou/i)).not.toBeInTheDocument();
+  });
+
+  it('requires renewed consent for real event sources instead of silently expanding earlier collection', async () => {
+    renderPanel({ ...active, workEventsEnabled: false });
+    fireEvent.click(await screen.findByRole('button', { name: 'Autorizar eventos reais de trabalho' }));
+    expect(await screen.findByText(/consultas bem-sucedidas no ERP e downloads concluídos/)).toBeInTheDocument();
+    expect(learn.setConsent.invoke).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Autorizar aprendizado de trabalho' }));
+    await waitFor(() => expect(learn.setConsent.invoke).toHaveBeenCalledWith({ enabled: true }));
   });
 
   it('while paused, Retomar ends the pause early', async () => {

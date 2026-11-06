@@ -1,8 +1,9 @@
 import { createServer } from 'node:http';
-import { BRAIN_PEERS_TIMEOUT_MS, brainRequest, handleBrain } from './brain.mjs';
+import { handleBrain } from './brain.mjs';
 import { handleHandbook } from './handbook.mjs';
 import { createModelProxy } from './proxy.mjs';
 import { createStore } from './store.mjs';
+import { createStrataService } from './strata/index.mjs';
 import { httpError, isHttpError, textField, validateConfiguration } from './validation.mjs';
 
 const json = (response, status, body) => {
@@ -12,21 +13,6 @@ const json = (response, status, body) => {
     'X-Content-Type-Options': 'nosniff',
   });
   response.end(JSON.stringify(body));
-};
-
-/** Brain `/peers` for the session, or null when the brain is not configured, down or answers badly. */
-const brainPeers = (config) => async (session) => {
-  if (!config.brain) return null;
-  const reply = await brainRequest(
-    config,
-    session.user,
-    'GET',
-    '/peers',
-    undefined,
-    config.brainFetch,
-    BRAIN_PEERS_TIMEOUT_MS
-  );
-  return reply.status === 200 ? reply.body : null;
 };
 
 async function readJson(request, limit) {
@@ -55,6 +41,7 @@ export function createControlServer(options = {}) {
   const config = validateConfiguration(options);
   const now = config.now ?? Date.now;
   const store = createStore({ ...config, now });
+  const strata = createStrataService({ ...config, now });
   const proxy = createModelProxy({ ...config, store, now });
   const loginAttempts = new Map();
   const rateLimitLogin = (address) => {
@@ -84,6 +71,10 @@ export function createControlServer(options = {}) {
         if (closing) throw httpError(503, 'service_unavailable');
         const path = request.url?.split('?')[0];
         if (request.method === 'GET' && path === '/health') return json(response, 200, { status: 'ok' });
+        if (request.method === 'GET' && path === '/strata/callback') {
+          const callback = new URL(request.url, 'http://control.invalid');
+          return json(response, 200, await strata.callback(callback.searchParams));
+        }
         if (request.method === 'POST' && path === '/auth/login') {
           rateLimitLogin(request.socket.remoteAddress ?? 'unknown');
           const body = await readJson(request, 16_384);
@@ -96,6 +87,34 @@ export function createControlServer(options = {}) {
           return json(response, 200, store.login(login));
         }
         const session = authenticate(request);
+        if (path?.startsWith('/strata/')) {
+          const current = () => authenticate(request);
+          if (request.method === 'GET' && path === '/strata/status')
+            return json(response, 200, await strata.status(session, current));
+          if (request.method === 'POST' && path === '/strata/connect') {
+            await readJson(request, 1024);
+            current();
+            return json(response, 200, await strata.connect(session, current));
+          }
+          if (request.method === 'POST' && path === '/strata/disconnect') {
+            await readJson(request, 1024);
+            current();
+            return json(response, 200, strata.disconnect(session, current));
+          }
+          if (request.method === 'POST' && path === '/strata/organization') {
+            const body = await readJson(request, 1024);
+            current();
+            return json(response, 200, await strata.organization(session, body.organizationId, current));
+          }
+          if (request.method === 'GET' && path === '/strata/mcp/tools')
+            return json(response, 200, await strata.tools(session, current));
+          if (request.method === 'POST' && path === '/strata/mcp/call') {
+            const body = await readJson(request, 70 * 1024);
+            current();
+            return json(response, 200, await strata.call(session, body.name, body.arguments, current));
+          }
+          throw httpError(404, 'not_found');
+        }
         if (request.method === 'GET' && path === '/auth/session') return json(response, 200, { user: session.user });
         if (request.method === 'POST' && path === '/auth/logout') {
           store.logout(session.sessionHash);
@@ -113,7 +132,6 @@ export function createControlServer(options = {}) {
             json,
             httpError,
             reauth: authenticate,
-            brainPeers: brainPeers(config),
           })
         )
           return;
@@ -127,6 +145,8 @@ export function createControlServer(options = {}) {
             json,
             reauth: authenticate,
             brainFetch: config.brainFetch,
+            resolvePrincipal: (currentSession, groupSearch) =>
+              strata.resolveKnowledgePrincipal(currentSession, () => authenticate(request), groupSearch),
           })
         )
           return;
@@ -187,6 +207,7 @@ export function createControlServer(options = {}) {
   server.keepAliveTimeout = 5_000;
   return {
     server,
+    strata,
     close() {
       closing ??= (async () => {
         const stopping = proxy.close();
@@ -197,6 +218,7 @@ export function createControlServer(options = {}) {
           });
         }
         await stopping;
+        strata.close();
         store.close();
       })();
       return closing;

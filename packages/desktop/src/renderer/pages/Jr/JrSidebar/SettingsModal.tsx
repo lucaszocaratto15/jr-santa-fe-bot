@@ -25,6 +25,7 @@ import { isMacOS } from '@/renderer/utils/platform';
 import { ipcBridge } from '@/common';
 import { useJrAccess, type JrAccessContextValue } from '@renderer/pages/Jr/Access/context';
 import BrainManager from '@renderer/pages/Jr/Brain/BrainManager';
+import { useBrainContextVersion } from '@renderer/pages/Jr/Brain/brainShared';
 import { ComputerPanel, GeneralPanel, UpdatesPanel } from './panels';
 import LearnPanel from './Learn/LearnPanel';
 import HandbookPanel from './Teach/HandbookPanel';
@@ -83,7 +84,6 @@ const JrSettingsModal: React.FC<{
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const bots = useSWR(tab === 'learn' ? JR_BOTS_KEY : null, listJrBots);
   // Without the company access provider nobody is a manager: the tab stays hidden.
   let access: JrAccessContextValue | null = null;
   try {
@@ -92,12 +92,21 @@ const JrSettingsModal: React.FC<{
   } catch {
     access = null;
   }
-  // The owner manages the brain from the admin page; an area manager gets this tab. Hidden on any error.
-  const me = useSWR(access ? 'jr.brain.me' : null, () => ipcBridge.brain.me.invoke(), {
+  const bots = useSWR(
+    tab === 'learn' && access?.state.user?.id ? [JR_BOTS_KEY, access.state.user.id] : null,
+    listJrBots
+  );
+  const contextVersion = useBrainContextVersion();
+  const ownerId = access?.state.user?.id;
+  // ERP capabilities, not a JR administrator role, decide whether the management tab exists.
+  const me = useSWR(ownerId ? ['jr.brain.me', ownerId, contextVersion] : null, () => ipcBridge.brain.me.invoke(), {
     shouldRetryOnError: false,
     revalidateOnFocus: false,
   });
-  const showBrain = Boolean(access) && access?.state.user?.id !== 'owner' && (me.data?.manages.length ?? 0) > 0;
+  const showBrain =
+    me.data?.permissionsSource === 'erp'
+      ? Boolean(me.data.capabilities?.revise || me.data.capabilities?.withdraw || me.data.capabilities?.approveOfficial)
+      : Boolean(access) && ownerId !== 'owner' && (me.data?.manages.length ?? 0) > 0;
   // A stored or requested 'brain' tab falls back to General for anyone who is not a manager.
   const current: SettingsTab = tab === 'brain' && !showBrain ? 'general' : tab;
   const tabs = SETTINGS_TABS.filter((id) => id !== 'brain' || showBrain);

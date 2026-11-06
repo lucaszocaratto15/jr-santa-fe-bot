@@ -751,9 +751,10 @@
         "status": {
           "active": "On",
           "paused": "Paused",
-          "unavailable": "Unavailable"
+          "unavailable": "Unavailable",
+          "disabled": "비활성화됨"
         },
-        "pause": "Pause for 15 min",
+        "pause": "수집 일시 중지",
         "resume": "Resume",
         "unavailableEncryption": "Unavailable: this computer does not offer system encryption, so nothing can be stored safely.",
         "unavailablePlatform": "Unavailable on this system.",
@@ -762,7 +763,7 @@
         "samplerError": "Observation stopped because of an error.",
         "retry": "Try again",
         "actionFailed": "Could not finish that. Try again.",
-        "intro": "Aprender looks at which programs and pages you use to understand your work and help you. It is always on, and raw records stay on this computer only. See the Data Notice for what is collected.",
+        "intro": "학습은 사용자가 허용한 경우에만 시작됩니다. 비공개 앱 메타데이터, 직접 표시한 단계, 완료된 ERP 조회 및 브라우저 다운로드를 사용하여 업무 절차 후보를 제안합니다. 수집을 일시 중지하거나 끌 수 있습니다.",
         "readNotice": "View the Data Notice"
       },
       "insights": {
@@ -774,8 +775,8 @@
         "timePerApp": "Time per program",
         "minutesShort": "{{value}} min",
         "hoursMinutes": "{{hours}}h{{minutes}}",
-        "repetitive": "Repetitive",
-        "times": "{{times}}× · {{minutes}} min",
+        "repetitive": "반복 업무 가설",
+        "times": "미확인 추정치: {{times}}회 · {{minutes}}분",
         "tip": "Tip",
         "teach": "Teach this task",
         "delete": "Delete",
@@ -814,6 +815,76 @@
         "rawHours": "Raw records: {{count}} h stored (deleted within 48 h)",
         "wipeNow": "Delete now",
         "wipeConfirm": "Delete the raw records stored on this computer now?"
+      },
+      "consent": {
+        "title": "내 업무에서 학습",
+        "body": "비공개 앱 및 창 메타데이터, 직접 표시한 작업 단계, 성공한 ERP 조회, JR 브라우저에서 완료된 다운로드의 사용을 허용합니다. 실제 이벤트에서는 작업 유형과 시각만 저장하며, 조회 인수, 반환된 데이터, 파일 이름 또는 주소는 저장하지 않습니다. 기록은 이 컴퓨터에 비공개로 보관되며, 집계된 요약은 회사 AI에 전송될 수 있습니다. 페이지 내용, 양식, 비밀번호 또는 문서는 수집하지 않습니다. 관찰된 작업 하나가 전체 업무 절차의 완료를 증명하지는 않습니다.",
+        "enable": "업무 학습 허용",
+        "disable": "수집 비활성화",
+        "weakEvidence": "앱 및 창 신호는 확실한 근거가 아닙니다. 이러한 제안은 확인이 필요합니다.",
+        "eventsRequired": "이전 허용으로는 실제 이벤트 학습이 활성화되지 않습니다. 추가된 정보 출처를 허용하려면 업데이트된 안내를 검토하세요.",
+        "eventsEnable": "실제 작업 이벤트 허용"
+      },
+      "workflow": {
+        "title": "내 워크플로",
+        "privacy": "비공개입니다. 일반적인 단계 이름만 사용하고, 사람, 문서, 주소 또는 인증 정보는 포함하지 마세요.",
+        "name": "일반적인 워크플로 이름",
+        "start": "워크플로 시작",
+        "step": "일반적인 단계 이름",
+        "addStep": "단계 완료",
+        "complete": "워크플로 완료",
+        "source": "사용하는 시스템",
+        "action": "작업 유형",
+        "review": "검토할 반복 업무",
+        "confirm": "반복 업무 확인 및 수정 사항 저장",
+        "reject": "반복 업무 폐기",
+        "eventual": "비정기 활동",
+        "exclude": "월간 요약에서 제외",
+        "suppress": "다시 제안하지 않음",
+        "notes": "비공개 메모",
+        "status": {
+          "candidate": "확인 대기 중",
+          "confirmed": "직원이 확인함",
+          "rejected": "폐기됨"
+        },
+        "sources": {
+          "erp": "ERP",
+          "web": "웹 포털 또는 시스템",
+          "desktop": "앱 또는 스프레드시트",
+          "integration": "연동",
+          "manual": "기타 도구"
+        },
+        "actions": {
+          "consulta": "조회",
+          "exportacao": "내보내기",
+          "preenchimento": "입력",
+          "envio": "전송",
+          "aprovacao": "승인",
+          "outro": "기타"
+        },
+        "month": "월(YYYY-MM)",
+        "monthly": "비공개 월간 업무 맵 생성",
+        "insufficient": "업무 맵을 생성하려면 이달에 완료한 반복 업무를 하나 이상 확인하세요.",
+        "frequency": "기록된 실행 {{count}}건",
+        "pending": "검증 대기 중인 반복 업무 {{count}}건",
+        "saveNotes": "메모 저장",
+        "manual": "비공개 초안 수동 작성",
+        "draft": "비공개 초안입니다. 사용하기 전에 검토하세요. Brain에는 아무것도 게시되지 않습니다.",
+        "responsibilities": "담당 업무 및 확인된 반복 업무",
+        "systems": "사용하는 시스템",
+        "steps": "확인된 단계",
+        "exceptions": "예외 및 메모",
+        "opportunities": "검증할 자동화 기회",
+        "opportunity": "작업을 실행하지 않고, 반복되는 단계를 자동화할 수 있는지 검토합니다.",
+        "error": "저장하지 못했습니다. 개인 데이터, 주소 또는 인증 정보가 없는 일반적인 이름을 사용하세요.",
+        "inputs": "알려진 입력(범주만, 문서 제외)",
+        "outputs": "알려진 출력(범주만, 문서 제외)",
+        "automationCandidate": "자동화 가능성: {{count}}개의 단계를 기록했습니다. 이 순서가 반복 업무에 해당하는지, 어떤 단계를 자동화할 수 있는지 검토하세요.",
+        "manualEvidence": "근거: 직접 입력한 업무 이정표입니다. 직무 지식으로 취급하기 전에 반복 업무를 확인하세요.",
+        "observedName": "JR에서 관찰된 작업 순서",
+        "observedEvidence": "이 작업들은 ERP 또는 브라우저에서 확인되었습니다. 이 순서는 작업 절차 후보일 뿐입니다. 직무 맵에 사용하기 전에 목적과 단계를 검토하세요.",
+        "observedQuery": "ERP 조회 완료",
+        "observedDownload": "브라우저 다운로드 완료"
       }
     },
     "handbook": {
@@ -902,28 +973,28 @@
       "updatedNotice": "Your Handbook was updated — review it if you like"
     },
     "dataNotice": {
-      "title": "Aviso de uso de dados",
-      "intro": "Para você saber como o JR Bot usa as informações do seu trabalho, aqui vai uma explicação simples. Este é um aviso, não um pedido de autorização: ele vale para todos os colaboradores da empresa.",
-      "collectedTitle": "O que é coletado",
-      "collectedBody": "Trechos das suas conversas com os bots, para o cérebro da empresa, incluindo os resultados de ferramentas que o bot usou na conversa (por exemplo, páginas e dados de sistemas); amostras da sua tela (aplicativo e título da janela), para o recurso Aprender; e as tarefas que você ensinar ao bot, para o Manual da função.",
-      "purposeTitle": "Para que serve",
-      "purposeBody": "Entender como o trabalho é feito para ajudar você: os bots passam a saber o que a empresa já sabe. Não serve para avaliar desempenho nem para controlar horário.",
-      "whoTitle": "Quem vê o quê",
-      "whoBody": "O que o cérebro aprende fica disponível por área e por nível: cada pessoa vê o conhecimento das suas áreas e o que for geral para a empresa. Informações sensíveis, como valores, contratos e dados de clientes, só aparecem para gestores da área e para a diretoria.",
-      "blockedTitle": "O que fica de fora",
-      "blockedBody": "Removemos os valores do seu Cofre antes do envio, e o servidor descarta fatos com CPF, CNPJ, cartão, chave de acesso ou e-mail.",
-      "retentionTitle": "Por quanto tempo",
-      "retentionBody": "As amostras de tela são apagadas em 48 horas. Os trechos de conversa não ficam guardados no servidor: só os fatos extraídos deles e, junto de cada fato, uma citação curta da conversa (até 120 caracteres).",
-      "providerTitle": "Quem processa",
-      "providerBody": "O processamento usa o provedor de IA da empresa (MiniMax), pelo servidor da empresa. Nada vai direto do seu computador para o provedor.",
-      "pauseTitle": "Pausar o Aprender",
-      "pauseBody": "Você pode pausar o Aprender por alguns minutos nas configurações dele, quando precisar de privacidade.",
-      "button": "Li e entendi",
-      "failed": "Não foi possível registrar agora. O aviso aparece de novo na próxima abertura."
+      "title": "데이터 사용 안내",
+      "intro": "이 안내는 선택한 발췌문을 사용해 회사 노트를 제안하는 허용과 비공개 업무 학습에 참여하는 동의라는 두 가지 별도 허용을 설명합니다. 이 안내를 확인해도 어느 쪽에도 허용한 것으로 간주되지 않습니다.",
+      "collectedTitle": "수집하는 항목",
+      "collectedBody": "회사 노트에는 사용자가 명시적으로 허용한 발췌문만 사용합니다. 업무 학습은 참여에 동의한 후에만 앱 및 창 메타데이터와 워크플로 진행 기록을 수집합니다. 페이지 내용, 양식, 인증 정보 또는 연속 스크린샷은 수집하지 않습니다.",
+      "purposeTitle": "사용 목적",
+      "purposeBody": "검증된 지식을 떠올리고 가능한 자동화를 찾도록 돕습니다. 비공개 학습은 직원 순위를 매기거나 성과를 평가하는 데 사용하지 않습니다.",
+      "whoTitle": "누가 무엇을 볼 수 있나요",
+      "whoBody": "대화와 워크플로 기록은 기본적으로 비공개입니다. 검토한 노트와 사용을 허용한 출처의 발췌문만 선택한 대상에게 공유할 수 있습니다. 접근이 제한된 검색에는 ERP 권한이 필요합니다.",
+      "blockedTitle": "제외되는 항목",
+      "blockedBody": "Vault의 비밀 정보는 처리 전에 가려집니다. 발췌문이나 워크플로 이름에 민감한 개인 데이터를 포함하지 마세요. 필터가 보호 기능을 더하지만, 검토는 여전히 필요합니다.",
+      "retentionTitle": "보관 기간",
+      "retentionBody": "원본 활동 샘플은 48시간 이내에, 비공개 분석 결과는 90일 이내에 만료됩니다. 과거 대화 대기열은 자동으로 다시 처리되지 않습니다. 공유 노트는 승인된 내용과 버전 기록을 보관합니다.",
+      "providerTitle": "처리 주체",
+      "providerBody": "명시적으로 허용한 발췌문만 회사 백엔드를 거쳐 AI 제공업체로 전송됩니다. 자동 업무 제안에는 집계 데이터를 사용합니다. 분석 허용과 공유 허용은 별개입니다.",
+      "pauseTitle": "업무 학습 일시 중지",
+      "pauseBody": "비공개 업무 학습은 참여에 동의한 후에 시작됩니다. 일시 중지하면 다시 시작할 때까지 수집이 중단됩니다. 수집을 비활성화할 수도 있습니다. Brain에 자동으로 게시되는 내용은 없습니다.",
+      "button": "내용을 읽고 이해했습니다",
+      "failed": "지금은 확인 사실을 기록하지 못했습니다. 다음에 앱을 열면 안내가 다시 표시됩니다."
     },
     "brainManage": {
       "title": "Cérebro da empresa",
-      "subtitle": "Os fatos que os bots da empresa aprenderam. Revise, corrija e decida o que fica disponível para cada área.",
+      "subtitle": "공유 노트와 공식 절차, 승인된 출처, 접근 권한 및 버전 기록을 검토합니다.",
       "loadFailed": "Não foi possível carregar o cérebro agora.",
       "exEmployee": "ex-funcionário",
       "facts": {
@@ -1026,7 +1097,8 @@
         "conflict": "Conflito: o item já existe, ou o fato faz parte de uma cadeia de versões e não pode mudar de área ou risco.",
         "forbidden": "Você não tem permissão para isso.",
         "notFound": "Este item não existe mais."
-      }
+      },
+      "erpPermissions": "지식 접근 및 승인 권한은 Strata Certa에서 관리됩니다. JR 관리자 권한은 ERP 접근 권한을 부여하지 않습니다."
     },
     "brain": {
       "activity": {
@@ -1036,6 +1108,61 @@
         "doneNone": "회사 두뇌 조회 · 찾은 내용 없음",
         "unavailable": "두뇌를 사용할 수 없음"
       }
+    },
+    "brainNotes": {
+      "create": "노트 만들기",
+      "authorizeExcerpt": "이 발췌문만 사용",
+      "revise": "검토용 버전 업데이트",
+      "shareVersion": "이 버전의 공유 허용",
+      "excerptNotice": "확인하면 아래 발췌문만 지식 관리자에게 전송됩니다. 사용하고 싶지 않은 내용은 편집하여 삭제하세요.",
+      "reviewNotice": "본문, 출처, 공유 대상을 검토하세요. 이 노트를 공유해도 원래 대화는 공개되지 않습니다. 편집한 후에는 공유를 허용하기 전에 버전을 업데이트하세요.",
+      "excerpt": "사용을 허용한 발췌문",
+      "text": "노트 본문",
+      "source": "사용을 허용한 출처의 발췌문",
+      "audience": "공유를 허용한 대상",
+      "kind": "지식 유형",
+      "sharedNote": "공유 노트",
+      "officialProcedure": "공식 절차",
+      "officialNotice": "담당 검토자에게 승인을 요청합니다. 승인되기 전까지는 검색에 표시되지 않습니다.",
+      "pending": "검토를 위해 제안을 보냈습니다. 아직 게시되지 않았습니다.",
+      "shared": "허용된 대상에게 노트를 공유했습니다.",
+      "failed": "이 작업을 완료하지 못했습니다. 연결, ERP 권한 및 제안 버전을 확인한 후 다시 시도하세요.",
+      "reviews": "검토 대기 중인 절차",
+      "noReviews": "검토 대기 중인 절차가 없습니다.",
+      "approve": "절차 승인",
+      "reject": "제안 거부",
+      "authorizationRequired": "검토하려면 확인된 ERP 연결과 권한이 필요합니다.",
+      "edit": "새 버전 제안",
+      "validUntil": "유효 기한(선택 사항)",
+      "status": {
+        "draft": "초안",
+        "active": "활성",
+        "pending_review": "승인 대기 중",
+        "rejected": "거부됨",
+        "superseded": "대체됨",
+        "suspended": "일시 중지됨"
+      }
+    },
+    "strata": {
+      "title": "Strata Certa",
+      "description": "기존 ERP 계정을 연결하세요. 도구는 현재 권한을 사용합니다.",
+      "connect": "Strata Certa 연결",
+      "disconnect": "계정 연결 해제",
+      "refresh": "연결 상태 새로고침",
+      "unconfigured": "관리자가 Strata 연결을 설정해야 합니다.",
+      "notLinked": "연결된 Strata 계정이 없습니다.",
+      "linkedAs": "연결된 계정: {{name}}",
+      "organization": "ERP 회사",
+      "chooseOrganization": "접근 권한이 있는 회사를 선택하세요",
+      "failed": "작업을 완료하지 못했습니다. Strata 접근 권한을 확인한 후 다시 시도하세요.",
+      "browserOpened": "브라우저에서 로그인을 계속하세요. 그런 다음 여기에서 연결 상태를 새로고침하세요.",
+      "permissions": "ERP가 작업마다 권한을 확인합니다.",
+      "consent": "ERP가 확인을 요청하면 Strata의 보안 페이지에서 확인을 완료하세요.",
+      "disconnectTitle": "Strata 계정 연결을 해제할까요?",
+      "disconnectBody": "이후 ERP 조회 및 작업을 하려면 다시 연결해야 합니다.",
+      "disconnected": "Strata 계정 연결이 해제되었습니다.",
+      "connecting": "Strata 로그인 대기 중",
+      "unavailable": "지금은 연결 상태를 확인할 수 없습니다."
     }
   }
 }

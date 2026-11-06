@@ -90,4 +90,28 @@ describe('brainManageClient', () => {
     expect(typeof brain.manage.facts).toBe('function');
     expect(await brain.me()).toMatchObject({ manages: ['2'], areas: [{ id: '2' }] });
   });
+
+  it('preserves verified ERP capabilities instead of inferring them from director status', async () => {
+    const me = {
+      areas: [{ id: 2, name: 'Obras', level: 'gestor', primary: true }],
+      isDirector: false,
+      manages: [2],
+      permissionsSource: 'erp',
+      capabilities: { read: true, publish: true, revise: false, withdraw: false, approveOfficial: false },
+    };
+    expect(await createBrainClient(async () => me).me()).toMatchObject({
+      permissionsSource: 'erp',
+      capabilities: me.capabilities,
+    });
+    await expect(createBrainClient(async () => ({ ...me, isDirector: true })).me()).rejects.toThrow('unavailable');
+    await expect(
+      createBrainClient(async () => ({ ...me, capabilities: { ...me.capabilities, approveOfficial: 'yes' } })).me()
+    ).rejects.toThrow('unavailable');
+  });
+
+  it('preserves per-note ERP action rights and rejects malformed grants', async () => {
+    const permissions = { canRevise: false, canWithdraw: true, canReactivate: false };
+    expect((await client({ facts: [{ ...row, ...permissions }] }).manage.facts({}))[0]).toMatchObject(permissions);
+    await expect(client({ facts: [{ ...row, canRevise: 'yes' }] }).manage.facts({})).rejects.toThrow('unavailable');
+  });
 });

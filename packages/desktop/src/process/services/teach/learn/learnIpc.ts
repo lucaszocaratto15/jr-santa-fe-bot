@@ -41,6 +41,15 @@ const requireService = () => {
 /** "Aprender" IPC. Only state, exclusions and insights cross; raw samples never do. */
 export function initLearnBridge(): void {
   ipcBridge.learn.state.provider(async () => getLearnService()?.state() ?? UNAVAILABLE_LEARN_STATE);
+  ipcBridge.learn.setConsent.provider(async ({ enabled }) => requireService().setConsent(enabled));
+  const workflow = ipcBridge.learn.workflow;
+  workflow.state.provider(async () => requireService().workflows.state());
+  workflow.start.provider(async ({ name }) => requireService().workflows.start(name));
+  workflow.step.provider(async (step) => requireService().workflows.step(step));
+  workflow.complete.provider(async () => requireService().workflows.complete());
+  workflow.review.provider(async (review) => requireService().workflows.review(review));
+  workflow.monthly.provider(async ({ month }) => requireService().workflows.monthly(month));
+  workflow.observations.provider(async ({ month, text }) => requireService().workflows.observations(month, text));
   ipcBridge.learn.pause.provider(async () => requireService().pause());
   ipcBridge.learn.resume.provider(async () => requireService().resume());
   ipcBridge.learn.getExclusions.provider(async () => requireService().getExclusions());
@@ -84,7 +93,7 @@ function currentUser(): { id: string; name: string } | null {
 
 /**
  * Create, register and start the learn service with Electron deps. Call after the app is ready
- * (powerMonitor and safeStorage need it). Sampling starts at once for everyone: no consent step.
+ * (powerMonitor and safeStorage need it). Collection stays disabled until this employee explicitly opts in.
  */
 export async function startLearnService(userDataDir: string): Promise<LearnService> {
   let screenLocked = false;
@@ -119,4 +128,11 @@ export async function startLearnService(userDataDir: string): Promise<LearnServi
   setLearnService(service);
   await service.init();
   return service;
+}
+
+/** Rebind private collection immediately when JR authentication changes. */
+export function onLearnAccessChanged(): void {
+  void getLearnService()
+    ?.refreshProfile()
+    .catch(() => {});
 }

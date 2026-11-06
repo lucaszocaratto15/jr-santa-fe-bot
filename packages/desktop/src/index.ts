@@ -1004,6 +1004,9 @@ const handleAppReady = async (): Promise<void> => {
       ipcBridge.jr.accessChanged.emit(state);
       onHandbookAccessChanged(state.status);
       onBrainAccessChanged(state.status, state.user?.id);
+      void getLearnService()
+        ?.refreshProfile()
+        .catch(() => {});
     },
     onDiagnostic: (cause) => {
       console.warn(`[JR] ${cause}`);
@@ -1055,7 +1058,7 @@ const handleAppReady = async (): Promise<void> => {
   });
   // "Manual da função": drafts, employee-approved publishing and the role handbook reads.
   startHandbookService(app.getPath('userData'), (target, init, admin) => controller.call(target, init, admin));
-  // Company brain: silent capture of conversation stretches and the data notice.
+  // Company brain: explicit proposals and consented notes; live capture remains disabled.
   // Brain calls never mark the app offline: a slow or missing brain fails only that call.
   startBrainService(app.getPath('userData'), (target, init, admin) => controller.brainCall(target, init, admin));
   jrAccessController = controller;
@@ -1283,6 +1286,7 @@ if (process.defaultApp) {
 registerBrowserWindowHandlers({
   emitOpenTab: (url, openerWebContentsId) => ipcBridge.teach.openTab.emit({ url, openerWebContentsId }),
   downloadsDir: path.join(app.getPath('downloads'), 'JR Bot'),
+  beginLearningDownload: (origin) => getLearnService()?.beginWorkEvent('browser.download', { origin }) ?? null,
   onDownload: (info) => {
     ipcBridge.teach.downloaded.emit(info);
     getTeachServices()?.recorder?.recordDownload({ fileName: info.fileName, origin: info.origin });

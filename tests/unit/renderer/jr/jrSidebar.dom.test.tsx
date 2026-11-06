@@ -25,8 +25,8 @@ vi.mock('react-router-dom', () => ({
   useLocation: () => ({ pathname: '/guid', search: mocks.search }),
 }));
 vi.mock('swr', () => ({
-  default: (key: string | string[]) => ({
-    data: Array.isArray(key) ? [] : key === 'jr.bots' ? mocks.bots : undefined,
+  default: (key: string | string[] | null) => ({
+    data: Array.isArray(key) && key[0] === 'jr.bots' ? mocks.bots : Array.isArray(key) ? [] : undefined,
     mutate: mocks.refreshBots,
   }),
 }));
@@ -150,14 +150,14 @@ describe('JrSidebar rows', () => {
     expect(screen.queryByText('Sent 1 archive')).not.toBeInTheDocument();
   });
 
-  it('moves search and new chat into the header slot beside the logo', () => {
+  it('moves search into the header without allowing another assistant', () => {
     const slot = document.createElement('div');
     slot.id = 'jr-sider-actions-slot';
     document.body.appendChild(slot);
     try {
       render(<JrSidebar />);
       expect(slot.querySelector('[aria-label="common.jr.search"]')).not.toBeNull();
-      expect(slot.querySelector('[aria-label="common.jr.newBot"]')).not.toBeNull();
+      expect(slot.querySelector('[aria-label="common.jr.newBot"]')).toBeNull();
       expect(screen.getByRole('navigation').querySelector('[aria-label="common.jr.search"]')).toBeNull();
     } finally {
       slot.remove();

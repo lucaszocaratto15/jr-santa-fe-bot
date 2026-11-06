@@ -153,7 +153,10 @@
     "tabLimitReached": "Browser tab limit reached ({{count}}). The oldest tab was reused.",
     "agentFirstUseTitle": "The agent is using the in-app browser",
     "agentFirstUseContent": "It can open pages, click and read content in this panel. Your sign-in state is kept between sessions.",
-    "agentFirstUseAction": "Open settings"
+    "agentFirstUseAction": "Open settings",
+    "tabProtected": "This browser is in use. Finish the task, recording or secure login, or return control to the bot before closing or replacing it.",
+    "sessionLimitReached": "The browser already has {{count}} open sessions. Close an unused tab before opening another; sessions in other projects stay open.",
+    "popupBlocked": "A new tab was blocked because its source browser is not active in this project. Open the link from the current project's browser."
   },
   "saveConflict": "Could not save: this file changed on disk since you opened it. Reload to see the other changes — your edits are still here, unsaved.",
   "persistQuotaExceeded": "Local storage is full, so open tabs can no longer be remembered for this project. Close some tabs or clear site data.",

@@ -751,9 +751,10 @@
         "status": {
           "active": "On",
           "paused": "Paused",
-          "unavailable": "Unavailable"
+          "unavailable": "Unavailable",
+          "disabled": "Desactivado"
         },
-        "pause": "Pause for 15 min",
+        "pause": "Pausar la recopilación",
         "resume": "Resume",
         "unavailableEncryption": "Unavailable: this computer does not offer system encryption, so nothing can be stored safely.",
         "unavailablePlatform": "Unavailable on this system.",
@@ -762,7 +763,7 @@
         "samplerError": "Observation stopped because of an error.",
         "retry": "Try again",
         "actionFailed": "Could not finish that. Try again.",
-        "intro": "Aprender looks at which programs and pages you use to understand your work and help you. It is always on, and raw records stay on this computer only. See the Data Notice for what is collected.",
+        "intro": "El aprendizaje comienza solo con su autorización. Usa metadatos privados de aplicaciones, sus hitos manuales, consultas completadas al ERP y descargas del navegador para sugerir rutinas candidatas. Puede pausar o desactivar la recopilación.",
         "readNotice": "View the Data Notice"
       },
       "insights": {
@@ -774,8 +775,8 @@
         "timePerApp": "Time per program",
         "minutesShort": "{{value}} min",
         "hoursMinutes": "{{hours}}h{{minutes}}",
-        "repetitive": "Repetitive",
-        "times": "{{times}}× · {{minutes}} min",
+        "repetitive": "Hipótesis de rutina",
+        "times": "Estimación sin confirmar: {{times}} veces · {{minutes}} min",
         "tip": "Tip",
         "teach": "Teach this task",
         "delete": "Delete",
@@ -814,6 +815,76 @@
         "rawHours": "Raw records: {{count}} h stored (deleted within 48 h)",
         "wipeNow": "Delete now",
         "wipeConfirm": "Delete the raw records stored on this computer now?"
+      },
+      "consent": {
+        "title": "Aprender de mi trabajo",
+        "body": "Autorice los metadatos privados de aplicaciones y ventanas, sus hitos de flujo de trabajo, las consultas exitosas al ERP y las descargas completadas en el navegador de JR. De los eventos reales solo se guardan categorías de acción y horas, nunca parámetros de consulta, datos devueltos, nombres de archivos ni direcciones. Los registros permanecen privados en este equipo; los resúmenes agregados pueden enviarse a la IA de la empresa. No se recopilan contenidos de páginas, formularios, contraseñas ni documentos. Una acción observada no demuestra una rutina de trabajo completa.",
+        "enable": "Autorizar el aprendizaje del trabajo",
+        "disable": "Desactivar la recopilación",
+        "weakEvidence": "Las señales de aplicaciones y ventanas son indicios débiles. Estas sugerencias requieren confirmación.",
+        "eventsRequired": "Su autorización anterior no activa el aprendizaje mediante eventos reales. Revise el aviso actualizado para autorizar estas fuentes adicionales.",
+        "eventsEnable": "Autorizar eventos reales de trabajo"
+      },
+      "workflow": {
+        "title": "Mis flujos de trabajo",
+        "privacy": "Privado. Usa solo nombres genéricos para los pasos; no incluyas personas, documentos, direcciones ni credenciales.",
+        "name": "Nombre genérico del flujo de trabajo",
+        "start": "Iniciar flujo de trabajo",
+        "step": "Nombre genérico del paso",
+        "addStep": "Completar paso",
+        "complete": "Completar flujo de trabajo",
+        "source": "Sistema implicado",
+        "action": "Tipo de acción",
+        "review": "Rutinas para revisar",
+        "confirm": "Confirmar rutina y guardar correcciones",
+        "reject": "Descartar rutina",
+        "eventual": "Actividad ocasional",
+        "exclude": "Excluir del resumen mensual",
+        "suppress": "No volver a sugerir",
+        "notes": "Notas privadas",
+        "status": {
+          "candidate": "Pendiente de confirmación",
+          "confirmed": "Confirmado por el empleado",
+          "rejected": "Descartado"
+        },
+        "sources": {
+          "erp": "ERP",
+          "web": "Portal o sistema web",
+          "desktop": "Aplicación u hoja de cálculo",
+          "integration": "Integración",
+          "manual": "Otra herramienta"
+        },
+        "actions": {
+          "consulta": "Consulta",
+          "exportacao": "Exportación",
+          "preenchimento": "Rellenar",
+          "envio": "Enviar",
+          "aprovacao": "Aprobación",
+          "outro": "Otra"
+        },
+        "month": "Mes (YYYY-MM)",
+        "monthly": "Generar mapa mensual privado",
+        "insufficient": "Confirma al menos una rutina completada este mes para generar el mapa.",
+        "frequency": "{{count}} ejecución(es) registrada(s)",
+        "pending": "{{count}} rutina(s) pendiente(s) de validación",
+        "saveNotes": "Guardar notas",
+        "manual": "Preparar borrador manual privado",
+        "draft": "Borrador privado — revísalo antes de usarlo. No se publicará nada en el Cerebro.",
+        "responsibilities": "Responsabilidades y rutinas confirmadas",
+        "systems": "Sistemas implicados",
+        "steps": "Pasos confirmados",
+        "exceptions": "Excepciones y notas",
+        "opportunities": "Oportunidades de automatización para validar",
+        "opportunity": "Revisa si los pasos repetidos pueden automatizarse, sin ejecutar acciones.",
+        "error": "No se ha podido guardar. Usa nombres genéricos sin datos personales, direcciones ni credenciales.",
+        "inputs": "Entradas conocidas (categorías, sin documentos)",
+        "outputs": "Salidas conocidas (categorías, sin documentos)",
+        "automationCandidate": "Posible automatización: registraste {{count}} paso(s). Revisa si esta secuencia representa una rutina y qué pasos podrían automatizarse.",
+        "manualEvidence": "Evidencia: hitos introducidos por ti; confirma la rutina antes de tratarla como conocimiento de tu función.",
+        "observedName": "Secuencia observada en JR",
+        "observedEvidence": "Estas acciones fueron confirmadas por el ERP o el navegador. Su secuencia es solo una rutina candidata; revise su objetivo y sus pasos antes de usarla en el mapa de su función.",
+        "observedQuery": "Consulta al ERP completada",
+        "observedDownload": "Descarga del navegador completada"
       }
     },
     "handbook": {
@@ -902,28 +973,28 @@
       "updatedNotice": "Your Handbook was updated — review it if you like"
     },
     "dataNotice": {
-      "title": "Aviso de uso de dados",
-      "intro": "Para você saber como o JR Bot usa as informações do seu trabalho, aqui vai uma explicação simples. Este é um aviso, não um pedido de autorização: ele vale para todos os colaboradores da empresa.",
-      "collectedTitle": "O que é coletado",
-      "collectedBody": "Trechos das suas conversas com os bots, para o cérebro da empresa, incluindo os resultados de ferramentas que o bot usou na conversa (por exemplo, páginas e dados de sistemas); amostras da sua tela (aplicativo e título da janela), para o recurso Aprender; e as tarefas que você ensinar ao bot, para o Manual da função.",
-      "purposeTitle": "Para que serve",
-      "purposeBody": "Entender como o trabalho é feito para ajudar você: os bots passam a saber o que a empresa já sabe. Não serve para avaliar desempenho nem para controlar horário.",
-      "whoTitle": "Quem vê o quê",
-      "whoBody": "O que o cérebro aprende fica disponível por área e por nível: cada pessoa vê o conhecimento das suas áreas e o que for geral para a empresa. Informações sensíveis, como valores, contratos e dados de clientes, só aparecem para gestores da área e para a diretoria.",
-      "blockedTitle": "O que fica de fora",
-      "blockedBody": "Removemos os valores do seu Cofre antes do envio, e o servidor descarta fatos com CPF, CNPJ, cartão, chave de acesso ou e-mail.",
-      "retentionTitle": "Por quanto tempo",
-      "retentionBody": "As amostras de tela são apagadas em 48 horas. Os trechos de conversa não ficam guardados no servidor: só os fatos extraídos deles e, junto de cada fato, uma citação curta da conversa (até 120 caracteres).",
-      "providerTitle": "Quem processa",
-      "providerBody": "O processamento usa o provedor de IA da empresa (MiniMax), pelo servidor da empresa. Nada vai direto do seu computador para o provedor.",
-      "pauseTitle": "Pausar o Aprender",
-      "pauseBody": "Você pode pausar o Aprender por alguns minutos nas configurações dele, quando precisar de privacidade.",
-      "button": "Li e entendi",
-      "failed": "Não foi possível registrar agora. O aviso aparece de novo na próxima abertura."
+      "title": "Aviso sobre el uso de datos",
+      "intro": "Este aviso explica dos autorizaciones independientes: usar un fragmento seleccionado para proponer una nota de empresa y activar el aprendizaje privado del trabajo. Reconocer este aviso no concede ninguna de las dos autorizaciones.",
+      "collectedTitle": "Qué se recopila",
+      "collectedBody": "Las notas de empresa usan solo el fragmento que autorices expresamente. El aprendizaje del trabajo registra metadatos de aplicaciones y ventanas e hitos de los flujos de trabajo solo tras tu consentimiento. No recopila contenido de páginas, formularios, credenciales ni capturas de pantalla continuas.",
+      "purposeTitle": "Para qué sirve",
+      "purposeBody": "Ayudarte a recordar conocimientos validados e identificar posibles automatizaciones. El aprendizaje privado no se utiliza para clasificar a los empleados ni evaluar su rendimiento.",
+      "whoTitle": "Quién ve qué",
+      "whoBody": "Las conversaciones y los registros de los flujos de trabajo se mantienen privados de forma predeterminada. Solo la nota revisada y el fragmento de origen autorizado pueden compartirse con la audiencia elegida. La búsqueda restringida requiere autorización del ERP.",
+      "blockedTitle": "Qué queda excluido",
+      "blockedBody": "Los secretos de la bóveda se ocultan antes del procesamiento. No incluyas datos personales sensibles en los fragmentos ni en los nombres de los flujos de trabajo. Los filtros añaden protección; sigue siendo necesario revisar el contenido.",
+      "retentionTitle": "Cuánto tiempo se conserva",
+      "retentionBody": "Las muestras de actividad sin procesar caducan en un plazo de 48 horas y las conclusiones privadas, en 90 días. Las colas de conversaciones anteriores no se vuelven a procesar automáticamente. Las notas compartidas conservan el contenido aprobado y el historial de versiones.",
+      "providerTitle": "Quién lo procesa",
+      "providerBody": "Solo los fragmentos autorizados expresamente se envían al proveedor de IA a través del backend de la empresa. Las sugerencias automáticas de trabajo usan datos agregados. Autorizar el análisis es independiente de autorizar que se comparta el contenido.",
+      "pauseTitle": "Pausar el aprendizaje del trabajo",
+      "pauseBody": "El aprendizaje privado del trabajo comienza tras tu consentimiento. Al pausarlo, se detiene la recopilación hasta que lo reanudes. También puedes desactivar la recopilación. No se publica nada automáticamente en el Cerebro.",
+      "button": "Lo he leído y entendido",
+      "failed": "No se ha podido registrar ahora. El aviso aparecerá de nuevo la próxima vez que abras la aplicación."
     },
     "brainManage": {
       "title": "Cérebro da empresa",
-      "subtitle": "Os fatos que os bots da empresa aprenderam. Revise, corrija e decida o que fica disponível para cada área.",
+      "subtitle": "Revisa las notas compartidas y los procedimientos oficiales, sus fuentes aprobadas, los permisos de acceso y el historial de versiones.",
       "loadFailed": "Não foi possível carregar o cérebro agora.",
       "exEmployee": "ex-funcionário",
       "facts": {
@@ -1026,7 +1097,8 @@
         "conflict": "Conflito: o item já existe, ou o fato faz parte de uma cadeia de versões e não pode mudar de área ou risco.",
         "forbidden": "Você não tem permissão para isso.",
         "notFound": "Este item não existe mais."
-      }
+      },
+      "erpPermissions": "El acceso al conocimiento y los permisos de aprobación se gestionan en Strata Certa. Ser administrador de JR no concede acceso al ERP."
     },
     "brain": {
       "activity": {
@@ -1036,6 +1108,61 @@
         "doneNone": "Consultó el cerebro de la empresa · nada encontrado",
         "unavailable": "Cerebro no disponible"
       }
+    },
+    "brainNotes": {
+      "create": "Crear nota",
+      "authorizeExcerpt": "Usar solo este fragmento",
+      "revise": "Actualizar versión para revisión",
+      "shareVersion": "Autorizar compartir esta versión",
+      "excerptNotice": "Solo se enviará al curador el fragmento siguiente cuando confirmes. Edítalo para eliminar cualquier contenido que no quieras usar.",
+      "reviewNotice": "Revisa el texto, la fuente y la audiencia. Compartir esta nota no expone la conversación original. Después de editarla, actualiza la versión antes de autorizar que se comparta.",
+      "excerpt": "Fragmento autorizado",
+      "text": "Texto de la nota",
+      "source": "Fragmento de origen autorizado",
+      "audience": "Audiencia autorizada",
+      "kind": "Tipo de conocimiento",
+      "sharedNote": "Nota compartida",
+      "officialProcedure": "Procedimiento oficial",
+      "officialNotice": "Se enviará a un revisor responsable para su aprobación. No aparecerá en las búsquedas hasta que se apruebe.",
+      "pending": "Propuesta enviada para revisión. Aún no se ha publicado.",
+      "shared": "Nota compartida con la audiencia autorizada.",
+      "failed": "No se ha podido completar esta acción. Comprueba la conexión, la autorización del ERP y la versión de la propuesta antes de volver a intentarlo.",
+      "reviews": "Procedimientos pendientes de revisión",
+      "noReviews": "No hay procedimientos pendientes de revisión.",
+      "approve": "Aprobar procedimiento",
+      "reject": "Rechazar propuesta",
+      "authorizationRequired": "La revisión requiere una vinculación verificada con el ERP y autorización.",
+      "edit": "Proponer una nueva versión",
+      "validUntil": "Válida hasta (opcional)",
+      "status": {
+        "draft": "Borrador",
+        "active": "Activa",
+        "pending_review": "Pendiente de aprobación",
+        "rejected": "Rechazada",
+        "superseded": "Sustituida",
+        "suspended": "Suspendida"
+      }
+    },
+    "strata": {
+      "title": "Strata Certa",
+      "description": "Conecta tu cuenta existente del ERP. Las herramientas usan tus permisos actuales.",
+      "connect": "Conectar Strata Certa",
+      "disconnect": "Desconectar cuenta",
+      "refresh": "Actualizar conexión",
+      "unconfigured": "Un administrador aún debe configurar la conexión con Strata.",
+      "notLinked": "No hay ninguna cuenta de Strata conectada.",
+      "linkedAs": "Cuenta conectada: {{name}}",
+      "organization": "Empresa del ERP",
+      "chooseOrganization": "Elige una empresa permitida",
+      "failed": "No se pudo completar. Comprueba tu acceso a Strata e inténtalo de nuevo.",
+      "browserOpened": "Continúa el inicio de sesión en el navegador. Después, actualiza la conexión aquí.",
+      "permissions": "El ERP comprueba los permisos en cada operación.",
+      "consent": "Cuando el ERP solicite confirmación, complétala en la página segura de Strata.",
+      "disconnectTitle": "¿Desconectar la cuenta de Strata?",
+      "disconnectBody": "Las próximas consultas y acciones del ERP requerirán una nueva conexión.",
+      "disconnected": "Cuenta de Strata desconectada.",
+      "connecting": "Esperando el inicio de sesión en Strata",
+      "unavailable": "No se ha podido verificar la conexión en este momento."
     }
   }
 }

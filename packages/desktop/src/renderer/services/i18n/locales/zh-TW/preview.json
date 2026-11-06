@@ -153,7 +153,10 @@
     "tabLimitReached": "標籤頁數量已達上限（{{count}} 個），已重複使用最早開啟的標籤頁。",
     "agentFirstUseTitle": "Agent 正在使用應用內瀏覽器",
     "agentFirstUseContent": "它可以在這個面板裡開啟網頁、點擊和讀取內容。你的登入狀態會被保留。",
-    "agentFirstUseAction": "前往設定"
+    "agentFirstUseAction": "前往設定",
+    "tabProtected": "此瀏覽器正在使用中。關閉或取代分頁前，請先完成任務、錄製或安全登入，或將控制權交還給機器人。",
+    "sessionLimitReached": "瀏覽器已開啟 {{count}} 個工作階段。開啟新工作階段前，請關閉未使用的分頁；其他專案中的工作階段會保持開啟。",
+    "popupBlocked": "新分頁已遭封鎖，因為發起開啟操作的瀏覽器在此專案中未處於作用中狀態。請從目前專案的瀏覽器開啟連結。"
   },
   "saveConflict": "儲存失敗：該檔案在你開啟後已被變更。可重新載入查看其他變更——你的編輯仍在，尚未儲存。",
   "persistQuotaExceeded": "本機儲存空間已滿，無法再記住該專案開啟的標籤頁。請關閉一些標籤頁或清理網站資料。",

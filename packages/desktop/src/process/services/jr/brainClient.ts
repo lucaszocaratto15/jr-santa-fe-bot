@@ -11,6 +11,7 @@
 
 import type { BrainCapturePayload, BrainFact, BrainMe } from '@/common/types/agent/brainTypes';
 import { createBrainManageClient, type BrainManageClient } from '@process/services/brain/brainManageClient';
+import { createBrainNotesClient } from '@process/services/brain/brainNotesClient';
 
 export type BrainCall = (path: string, init?: RequestInit, admin?: boolean) => Promise<unknown>;
 
@@ -23,6 +24,7 @@ export type BrainClient = {
   consentState(): Promise<{ version: string | null; at: string | null }>;
   /** Manager routes (`/api/brain/manage/*`). */
   manage: BrainManageClient;
+  notes: ReturnType<typeof createBrainNotesClient>;
 };
 
 const record = (value: unknown): value is Record<string, unknown> =>
@@ -51,6 +53,10 @@ function parseFact(value: unknown): BrainFact {
   const date = value.date ?? null;
   const erpRef = value.erpRef ?? null;
   if (!nullableText(area) || !nullableText(date) || !nullableText(erpRef)) return invalid();
+  if (value.noteType !== undefined && value.noteType !== 'shared_note' && value.noteType !== 'official_procedure')
+    return invalid();
+  if (value.sourceQuote !== undefined && !nullableText(value.sourceQuote)) return invalid();
+  if (value.version !== undefined && (!Number.isInteger(value.version) || Number(value.version) < 1)) return invalid();
   return {
     id: factIdText(value.id) as string,
     text: value.text,
@@ -59,6 +65,11 @@ function parseFact(value: unknown): BrainFact {
     date,
     confidence: value.confidence,
     erpRef,
+    ...(value.noteType === 'shared_note' || value.noteType === 'official_procedure'
+      ? { noteType: value.noteType }
+      : {}),
+    ...(value.version === undefined ? {} : { version: value.version as number }),
+    ...(value.sourceQuote === undefined ? {} : { sourceQuote: value.sourceQuote as string | null }),
   };
 }
 
@@ -83,6 +94,31 @@ function parseMe(value: unknown): BrainMe {
       return invalid();
     return { id, name: (entry.name ?? null) as string | null, level: entry.level, primary: entry.primary };
   });
+  if (value.permissionsSource !== undefined) {
+    if (
+      value.permissionsSource !== 'erp' ||
+      value.isDirector !== false ||
+      !record(value.capabilities) ||
+      ['read', 'publish', 'revise', 'withdraw', 'approveOfficial'].some(
+        (key) => typeof (value.capabilities as Record<string, unknown>)[key] !== 'boolean'
+      )
+    )
+      return invalid();
+    return {
+      areas,
+      isDirector: false,
+      manages: manages as string[],
+      permissionsSource: 'erp',
+      capabilities: {
+        read: value.capabilities.read as boolean,
+        publish: value.capabilities.publish as boolean,
+        revise: value.capabilities.revise as boolean,
+        withdraw: value.capabilities.withdraw as boolean,
+        approveOfficial: value.capabilities.approveOfficial as boolean,
+      },
+    };
+  }
+  if (value.capabilities !== undefined) return invalid();
   return { areas, isDirector: value.isDirector, manages: manages as string[] };
 }
 
@@ -130,5 +166,6 @@ export function createBrainClient(call: BrainCall): BrainClient {
       return parseConsent(await call('/api/brain/consent'));
     },
     manage: createBrainManageClient(call),
+    notes: createBrainNotesClient(call),
   };
 }

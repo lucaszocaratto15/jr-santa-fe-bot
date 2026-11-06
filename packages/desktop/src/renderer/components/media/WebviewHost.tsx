@@ -20,6 +20,10 @@ export interface WebviewHostProps {
   showNavBar?: boolean;
   /** Webview partition for cache/session isolation, e.g. "persist:ext-settings-feishu" */
   partition?: string;
+  /** Inactive parked browser guests must not take over the agent's CDP target. */
+  agentBrowserActive?: boolean;
+  /** Reports the guest's native identity without exposing page data. */
+  onWebContentsReady?: (webContentsId: number) => void;
   /** Extra class names for root container */
   className?: string;
   /** Extra styles for root container */
@@ -65,6 +69,8 @@ const WebviewHost: React.FC<WebviewHostProps> = ({
   id: _id,
   showNavBar = false,
   partition,
+  agentBrowserActive = false,
+  onWebContentsReady,
   className,
   style,
   onDidFinishLoad,
@@ -79,6 +85,10 @@ const WebviewHost: React.FC<WebviewHostProps> = ({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const webviewRef = useRef<Electron.WebviewTag | null>(null);
+  const agentBrowserActiveRef = useRef(agentBrowserActive);
+  agentBrowserActiveRef.current = agentBrowserActive;
+  const onWebContentsReadyRef = useRef(onWebContentsReady);
+  onWebContentsReadyRef.current = onWebContentsReady;
   const autoFitPendingRef = useRef(false);
 
   // Callbacks are mirrored into refs so the listener effect does not re-subscribe
@@ -96,6 +106,12 @@ const WebviewHost: React.FC<WebviewHostProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [zoomFactor, setZoomFactor] = useState(1);
   const [webviewReady, setWebviewReady] = useState(false);
+  useEffect(() => {
+    if (!agentBrowserActive || !webviewReady) return;
+    const webContentsId = webviewRef.current?.getWebContentsId?.();
+    if (typeof webContentsId === 'number')
+      void ipcBridge.application.reportBrowserWebContentsId.invoke({ webContentsId }).catch(() => {});
+  }, [agentBrowserActive, webviewReady]);
 
   // 最近由本组件内部触发的导航地址集合。
   //
@@ -320,7 +336,8 @@ const WebviewHost: React.FC<WebviewHostProps> = ({
        */
       try {
         const webContentsId = webviewEl.getWebContentsId?.();
-        if (typeof webContentsId === 'number') {
+        if (typeof webContentsId === 'number') onWebContentsReadyRef.current?.(webContentsId);
+        if (agentBrowserActiveRef.current && typeof webContentsId === 'number') {
           void ipcBridge.application.reportBrowserWebContentsId.invoke({ webContentsId }).then((res) => {
             if (!res.success && res.msg) console.warn('[browser] agent control unavailable:', res.msg);
           });

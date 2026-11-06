@@ -2,6 +2,57 @@
 
 Serviço separado do aplicativo. Executa em Node.js 24, usa SQLite e não possui dependências externas. A execução de arquivos, ferramentas e navegador continua no computador do funcionário. Este serviço controla identidade e acesso ao modelo MiniMax.
 
+## Conectar uma conta existente do Strata Certa
+
+O controle JR agora oferece autorização OAuth confidencial com PKCE S256 e chamadas MCP delegadas por funcionário. O vínculo usa exclusivamente o ID comprovado por `GET /mcp/vinculo` e pela ferramenta `erp.quem_sou`; nomes e e-mails não servem como prova. Uma conta ERP não pode ser vinculada a dois cadastros JR diferentes. A empresa selecionada serve como contexto padrão. Chamadas MCP podem indicar qualquer empresa retornada pelo ERP, sem trocar essa seleção. O grupo e as permissões por módulo vêm da política canônica do Strata; o JR não cria vínculos ou concessões por empresa.
+
+Para habilitar em um ambiente de revisão, registre no provedor OAuth utilizado pelo Strata um aplicativo confidencial, com PKCE S256 e um callback HTTPS fixo. Os endereços de autorização e troca/renovação de tokens são descobertos nos metadados do issuer; o controle exige a mesma origem configurada, recusa redirecionamentos HTTP e usa `client_secret_basic`. Não deriva endpoints nem callback de cabeçalhos `Host` ou de valores enviados pelo cliente. Autorização, troca do código e renovação enviam `resource` com a URL MCP; o ERP valida esse recurso no `aud` do JWT ou da introspecção do token opaco.
+
+Configure em ambiente seguro, usando os nomes presentes em `services/control/deploy/.env.example`:
+
+- `STRATA_MCP_RESOURCE_URL`: URL pública exata do recurso MCP, terminando em `/mcp`.
+- `STRATA_OAUTH_ISSUER`: issuer OAuth anunciado pelo recurso ERP.
+- `STRATA_OAUTH_CLIENT_ID` e `STRATA_OAUTH_CLIENT_SECRET`: credenciais do aplicativo confidencial registrado.
+- `STRATA_OAUTH_REDIRECT_URI`: callback registrado, por exemplo `https://HOST/bot/strata/callback`, quando o proxy público remove `/bot`.
+- `STRATA_TOKEN_ENCRYPTION_KEY`: chave própria de 32 bytes, em hexadecimal ou base64, guardada fora do banco e do repositório. Alterar/perder essa chave exige reconectar as contas.
+- `STRATA_OAUTH_SCOPES`: escopos atribuídos ao aplicativo no provedor e anunciados nos metadados do ERP. Deve incluir `mcp:identidade`; adicione somente os módulos necessários, como `mcp:conhecimento`, quando realmente habilitados.
+
+Sem configuração completa, `/strata/status` informa `configured: false` e o JR continua operando sem essa integração. Isso não configura nem publica o OAuth do ERP. Não use uma chave administrativa compartilhada como substituição dos grants individuais.
+
+### Revisão no aplicativo
+
+1. Entre no JR com o cadastro do funcionário e abra **Conexões → Strata Certa**.
+2. Use **Conectar Strata Certa**. O processo nativo abre a autorização no navegador; senha, tokens e URL OAuth não entram no chat nem no renderer.
+3. Autorize com a conta já existente no Strata. O callback comprova o ID dessa conta, sem associar por nome ou e-mail.
+4. Volte ao JR. A tela atualiza durante os dez minutos do fluxo; também permite atualizar manualmente. Identidade e catálogo consultam o grupo sem seleção manual. Escolha uma empresa autorizada apenas para operações que precisem desse contexto, como rascunhos do Brain.
+5. O bot usa `strata_list_tools` para descobrir os esquemas e `strata_call_tool` para chamar o MCP. A listagem é leitura; chamadas continuam sujeitas à confirmação de ferramenta no JR e à autorização do ERP.
+6. Se uma ação devolver `consent_url`, conclua a confirmação humana no navegador do ERP, com a mesma conta. Uma proposta pendente não é uma alteração concluída.
+
+Para conferir o isolamento, teste duas contas com permissões diferentes, a revogação de uma permissão no ERP e a troca de empresa durante uma consulta. Desconectar remove a credencial guardada pelo JR; não equivale a revogar o grant no provedor OAuth. A integração não cria funcionários, não altera permissões e não duplica a matriz do ERP.
+
+Rotas autenticadas pela sessão JR:
+
+| Rota                                               | Comportamento                                                                                           |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `POST /strata/connect` com `{}`                    | Gera URL de autorização e vencimento do fluxo, sem credenciais do provedor.                             |
+| `GET /strata/status`                               | Confirma a conta e as organizações atuais; informa a empresa selecionada.                               |
+| `POST /strata/organization` com `{organizationId}` | Aceita somente membership verificado no ERP; invalida respostas pendentes da empresa anterior.          |
+| `POST /strata/disconnect` com `{}`                 | Descarta o grant local e cancela fluxos OAuth pendentes.                                                |
+| `GET /strata/mcp/tools`                            | Retorna o catálogo atual do ERP. Catálogo visível não significa permissão para executar uma ferramenta. |
+| `POST /strata/mcp/call` com `{name, arguments}`    | Revalida identidade e empresa; o ERP aplica novamente suas permissões e consentimentos.                 |
+
+`GET /strata/callback` é público apenas para concluir o fluxo OAuth de uso único. O estado expira em dez minutos e pertence à sessão JR que iniciou a conexão; outra sessão não pode assumir a identidade. Reiniciar o processo cancela fluxos de login ainda incompletos. O callback retorna somente resultado genérico, nunca tokens nem mensagens brutas do provedor.
+
+Access e refresh tokens ficam cifrados com AES-256-GCM nas tabelas `strata_links` do SQLite existente. A cifra vincula usuário JR, issuer, client ID e recurso ERP. Renovação usa controle de concorrência; desconectar ou revogar a sessão impede resultados pendentes de serem entregues. A troca de organização tem uma geração própria para não perder um refresh token rotacionado. Uma operação já aceita pelo ERP não é desfeita por troca de organização ou desconexão.
+
+Cada operação consulta identidade e memberships atuais no ERP; não há fallback para nome, e-mail ou permissões JR. Respostas JSON/SSE são limitadas e os tokens conhecidos também são removidos de chaves e valores antes de qualquer resultado alcançar o cliente ou o modelo. A integração respeita o desafio de consentimento humano do ERP para ações: ela não segue automaticamente URLs de aprovação.
+
+O complemento ERP de revisão adiciona a ferramenta `conhecimento.autorizacao` e os módulos canônicos `conhecimento` e `conhecimento-procedimentos`. O Brain usa a política retornada a cada operação, com públicos `empresa` ou `modulo:<id ERP>`, sem permissões locais JR. O controle revalida a política e o contexto após a resposta interna; troca de empresa, conta, sessão ou direitos impede a entrega de um resultado antigo. Sem o novo contrato, conteúdo compartilhado continua falhando fechado. Ver [revisão da integração](jr-review.md). Os registros internos da publicação ficam no repositório privado do ERP. Nenhuma concessão de funcionário foi alterada.
+
+Na política de grupo, respostas bem-sucedidas do Brain confirmam `x-brain-authorization: erp-v3`, `x-brain-group` e `x-brain-organization`. A política de uma empresa conserva `erp-v2`. A busca de grupo e o feedback não exigem selecionar uma empresa; o ERP informa o grupo em uma única resposta de autorização, revalidada antes de liberar o resultado. Uma mudança no grupo ou nas permissões invalida a resposta em andamento. O controle recusa conteúdo de versões antigas que ignorem a política, antes de ler o corpo. O contrato e os módulos novos devem ser revisados em conjunto, sem publicação parcial.
+
+Validação local: `node --test tests/unit/jr/control/strata/*.test.mjs`. Os testes usam servidores efêmeros e dados sintéticos. Eles não comprovam o cadastro OAuth, as credenciais externas ou o funcionamento do ambiente publicado.
+
 ## Configuração
 
 | Variável                     | Uso                                                                                                                                |
@@ -72,7 +123,7 @@ O fluxo `Distribute Release Assets` pode publicar o instalador no feed JR depois
 
 Para ativar a publicação automática uma única vez:
 
-1. Em **Settings → Secrets and variables → Actions → Variables**, configure `PUBLISH_JR_UPDATES=true`, `JR_UPDATES_SSH_HOST=179.199.143.126` e `JR_UPDATES_SSH_USER=jr-bot-updates`. O fluxo existente também precisa de `PUBLISH_RELEASE=true` para gerar os instaladores.
+1. Em **Settings → Secrets and variables → Actions → Variables**, configure `PUBLISH_JR_UPDATES=true`, `JR_UPDATES_SSH_HOST=YOUR_VPS_HOST` e `JR_UPDATES_SSH_USER=jr-bot-updates`. O fluxo existente também precisa de `PUBLISH_RELEASE=true` para gerar os instaladores.
 2. Crie uma chave de implantação fora do repositório: `mkdir -p ~/.ssh && chmod 700 ~/.ssh && ssh-keygen -t ed25519 -f ~/.ssh/jr-bot-updates -C jr-bot-updates -N ''`. Nunca coloque a chave privada no repositório.
 3. Na VPS, confirme com `namei -l /opt/mmx-gw/data` que todos os diretórios até essa raiz pertencem a `root` e não permitem escrita por grupo/outros. Confirme também com `find /opt/mmx-gw/data -mindepth 1 -maxdepth 1 -printf '%f\n'` que a raiz contém somente `updates`, que são arquivos públicos. Se qualquer verificação falhar, não altere essas permissões; configure uma raiz SFTP separada e um vínculo de montagem para o diretório do feed.
 4. Em uma sessão administrativa da VPS, crie o usuário e cadastre a chave pública. Se o usuário ainda não existir:
@@ -102,7 +153,7 @@ Para ativar a publicação automática uma única vez:
 
    Valide com `sudo sshd -t` antes de `sudo systemctl reload ssh`. Essa conta não recebe terminal SSH; ela só grava no diretório público de atualizações.
 
-5. Gere a linha de host conhecido com `ssh-keyscan -H -t ed25519 179.199.143.126 > jr-bot-updates-known-hosts` e compare a impressão digital com `sudo ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` na VPS. Só depois da comparação, cadastre o conteúdo desse arquivo como segredo `JR_UPDATES_SSH_KNOWN_HOSTS`.
+5. Gere a linha de host conhecido com `ssh-keyscan -H -t ed25519 YOUR_VPS_HOST > jr-bot-updates-known-hosts` e compare a impressão digital com `sudo ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` na VPS. Só depois da comparação, cadastre o conteúdo desse arquivo como segredo `JR_UPDATES_SSH_KNOWN_HOSTS`.
 6. Em **Actions secrets**, cadastre `JR_UPDATES_SSH_PRIVATE_KEY` com o conteúdo de `~/.ssh/jr-bot-updates`. Cadastre também `JR_UPDATES_SSH_KNOWN_HOSTS` com a linha conferida acima. O segredo da chave privada nunca sai do GitHub Actions.
 
 Depois de ativado, publique a versão estável no GitHub Releases (ou execute novamente `Distribute Release Assets` com uma versão publicada). O trabalho separado `Publish JR Bot Windows update feed` valida o instalador antes de substituir o manifesto público. Se as credenciais ou a conexão SFTP falharem, o trabalho falha e a versão anterior continua anunciada.
@@ -121,7 +172,7 @@ Depois de três falhas seguidas do MiniMax, as próximas requisições vão dire
 
 Cada resposta concluída grava uma linha `Provedor: <nome> <modelo>`. A abertura do intervalo grava `Provedor: circuito aberto`. Essas linhas não incluem chaves. A resposta leva `X-JR-Provider` com `minimax`, `openrouter` ou `gemini`. `GET /usage` inclui `"fallback": true` enquanto o serviço estiver nesse modo, para o texto curto na tela de uso.
 
-Para ativar, coloque as variáveis no ambiente do processo, sem publicá-las no repositório. O exemplo comentado está em `deploy/.env.example`. No contêiner, o `deploy/compose.yml` só repassa a variável se ela existir no ambiente; valor vazio deixa o provedor desligado. Isto não altera a VPS: o fallback permanece desligado até alguém definir uma chave e reiniciar o processo.
+Para ativar, coloque as variáveis no ambiente do processo, sem publicá-las no repositório. O exemplo comentado está em `services/control/deploy/.env.example`. No contêiner, o `services/control/deploy/compose.yml` só repassa a variável se ela existir no ambiente; valor vazio deixa o provedor desligado. Isto não altera a VPS: o fallback permanece desligado até alguém definir uma chave e reiniciar o processo.
 
 ```sh
 OPENROUTER_API_KEY='cole-a-chave-no-ambiente' \
@@ -144,7 +195,7 @@ Se só o system prompt ainda estourar o teto, ele é truncado no meio, preservan
 
 ## Contrato HTTP
 
-Somente `GET /health` e `POST /auth/login` são públicos. Os demais caminhos exigem `Authorization: Bearer <token>`. As funções administrativas exigem o papel `admin`, consultado no banco a cada requisição.
+`GET /health`, `POST /auth/login` e o callback OAuth `GET /strata/callback` são públicos. O callback exige seu estado de uso único e a sessão original ativa. Os demais caminhos exigem `Authorization: Bearer <token>`. As funções administrativas exigem o papel `admin`, consultado no banco a cada requisição.
 
 | Método e caminho                   | Entrada ou resposta                                                                                                                                                               |
 | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

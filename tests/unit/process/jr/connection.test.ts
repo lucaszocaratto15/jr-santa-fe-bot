@@ -237,3 +237,246 @@ it('never stores a remote service session directly in the renderer-visible provi
   ).rejects.toThrow();
   expect(request).not.toHaveBeenCalled();
 });
+
+it('Strata client keeps credentials out of status and rejects inconsistent identity or organizations', async () => {
+  const { createStrataClient } = await import('@/process/services/jr/strataClient');
+  const status = {
+    configured: true,
+    linked: true,
+    erpUser: { id: 'erp-fixture', name: 'Test account' },
+    organizations: [{ id: 'organization-fixture', name: 'Test company' }],
+    organizationId: 'organization-fixture',
+    linkedAt: '2026-11-06T12:00:00Z',
+  };
+  const client = createStrataClient(async () => ({ ...status, accessToken: 'fixture-token-never-return' }));
+  expect(await client.status()).toEqual(status);
+  await expect(
+    createStrataClient(async () => ({ ...status, organizationId: 'another-organization' })).status()
+  ).rejects.toThrow('JR_STRATA_INVALID_RESPONSE');
+  await expect(createStrataClient(async () => ({ ...status, erpUser: null })).status()).rejects.toThrow(
+    'JR_STRATA_INVALID_RESPONSE'
+  );
+});
+
+it('Strata client accepts only HTTPS browser authorization and never forwards a model-supplied URL', async () => {
+  const { createStrataClient } = await import('@/process/services/jr/strataClient');
+  for (const authorizationUrl of [
+    'javascript:alert(1)',
+    'file:///private/file',
+    'https://person:secret@example.test/oauth',
+  ]) {
+    await expect(
+      createStrataClient(async () => ({ authorizationUrl, expiresAt: '2026-11-06T12:00:00Z' })).connect()
+    ).rejects.toThrow('JR_STRATA_INVALID_RESPONSE');
+  }
+});
+
+it('Strata tool calls preserve MCP errors while returning no transport secrets', async () => {
+  const { createStrataClient } = await import('@/process/services/jr/strataClient');
+  const call = vi.fn(async (_path: string, _init?: RequestInit) => ({
+    content: [{ type: 'text', text: 'permission_denied' }],
+    isError: true,
+    headers: { authorization: 'private-fixture' },
+  }));
+  const client = createStrataClient(call);
+  expect(await client.callTool({ name: 'compras.consultar', arguments: {} })).toEqual({
+    content: [{ type: 'text', text: 'permission_denied' }],
+    isError: true,
+  });
+  expect(call.mock.calls[0][0]).toBe('/strata/mcp/call');
+  await expect(client.callTool({ name: '../../admin', arguments: {} })).rejects.toThrow('JR_STRATA_INVALID_REQUEST');
+});
+
+it('Strata tool discovery rejects malformed schemas rather than giving the model a fake success', async () => {
+  const { createStrataClient } = await import('@/process/services/jr/strataClient');
+  await expect(
+    createStrataClient(async () => ({ tools: [{ name: 'erp.quem_sou', inputSchema: null }] })).tools()
+  ).rejects.toThrow('JR_STRATA_INVALID_RESPONSE');
+});
+
+it('Strata native login opens the backend URL and returns only expiry to the renderer', async () => {
+  vi.resetModules();
+  const providers: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
+  const openExternal = vi.fn(async () => {});
+  const expiresAt = '2026-11-06T12:00:00Z';
+  const authorizationUrl = 'https://issuer.example/oauth/authorize?state=fixture';
+  const strataCall = vi.fn(async () => ({ authorizationUrl, expiresAt, accessToken: 'private-fixture' }));
+  vi.doMock('electron', () => ({ shell: { openExternal } }));
+  vi.doMock('@/common', () => ({
+    ipcBridge: {
+      jr: {
+        strata: {
+          ...Object.fromEntries(
+            ['status', 'connect', 'organization', 'disconnect'].map((name) => [
+              name,
+              {
+                provider: (handler: (...args: unknown[]) => Promise<unknown>) => {
+                  providers[name] = handler;
+                },
+              },
+            ])
+          ),
+          changed: { emit: vi.fn() },
+        },
+      },
+    },
+  }));
+  vi.doMock('@/process/services/jr/auth', () => ({
+    getJrAccessController: () => ({ state: { status: 'authenticated', user: { id: 'jr-fixture' } }, strataCall }),
+  }));
+  try {
+    const { initStrataBridge } = await import('@/process/services/jr/strataIpc');
+    initStrataBridge();
+    expect(await providers.connect()).toEqual({ expiresAt });
+    expect(openExternal).toHaveBeenCalledWith(authorizationUrl);
+    expect(strataCall).toHaveBeenCalledWith('/strata/connect', expect.objectContaining({ method: 'POST' }));
+  } finally {
+    vi.doUnmock('electron');
+    vi.doUnmock('@/common');
+    vi.doUnmock('@/process/services/jr/auth');
+  }
+});
+
+it('Strata native execution observes only successful known ERP query receipts after the call completes', async () => {
+  vi.resetModules();
+  const order: string[] = [];
+  const completed = vi.fn(async () => {
+    order.push('completed');
+  });
+  const beginWorkEvent = vi.fn(() => {
+    order.push('began');
+    return completed;
+  });
+  let result: Record<string, unknown> = {
+    content: [{ type: 'text', text: JSON.stringify({ items: [], page: { limit: 20, offset: 0, total: 0 } }) }],
+  };
+  const strataCall = vi.fn(async () => {
+    order.push('requested');
+    return result;
+  });
+  vi.doMock('electron', () => ({ shell: { openExternal: vi.fn() } }));
+  vi.doMock('@/common', () => ({ ipcBridge: {} }));
+  vi.doMock('@/process/services/jr/auth', () => ({ getJrAccessController: () => ({ strataCall }) }));
+  vi.doMock('@/process/services/teach/registry', () => ({ getLearnService: () => ({ beginWorkEvent }) }));
+  try {
+    const { getStrataClient } = await import('@/process/services/jr/strataIpc');
+    const client = getStrataClient();
+    await client.callTool({ name: 'obras.listar', arguments: { query: 'private query never forwarded to learning' } });
+    expect(order).toEqual(['began', 'requested', 'completed']);
+    expect(completed).toHaveBeenCalledWith();
+    completed.mockClear();
+    for (const receipt of [
+      {
+        content: [{ type: 'text', text: JSON.stringify({ items: [], page: { limit: 20, offset: 0, total: 0 } }) }],
+        isError: true,
+      },
+      {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({ status: 'aguardando_consentimento', consent_url: 'https://erp.test/approve' }),
+          },
+        ],
+      },
+      { content: [{ type: 'text', text: 'The model says the query finished' }] },
+    ]) {
+      result = receipt;
+      await client.callTool({ name: 'obras.listar', arguments: {} });
+    }
+    expect(completed).not.toHaveBeenCalled();
+  } finally {
+    vi.doUnmock('electron');
+    vi.doUnmock('@/common');
+    vi.doUnmock('@/process/services/jr/auth');
+    vi.doUnmock('@/process/services/teach/registry');
+  }
+});
+
+it('creates the canonical employee assistant once during concurrent requests and never reassigns legacy assistants', async () => {
+  const { createEmployeeAssistantRegistry } = await import('@/process/services/jr/bootstrap');
+  const rows = [
+    { id: 'runtime', source: 'generated', agent_id: 'embedded', agent: { type: 'aionrs' } },
+  ] as unknown as import('@/common/types/agent/assistantTypes').Assistant[];
+  const create = vi.fn(async (input: import('@/common/types/agent/assistantTypes').CreateAssistantRequest) => {
+    const assistant = { ...rows[0], ...input, source: 'user' as const };
+    rows.push(assistant);
+    return assistant;
+  });
+  const identity = { ownerAccountId: 'account-a', assistantId: 'employee-a', generation: 1 };
+  const register = createEmployeeAssistantRegistry({
+    identity: () => identity,
+    list: async () => rows,
+    create,
+    skills: async () => ['read', 'read'],
+  });
+  expect(await Promise.all([register({ name: 'A' }), register({ name: 'A' })])).toEqual(
+    [identity, identity].map(({ generation: _generation, ...result }) => result)
+  );
+  await register({ name: 'Renamed' });
+  expect(create).toHaveBeenCalledTimes(1);
+  expect(create).toHaveBeenCalledWith(
+    expect.objectContaining({
+      id: 'employee-a',
+      avatar: '🤖',
+      defaults: { skills: { mode: 'fixed', value: ['read'] } },
+    })
+  );
+});
+
+it('keeps canonical assistant identities separate for different authenticated accounts', async () => {
+  const { createEmployeeAssistantRegistry } = await import('@/process/services/jr/bootstrap');
+  const runtime = {
+    id: 'runtime',
+    source: 'generated',
+    agent_id: 'embedded',
+    agent: { type: 'aionrs' },
+  } as unknown as import('@/common/types/agent/assistantTypes').Assistant;
+  let identity = { ownerAccountId: 'account-a', assistantId: 'employee-a', generation: 1 };
+  const create = vi.fn(async (input: import('@/common/types/agent/assistantTypes').CreateAssistantRequest) => ({
+    ...runtime,
+    ...input,
+  }));
+  const register = createEmployeeAssistantRegistry({
+    identity: () => identity,
+    list: async () => [runtime],
+    create,
+    skills: async () => [],
+  });
+  await register({ name: 'Same name' });
+  identity = { ownerAccountId: 'account-b', assistantId: 'employee-b', generation: 2 };
+  await register({ name: 'Same name' });
+  expect(create.mock.calls.map(([input]) => input.id)).toEqual(['employee-a', 'employee-b']);
+});
+
+it('rejects assistant creation if logout or relogin changes the session while the catalog loads', async () => {
+  const { createEmployeeAssistantRegistry } = await import('@/process/services/jr/bootstrap');
+  let generation = 1;
+  const create = vi.fn();
+  const register = createEmployeeAssistantRegistry({
+    identity: () => ({ ownerAccountId: 'account-a', assistantId: 'employee-a', generation }),
+    list: async () => {
+      generation += 1;
+      return [];
+    },
+    create,
+    skills: async () => [],
+  });
+  await expect(register({ name: 'A' })).rejects.toThrow('JR_ACCESS_REQUIRED');
+  expect(create).not.toHaveBeenCalled();
+});
+
+it('refuses to take over an existing non-user assistant at the canonical id', async () => {
+  const { createEmployeeAssistantRegistry } = await import('@/process/services/jr/bootstrap');
+  const create = vi.fn();
+  const register = createEmployeeAssistantRegistry({
+    identity: () => ({ ownerAccountId: 'account-a', assistantId: 'employee-a', generation: 1 }),
+    list: async () =>
+      [
+        { id: 'employee-a', source: 'builtin', agent: { type: 'aionrs' } },
+      ] as unknown as import('@/common/types/agent/assistantTypes').Assistant[],
+    create,
+    skills: async () => [],
+  });
+  await expect(register({ name: 'A' })).rejects.toThrow('JR_ASSISTANT_ID_CONFLICT');
+  expect(create).not.toHaveBeenCalled();
+});

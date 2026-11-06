@@ -9,18 +9,18 @@
  * Raw samples never cross the IPC: only state, exclusions and insights do.
  */
 
-/**
- * Aprender is always on: there is no consent state and no off switch. Its use is covered by the
- * Data Notice (DATA_NOTICE_VERSION), which the employee can only acknowledge.
- */
-export type LearnStatus = 'active' | 'paused' | 'unavailable';
+/** Work observation requires its own explicit opt-in, independent of the brain. */
+export type LearnStatus = 'disabled' | 'active' | 'paused' | 'unavailable';
 
 export type LearnState = {
+  ownerId?: string | null;
+  /** Earlier sampler consent does not authorize newly added real-event collectors. */
+  workEventsEnabled?: boolean;
   status: LearnStatus;
   unavailableReason: 'encryption' | 'platform' | null;
-  /** End of today's pause (in memory only); null unless status is 'paused'. */
+  /** Kept for IPC compatibility; indefinite pauses have no deadline. */
   pausedUntil: number | null;
-  /** The one pause of the local day is still unused. Once used, the control is hidden. */
+  /** True whenever collection can be paused. */
   pauseAvailable: boolean;
   /** macOS without Screen Recording permission → 'app-only'. */
   titles: 'full' | 'app-only';
@@ -46,6 +46,7 @@ export type LearnSuggestion = {
 };
 
 export type LearnInsightBatch = {
+  ownerUserId?: string;
   id: string;
   createdAt: number;
   periodStart: number;
@@ -58,3 +59,66 @@ export type LearnInsightBatch = {
 export type LearnGenerateErrorCode = 'no-data' | 'offline' | 'model-error' | 'unavailable' | 'busy';
 
 export type LearnGenerateResult = { ok: true; batch: LearnInsightBatch } | { ok: false; code: LearnGenerateErrorCode };
+
+export type WorkSourceType = 'erp' | 'web' | 'desktop' | 'integration' | 'manual';
+export type WorkActionCategory = 'consulta' | 'exportacao' | 'preenchimento' | 'envio' | 'aprovacao' | 'outro';
+export type WorkEvidence = 'strong' | 'medium' | 'weak';
+export type ObservedWorkSource = 'erp.read' | 'browser.download';
+export type WorkStep = { id: string; label: string; sourceType: WorkSourceType; actionCategory: WorkActionCategory };
+export type WorkEvent = {
+  id: string;
+  eventType: 'workflow_started' | 'workflow_step_observed' | 'workflow_completed';
+  sourceType: 'manual' | 'erp' | 'web';
+  sourceId: 'jr-manual' | 'jr-strata' | 'jr-browser';
+  actionCategory: WorkActionCategory;
+  workflowKey: string;
+  occurredAt: number;
+  evidence: WorkEvidence;
+  metadata: { systemCategory: WorkSourceType };
+};
+export type WorkRoutine = {
+  id: string;
+  name: string;
+  startedAt: number;
+  completedAt: number | null;
+  status: 'candidate' | 'confirmed' | 'rejected';
+  evidence: WorkEvidence;
+  steps: WorkStep[];
+  notes: string;
+  inputs: string;
+  outputs: string;
+  eventual: boolean;
+  excludedFromSummary: boolean;
+  suppressSuggestion: boolean;
+  /** Trusted actions prove individual steps, not an inferred business routine. */
+  observed?: boolean;
+  reviewedAt?: number;
+};
+export type WorkRoutineReview = Pick<
+  WorkRoutine,
+  | 'id'
+  | 'name'
+  | 'steps'
+  | 'notes'
+  | 'inputs'
+  | 'outputs'
+  | 'eventual'
+  | 'excludedFromSummary'
+  | 'suppressSuggestion'
+  | 'status'
+>;
+export type WorkFlowState = { active: WorkRoutine | null; routines: WorkRoutine[] };
+export type WorkMonthlyMap = {
+  month: string;
+  routines: Array<{
+    name: string;
+    frequency: number;
+    steps: WorkStep[];
+    notes: string;
+    inputs: string;
+    outputs: string;
+    eventual: boolean;
+  }>;
+  pendingCount: number;
+  observations: string;
+};

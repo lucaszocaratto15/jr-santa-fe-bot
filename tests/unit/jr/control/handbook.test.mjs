@@ -345,7 +345,7 @@ test('a publish request over the 6 MB cap is rejected with 413 and one under it 
   assert.equal(HANDBOOK_REQUEST_LIMIT, 6 * 1024 * 1024);
 });
 
-// ---- role handbooks visible within an area (company brain /peers) ----
+// ---- legacy local peers never grant access to another role's handbook ----
 
 const BRAIN_SECRET = 'brain-test-only-secret-0123456789';
 
@@ -390,8 +390,9 @@ async function areaSetup(t) {
   return { ...env, frota1, frota2, peers };
 }
 
-test('colaborador reads activity items of area peers but not of other roles, and gets no indicators', async (t) => {
-  const { app, frota1, fin } = await areaSetup(t);
+test('local collaborator peers cannot grant another role, while the own role remains readable without indicators', async (t) => {
+  const { app, frota1, fin, state } = await areaSetup(t);
+  state.peersOf[frota1.id].push({ userId: fin.id, areas: [{ areaId: 1, level: 'colaborador' }] });
   const list = await (await app.request('/handbook/roles', { token: frota1.token })).json();
   assert.deepEqual(
     list.roles.map((role) => role.key),
@@ -406,28 +407,33 @@ test('colaborador reads activity items of area peers but not of other roles, and
   assert.equal(JSON.stringify(payload).includes('timesPerWeek'), false);
   const denied = await app.request(roleUrl('financeiro'), { token: frota1.token });
   assert.equal(denied.status, 403);
+  assert.equal(JSON.stringify(await denied.json()).includes('Conciliar banco'), false);
+  assert.equal(state.calls, 0);
   assert.equal(fin.user.title, 'Financeiro');
 });
 
-test('a hung brain only delays handbook reads by the 2 s /peers timeout, then falls back to the own role', async (t) => {
+test('a hung legacy brain is never queried for role-handbook grants', async (t) => {
   const { app, frota1, state } = await areaSetup(t);
   state.hang = true;
-  const started = Date.now();
   const response = await app.request('/handbook/roles', { token: frota1.token });
-  const elapsed = Date.now() - started;
   assert.equal(response.status, 200);
-  assert.ok(elapsed >= 1500 && elapsed < 3500, `elapsed ${elapsed}`);
+  assert.deepEqual(
+    (await response.json()).roles.map((role) => role.key),
+    ['frota']
+  );
+  assert.equal(state.calls, 0);
 });
 
-test('a gestor of the shared area reads the peers role but never its indicators (owner-only)', async (t) => {
-  const { app, frota1, state, peers } = await areaSetup(t);
-  state.peersOf[frota1.id] = peers('gestor');
+test('local gestor status cannot grant another role or indicators', async (t) => {
+  const { app, frota1, fin, state, peers } = await areaSetup(t);
+  state.peersOf[frota1.id] = [...peers('gestor'), { userId: fin.id, areas: [{ areaId: 1, level: 'gestor' }] }];
   const payload = await (await app.request(roleUrl('frota'), { token: frota1.token })).json();
   assert.equal('indicators' in payload, false);
   assert.equal(payload.indicatorsHidden, true);
   assert.ok(payload.items.length > 0);
   const financeiro = await app.request(roleUrl('financeiro'), { token: frota1.token });
   assert.equal(financeiro.status, 403);
+  assert.equal(state.calls, 0);
 });
 
 test('owner sees every role with indicators', async (t) => {
@@ -438,14 +444,16 @@ test('owner sees every role with indicators', async (t) => {
   assert.equal(payload.indicators.contributors, 1);
 });
 
-test('peers media is readable by the area, other roles media is not', async (t) => {
-  const { app, frota1, frota2, fin, publish } = await areaSetup(t);
+test('own-role media is readable but local peer grants cannot expose another role media', async (t) => {
+  const { app, frota1, frota2, fin, publish, state } = await areaSetup(t);
+  state.peersOf[frota1.id].push({ userId: fin.id, areas: [{ areaId: 1, level: 'gestor' }] });
   const peerMedia = randomUUID();
   const otherMedia = randomUUID();
   await publish(frota2, { media: [{ id: peerMedia, base64: JPEG() }] });
   await publish(fin, { media: [{ id: otherMedia, base64: JPEG() }] });
   assert.equal((await app.request(`/handbook/media/${peerMedia}`, { token: frota1.token })).status, 200);
   assert.equal((await app.request(`/handbook/media/${otherMedia}`, { token: frota1.token })).status, 403);
+  assert.equal(state.calls, 0);
 });
 
 test('brain down falls back to the own role only, never an error', async (t) => {
@@ -462,6 +470,7 @@ test('brain down falls back to the own role only, never an error', async (t) => 
   assert.equal(own.items.length, 2);
   const fin = await app.request(roleUrl('financeiro'), { token: frota1.token });
   assert.equal(fin.status, 403);
+  assert.equal(state.calls, 0);
 });
 
 test('without a brain configured an employee reads only their own role', async (t) => {

@@ -8,3 +8,5 @@
 !compact.mjs
 !handbook.mjs
 !brain.mjs
+!strata/
+!strata/*.mjs

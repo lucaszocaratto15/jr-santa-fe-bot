@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -60,7 +61,18 @@ const insert = (text: string, extra: Record<string, unknown> = {}) =>
 
 beforeAll(async () => {
   directory = await mkdtemp(join(tmpdir(), 'jr-brain-contract-'));
-  brain = createBrainServer({ databasePath: join(directory, 'brain.sqlite'), secret: SECRET }) as Brain;
+  brain = createBrainServer({
+    databasePath: join(directory, 'brain.sqlite'),
+    secret: SECRET,
+    resolveAuthorization: async (identity: { userId: string }) => ({
+      jrUserId: identity.userId,
+      erpUserId: `erp-${identity.userId}`,
+      organizationId: 'jr',
+      scope: { all: true },
+      publishAreaIds: brain.store.areas.list().map((area: { id: number }) => area.id),
+      reviewAreaIds: brain.store.areas.list().map((area: { id: number }) => area.id),
+    }),
+  }) as Brain;
   const { port } = await brain.listen(0, '127.0.0.1');
   baseUrl = `http://127.0.0.1:${port}`;
   areas = {
@@ -111,16 +123,31 @@ describe('desktop clients against the real brain', () => {
     const facts = await manage.facts({ areaId: areas.obras, q: 'bomba' });
     expect(facts.map((f) => f.id)).toEqual([id]);
     expect(facts[0].effectiveConfidence).toBeGreaterThan(0);
-    const updated = await manage.updateFact(id, { text: 'Bomba reserva fica no galpao 3' });
-    expect(updated.text).toBe('Bomba reserva fica no galpao 3');
-    expect(updated.humanEdited).toBe(true);
-    expect((await manage.history(id)).map((f) => f.id)).toEqual([id]);
-    // Geral is owner-only for a gestor; high facts cannot be promoted.
+    await expect(manage.updateFact(id, { text: 'Bomba reserva fica no galpao 3' })).rejects.toThrow('BRAIN_CONFLICT');
+    const notes = clientAs('gil').notes;
+    const draft = await notes.create({ requestId: randomUUID(), factId: id });
+    const revised = await notes.revise({
+      id: draft.proposal.id,
+      version: draft.proposal.version,
+      text: 'Bomba reserva fica no galpao 3',
+      sourceQuote: draft.proposal.sourceQuote,
+      areaId: areas.obras,
+      kind: 'shared_note',
+    });
+    await notes.consent({
+      id: revised.proposal.id,
+      version: revised.proposal.version,
+      hash: revised.proposal.hash,
+      decision: 'share',
+    });
+    const history = await manage.history(id);
+    expect(history.map((item) => item.text)).toEqual([
+      'Bomba reserva fica no galpao 2',
+      'Bomba reserva fica no galpao 3',
+    ]);
+    // Area promotion also needs the explicit version-bound consent flow.
+    await expect(manage.updateFact(id, { general: true })).rejects.toThrow('BRAIN_CONFLICT');
     await expect(manage.facts({ areaId: areas.general })).rejects.toThrow('BRAIN_FORBIDDEN');
-    const high = insert('Contrato com valor alto', { risk: 'high' });
-    await expect(manage.updateFact(high, { general: true })).rejects.toThrow('BRAIN_REJECTED');
-    const promoted = await manage.updateFact(id, { general: true });
-    expect(promoted.areaId).toBe(areas.general);
   });
 
   it('owner: areas CRUD, members, delete by author and log', async () => {

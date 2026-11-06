@@ -10,6 +10,7 @@ import ConnectionDialog from './ConnectionDialog';
 import type { ApprovedAppId } from './connections';
 import { useConnections } from './useConnections';
 import styles from './Connections.module.css';
+import StrataConnection from './StrataConnection';
 
 // Google account connection is paused for the current company pilot.
 const APPROVED_APPS: ApprovedAppId[] = ['chrome'];
@@ -76,6 +77,10 @@ const Connections: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
             </Button>
           </div>
           <div className={styles.catalogBody}>
+            <StrataConnection
+              key={state.user?.id ?? 'signed-out'}
+              ownerId={state.status === 'authenticated' ? (state.user?.id ?? null) : null}
+            />
             {connections.actionError && <Alert type='error' content={t(`common.jr.mcp.${connections.actionError}`)} />}
             {connections.error && (
               <div className={styles.loadError}>

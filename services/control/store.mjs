@@ -130,7 +130,7 @@ export function usageHistory(rows, timestamp) {
       if (sum > best.tokens) best = { tokens: sum, startedAt: new Date(row.at).toISOString() };
       sum -= row.tokens;
     }
-    return { days, ...best };
+    return Object.assign({ days }, best);
   });
   return { daily, peak5h };
 }

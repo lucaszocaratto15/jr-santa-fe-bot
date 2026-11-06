@@ -751,9 +751,10 @@
         "status": {
           "active": "On",
           "paused": "Paused",
-          "unavailable": "Unavailable"
+          "unavailable": "Unavailable",
+          "disabled": "無効"
         },
-        "pause": "Pause for 15 min",
+        "pause": "収集を一時停止",
         "resume": "Resume",
         "unavailableEncryption": "Unavailable: this computer does not offer system encryption, so nothing can be stored safely.",
         "unavailablePlatform": "Unavailable on this system.",
@@ -762,7 +763,7 @@
         "samplerError": "Observation stopped because of an error.",
         "retry": "Try again",
         "actionFailed": "Could not finish that. Try again.",
-        "intro": "Aprender looks at which programs and pages you use to understand your work and help you. It is always on, and raw records stay on this computer only. See the Data Notice for what is collected.",
+        "intro": "学習はご自身の許可がある場合にのみ開始します。アプリの非公開メタデータ、手動マーカー、完了した ERP への照会、ブラウザでのダウンロードを利用して、業務手順の候補を提案します。収集は一時停止または無効化できます。",
         "readNotice": "View the Data Notice"
       },
       "insights": {
@@ -774,8 +775,8 @@
         "timePerApp": "Time per program",
         "minutesShort": "{{value}} min",
         "hoursMinutes": "{{hours}}h{{minutes}}",
-        "repetitive": "Repetitive",
-        "times": "{{times}}× · {{minutes}} min",
+        "repetitive": "定型業務の仮説",
+        "times": "未確認の推定：{{times}} 回 · {{minutes}} 分",
         "tip": "Tip",
         "teach": "Teach this task",
         "delete": "Delete",
@@ -814,6 +815,76 @@
         "rawHours": "Raw records: {{count}} h stored (deleted within 48 h)",
         "wipeNow": "Delete now",
         "wipeConfirm": "Delete the raw records stored on this computer now?"
+      },
+      "consent": {
+        "title": "自分の業務から学習",
+        "body": "アプリとウィンドウの非公開メタデータ、ご自身で付けた作業工程のマーカー、成功した ERP への照会、JR ブラウザで完了したダウンロードの利用を許可します。実際のイベントから保存されるのは操作の分類と時刻だけであり、照会の引数、返されたデータ、ファイル名、アドレスは保存されません。記録はこのコンピュータ上で非公開に保たれますが、集計された要約が会社の AI に送信される場合があります。ページの内容、フォーム、パスワード、文書は収集されません。観測された操作だけでは、業務手順全体が実行された証拠にはなりません。",
+        "enable": "業務学習を許可",
+        "disable": "収集を無効にする",
+        "weakEvidence": "アプリやウィンドウから得られる情報は、確実な証拠ではありません。これらの提案には確認が必要です。",
+        "eventsRequired": "以前の許可では、実際のイベントからの学習は有効になりません。これらの追加情報源を許可するには、更新された通知をご確認ください。",
+        "eventsEnable": "実際の作業イベントを許可"
+      },
+      "workflow": {
+        "title": "自分のワークフロー",
+        "privacy": "非公開です。手順名は一般的な名称にし、個人、文書、住所、認証情報を含めないでください。",
+        "name": "一般的なワークフロー名",
+        "start": "ワークフローを開始",
+        "step": "一般的な手順名",
+        "addStep": "手順を完了",
+        "complete": "ワークフローを完了",
+        "source": "使用するシステム",
+        "action": "操作の種類",
+        "review": "確認する定型業務",
+        "confirm": "定型業務を確認し、修正を保存",
+        "reject": "定型業務を破棄",
+        "eventual": "不定期の作業",
+        "exclude": "月次概要から除外",
+        "suppress": "今後は提案しない",
+        "notes": "非公開メモ",
+        "status": {
+          "candidate": "確認待ち",
+          "confirmed": "従業員が確認済み",
+          "rejected": "破棄済み"
+        },
+        "sources": {
+          "erp": "ERP",
+          "web": "Webポータルまたはシステム",
+          "desktop": "アプリまたはスプレッドシート",
+          "integration": "連携",
+          "manual": "その他のツール"
+        },
+        "actions": {
+          "consulta": "照会",
+          "exportacao": "エクスポート",
+          "preenchimento": "入力",
+          "envio": "送信",
+          "aprovacao": "承認",
+          "outro": "その他"
+        },
+        "month": "月（YYYY-MM）",
+        "monthly": "非公開の月次業務マップを生成",
+        "insufficient": "マップを生成するには、この月に完了した定型業務を1件以上確認してください。",
+        "frequency": "実行記録 {{count}} 件",
+        "pending": "検証待ちの定型業務 {{count}} 件",
+        "saveNotes": "メモを保存",
+        "manual": "非公開の下書きを手動で作成",
+        "draft": "非公開の下書きです。使用前に確認してください。Brainには何も公開されません。",
+        "responsibilities": "担当業務と確認済みの定型業務",
+        "systems": "使用するシステム",
+        "steps": "確認済みの手順",
+        "exceptions": "例外とメモ",
+        "opportunities": "検証が必要な自動化の候補",
+        "opportunity": "操作を実行せずに、繰り返す手順を自動化できるか確認します。",
+        "error": "保存できませんでした。個人データ、住所、認証情報を含まない一般的な名称を使用してください。",
+        "inputs": "既知の入力（分類のみ、文書は含めない）",
+        "outputs": "既知の出力（分類のみ、文書は含めない）",
+        "automationCandidate": "自動化の可能性：{{count}} 件のステップを記録しました。この一連の操作が定型業務に当たるか、どのステップを自動化できるか確認してください。",
+        "manualEvidence": "根拠：あなたが入力した業務の節目。職務に関する知識として扱う前に、定型業務の内容を確認してください。",
+        "observedName": "JR で観測された操作の流れ",
+        "observedEvidence": "これらの操作は ERP またはブラウザによって確認されました。この流れは作業手順の候補にすぎません。職務マップに使用する前に、目的と各手順を確認してください。",
+        "observedQuery": "ERP への照会が完了しました",
+        "observedDownload": "ブラウザでのダウンロードが完了しました"
       }
     },
     "handbook": {
@@ -902,28 +973,28 @@
       "updatedNotice": "Your Handbook was updated — review it if you like"
     },
     "dataNotice": {
-      "title": "Aviso de uso de dados",
-      "intro": "Para você saber como o JR Bot usa as informações do seu trabalho, aqui vai uma explicação simples. Este é um aviso, não um pedido de autorização: ele vale para todos os colaboradores da empresa.",
-      "collectedTitle": "O que é coletado",
-      "collectedBody": "Trechos das suas conversas com os bots, para o cérebro da empresa, incluindo os resultados de ferramentas que o bot usou na conversa (por exemplo, páginas e dados de sistemas); amostras da sua tela (aplicativo e título da janela), para o recurso Aprender; e as tarefas que você ensinar ao bot, para o Manual da função.",
-      "purposeTitle": "Para que serve",
-      "purposeBody": "Entender como o trabalho é feito para ajudar você: os bots passam a saber o que a empresa já sabe. Não serve para avaliar desempenho nem para controlar horário.",
-      "whoTitle": "Quem vê o quê",
-      "whoBody": "O que o cérebro aprende fica disponível por área e por nível: cada pessoa vê o conhecimento das suas áreas e o que for geral para a empresa. Informações sensíveis, como valores, contratos e dados de clientes, só aparecem para gestores da área e para a diretoria.",
-      "blockedTitle": "O que fica de fora",
-      "blockedBody": "Removemos os valores do seu Cofre antes do envio, e o servidor descarta fatos com CPF, CNPJ, cartão, chave de acesso ou e-mail.",
-      "retentionTitle": "Por quanto tempo",
-      "retentionBody": "As amostras de tela são apagadas em 48 horas. Os trechos de conversa não ficam guardados no servidor: só os fatos extraídos deles e, junto de cada fato, uma citação curta da conversa (até 120 caracteres).",
-      "providerTitle": "Quem processa",
-      "providerBody": "O processamento usa o provedor de IA da empresa (MiniMax), pelo servidor da empresa. Nada vai direto do seu computador para o provedor.",
-      "pauseTitle": "Pausar o Aprender",
-      "pauseBody": "Você pode pausar o Aprender por alguns minutos nas configurações dele, quando precisar de privacidade.",
-      "button": "Li e entendi",
-      "failed": "Não foi possível registrar agora. O aviso aparece de novo na próxima abertura."
+      "title": "データ利用のお知らせ",
+      "intro": "このお知らせでは、選択した抜粋を使って社内ノートを提案する許可と、非公開の業務学習に参加する許可という、別々の2つの許可について説明します。このお知らせを確認しても、どちらの許可も与えたことにはなりません。",
+      "collectedTitle": "収集するもの",
+      "collectedBody": "社内ノートには、明示的に許可した抜粋のみを使用します。業務学習では、参加に同意した後にのみアプリやウィンドウのメタデータとワークフローの進捗を記録します。ページの内容、フォーム、認証情報、連続的なスクリーンショットは収集しません。",
+      "purposeTitle": "利用目的",
+      "purposeBody": "検証済みの知識を思い出し、自動化の候補を見つけるために使います。非公開の学習は、従業員の順位付けや業績評価には使用しません。",
+      "whoTitle": "誰に何が見えるか",
+      "whoBody": "会話とワークフローの記録は、初期設定では非公開です。選択した共有先に共有できるのは、確認済みのノートと、使用を許可した出典の抜粋のみです。アクセス制限のある検索にはERPの許可が必要です。",
+      "blockedTitle": "対象外となるもの",
+      "blockedBody": "Vault内の機密情報は処理前にマスキングされます。抜粋やワークフロー名に、機微な個人データを含めないでください。フィルターで保護を強化していますが、確認は引き続き必要です。",
+      "retentionTitle": "保存期間",
+      "retentionBody": "未加工のアクティビティサンプルは48時間以内、非公開の分析結果は90日以内に期限切れになります。過去の会話キューは自動的に再処理されません。共有ノートには、承認済みの内容とバージョン履歴が保持されます。",
+      "providerTitle": "処理する事業者",
+      "providerBody": "明示的に許可した抜粋のみが、会社のバックエンドを経由してAIプロバイダーに送信されます。業務の自動提案には集計データを使用します。分析の許可と共有の許可は別々です。",
+      "pauseTitle": "業務学習の一時停止",
+      "pauseBody": "非公開の業務学習は、参加に同意した後に開始されます。一時停止すると、再開するまで収集が停止します。収集を無効にすることもできます。Brainに自動で公開されることはありません。",
+      "button": "内容を読み、理解しました",
+      "failed": "現在、この確認を記録できませんでした。次回アプリを開いたときに、このお知らせが再び表示されます。"
     },
     "brainManage": {
       "title": "Cérebro da empresa",
-      "subtitle": "Os fatos que os bots da empresa aprenderam. Revise, corrija e decida o que fica disponível para cada área.",
+      "subtitle": "共有ノートと正式な手順、その承認済みの出典、アクセス権、バージョン履歴を確認します。",
       "loadFailed": "Não foi possível carregar o cérebro agora.",
       "exEmployee": "ex-funcionário",
       "facts": {
@@ -1026,7 +1097,8 @@
         "conflict": "Conflito: o item já existe, ou o fato faz parte de uma cadeia de versões e não pode mudar de área ou risco.",
         "forbidden": "Você não tem permissão para isso.",
         "notFound": "Este item não existe mais."
-      }
+      },
+      "erpPermissions": "ナレッジへのアクセス権限と承認権限は Strata Certa で管理されます。JR の管理者であっても ERP へのアクセス権限は付与されません。"
     },
     "brain": {
       "activity": {
@@ -1036,6 +1108,61 @@
         "doneNone": "会社の頭脳を参照 · 該当なし",
         "unavailable": "頭脳は利用できません"
       }
+    },
+    "brainNotes": {
+      "create": "ノートを作成",
+      "authorizeExcerpt": "この抜粋のみを使用",
+      "revise": "確認用のバージョンを更新",
+      "shareVersion": "このバージョンの共有を許可",
+      "excerptNotice": "確認すると、以下の抜粋のみが知識管理担当者に送信されます。使用したくない内容は編集して削除してください。",
+      "reviewNotice": "本文、出典、共有先を確認してください。このノートを共有しても、元の会話は公開されません。編集後は、共有を許可する前にバージョンを更新してください。",
+      "excerpt": "使用を許可した抜粋",
+      "text": "ノートの本文",
+      "source": "使用を許可した出典の抜粋",
+      "audience": "共有を許可した対象",
+      "kind": "知識の種類",
+      "sharedNote": "共有ノート",
+      "officialProcedure": "正式な手順",
+      "officialNotice": "担当の確認者に承認を依頼します。承認されるまで検索結果には表示されません。",
+      "pending": "提案を確認のために送信しました。まだ公開されていません。",
+      "shared": "許可された共有先にノートを共有しました。",
+      "failed": "この操作を完了できませんでした。接続、ERPの権限、提案のバージョンを確認してから、もう一度お試しください。",
+      "reviews": "確認待ちの手順",
+      "noReviews": "確認待ちの手順はありません。",
+      "approve": "手順を承認",
+      "reject": "提案を却下",
+      "authorizationRequired": "確認には、検証済みのERP連携と権限が必要です。",
+      "edit": "新しいバージョンを提案",
+      "validUntil": "有効期限（任意）",
+      "status": {
+        "draft": "下書き",
+        "active": "有効",
+        "pending_review": "承認待ち",
+        "rejected": "却下済み",
+        "superseded": "置き換え済み",
+        "suspended": "停止中"
+      }
+    },
+    "strata": {
+      "title": "Strata Certa",
+      "description": "既存の ERP アカウントを接続します。ツールは現在の権限で動作します。",
+      "connect": "Strata Certa を接続",
+      "disconnect": "アカウントの接続を解除",
+      "refresh": "連携を更新",
+      "unconfigured": "管理者による Strata 接続の設定が必要です。",
+      "notLinked": "Strata アカウントは接続されていません。",
+      "linkedAs": "接続中のアカウント：{{name}}",
+      "organization": "ERP の会社",
+      "chooseOrganization": "アクセスを許可されている会社を選択",
+      "failed": "操作を完了できませんでした。Strata へのアクセス権を確認して、もう一度お試しください。",
+      "browserOpened": "ブラウザーでログインを続けてください。その後、ここで連携を更新してください。",
+      "permissions": "ERP が操作ごとに権限を確認します。",
+      "consent": "ERP から確認を求められた場合は、Strata の安全なページで確認を完了してください。",
+      "disconnectTitle": "Strata アカウントの接続を解除しますか？",
+      "disconnectBody": "今後 ERP で照会や操作を行うには、再接続が必要です。",
+      "disconnected": "Strata アカウントの接続を解除しました。",
+      "connecting": "Strata へのログインを待っています",
+      "unavailable": "現在、連携を確認できません。"
     }
   }
 }

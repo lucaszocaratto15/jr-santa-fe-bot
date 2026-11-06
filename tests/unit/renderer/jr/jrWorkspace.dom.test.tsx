@@ -21,8 +21,8 @@ vi.mock('react-router-dom', () => ({
   useSearchParams: () => [new URLSearchParams(mocks.route), vi.fn()],
 }));
 vi.mock('swr', () => ({
-  default: (key: string | string[]) => ({
-    data: Array.isArray(key) ? mocks.bot : key === 'jr.bots' ? [mocks.bot] : { items: [] },
+  default: (key: string | string[] | null) => ({
+    data: Array.isArray(key) && key[0] === 'jr.bots' ? [mocks.bot] : Array.isArray(key) ? mocks.bot : { items: [] },
     mutate: mocks.refresh,
   }),
   mutate: vi.fn(),
@@ -118,17 +118,13 @@ it('shows a localized retry and the underlying error when the bot conversation c
   );
 });
 
-it('keeps search and new bot controls first, with real search and creation actions', () => {
+it('keeps search and removes the control for creating more assistants', () => {
   render(<JrSidebar />);
   const buttons = screen.getAllByRole('button');
-  expect(buttons.slice(0, 2).map((button) => button.getAttribute('aria-label'))).toEqual([
-    'common.jr.search',
-    'common.jr.newBot',
-  ]);
+  expect(buttons[0].getAttribute('aria-label')).toBe('common.jr.search');
   fireEvent.click(screen.getByRole('button', { name: 'common.jr.search' }));
   expect(mocks.search).toHaveBeenCalledTimes(1);
-  fireEvent.click(screen.getByRole('button', { name: 'common.jr.newBot' }));
-  expect(mocks.navigate).toHaveBeenCalledWith('/guid?create=1');
+  expect(screen.queryByRole('button', { name: 'common.jr.newBot' })).not.toBeInTheDocument();
 });
 
 async function openSettingsFromUserMenu(): Promise<void> {
@@ -239,4 +235,11 @@ it('opens and closes connections over the current chat without navigation', asyn
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   expect(screen.getByTestId('current-chat')).toBeInTheDocument();
   expect(mocks.navigate).not.toHaveBeenCalled();
+});
+
+it('ignores the legacy create route once the employee has an assistant', async () => {
+  mocks.route = '?bot=bot-1&create=1';
+  render(<JrWorkspace />);
+  await waitFor(() => expect(mocks.start).toHaveBeenCalledWith(mocks.bot));
+  expect(mocks.navigate).toHaveBeenCalledWith('/conversation/conversation-1?bot=bot-1', { replace: true });
 });

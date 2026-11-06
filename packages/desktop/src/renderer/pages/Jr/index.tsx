@@ -6,22 +6,25 @@ import useSWR, { mutate } from 'swr';
 import { getJrBot, listJrBots, reportJrOpenError, startJrConversation, type JrBot } from './jrBots';
 import JrBotDialog from './JrBotDialog';
 import styles from './JrWorkspace.module.css';
+import { useJrAccess } from './Access/context';
 
 export const JR_BOTS_KEY = 'jr.bots';
 
 const JrWorkspace: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { state } = useJrAccess();
   const [params, setParams] = useSearchParams();
-  const { data: bots, error, isLoading, mutate: refreshBots } = useSWR(JR_BOTS_KEY, listJrBots);
-  const selectedId = params.get('bot') || bots?.[0]?.id;
+  const botsKey = state.user?.id ? [JR_BOTS_KEY, state.user.id] : null;
+  const { data: bots, error, isLoading, mutate: refreshBots } = useSWR(botsKey, listJrBots);
+  const selectedId = bots?.find((item) => item.id === params.get('bot'))?.id || bots?.[0]?.id;
   const {
     data: bot,
     error: botError,
     isLoading: botLoading,
     mutate: refreshBot,
-  } = useSWR(selectedId ? ['jr.bot', selectedId] : null, () => getJrBot(selectedId!));
-  const creating = params.get('create') === '1';
+  } = useSWR(selectedId ? ['jr.bot', state.user?.id, selectedId] : null, () => getJrBot(selectedId!));
+  const creating = params.get('create') === '1' && bots?.length === 0;
   const editing = params.get('edit') === '1';
   const newConversation = params.get('new') === '1';
   const dialogVisible = creating || editing;
@@ -38,7 +41,7 @@ const JrWorkspace: React.FC = () => {
     void opening.then(
       (conversation) => {
         if (!cancelled) {
-          if (newConversation) void mutate(JR_BOTS_KEY);
+          if (newConversation) void mutate(botsKey);
           void navigate(`/conversation/${conversation.id}?bot=${encodeURIComponent(bot.id)}`, { replace: true });
         }
       },
@@ -54,7 +57,7 @@ const JrWorkspace: React.FC = () => {
   const closeDialog = () => setParams(bot ? { bot: bot.id } : {});
   const onSaved = async (saved: JrBot) => {
     await refreshBots();
-    await mutate(['jr.bot', saved.id], saved);
+    await mutate(['jr.bot', state.user?.id, saved.id], saved);
     setParams({ bot: saved.id });
   };
 

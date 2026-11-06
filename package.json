@@ -44,7 +44,7 @@
     "format:check": "oxfmt --check",
     "i18n:types": "node scripts/generate-i18n-types.js",
     "test": "vitest run",
-    "test:jr": "node --test tests/unit/jr/*.test.mjs tests/unit/jr/control/*.test.mjs tests/unit/jr/brain/*.test.mjs",
+    "test:jr": "node --test tests/unit/jr/*.test.mjs tests/unit/jr/control/*.test.mjs tests/unit/jr/control/strata/*.test.mjs tests/unit/jr/brain/*.test.mjs",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:contract": "vitest run tests/contract --passWithNoTests",

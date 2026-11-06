@@ -153,7 +153,10 @@
     "tabLimitReached": "Tab-Limit erreicht ({{count}}). Der älteste Tab wurde wiederverwendet.",
     "agentFirstUseTitle": "Der Agent nutzt den integrierten Browser",
     "agentFirstUseContent": "Er kann in diesem Bereich Seiten öffnen, klicken und Inhalte lesen. Deine Anmeldung bleibt erhalten.",
-    "agentFirstUseAction": "Einstellungen öffnen"
+    "agentFirstUseAction": "Einstellungen öffnen",
+    "tabProtected": "Dieser Browser wird verwendet. Beenden Sie die Aufgabe, Aufnahme oder sichere Anmeldung oder geben Sie die Steuerung an den Bot zurück, bevor Sie den Tab schließen oder ersetzen.",
+    "sessionLimitReached": "Im Browser sind bereits {{count}} Sitzungen geöffnet. Schließen Sie einen ungenutzten Tab, bevor Sie eine weitere Sitzung öffnen. Sitzungen in anderen Projekten bleiben geöffnet.",
+    "popupBlocked": "Ein neuer Tab wurde blockiert, weil der Browser, aus dem er geöffnet wurde, in diesem Projekt nicht aktiv ist. Öffnen Sie den Link im Browser des aktuellen Projekts."
   },
   "saveConflict": "Speichern fehlgeschlagen: Diese Datei wurde auf der Festplatte geändert, nachdem Sie sie geöffnet haben. Neu laden, um die anderen Änderungen zu sehen — Ihre Bearbeitungen sind noch da, ungespeichert.",
   "persistQuotaExceeded": "Der lokale Speicher ist voll, offene Tabs dieses Projekts können nicht mehr gemerkt werden. Schließen Sie einige Tabs oder löschen Sie die Websitedaten.",

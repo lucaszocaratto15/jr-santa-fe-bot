@@ -22,6 +22,8 @@ export const TEACH_TOOL_NAMES = [
   'handbook_show',
   'brain_search',
   'brain_wrong',
+  'strata_list_tools',
+  'strata_call_tool',
 ] as const;
 
 export type TeachToolName = (typeof TEACH_TOOL_NAMES)[number];

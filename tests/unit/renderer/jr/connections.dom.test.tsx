@@ -14,6 +14,10 @@ const mocks = vi.hoisted(() => ({
   info: vi.fn(),
   open: vi.fn(),
   navigate: vi.fn(),
+  strataStatus: vi.fn(),
+  strataConnect: vi.fn(),
+  strataDisconnect: vi.fn(),
+  strataOrganization: vi.fn(),
   access: { status: 'pilot', user: null as { id: string; name: string; role: 'admin' | 'employee' } | null },
 }));
 vi.mock('react-i18next', () => ({
@@ -28,6 +32,14 @@ vi.mock('@/renderer/pages/Jr/Access/context', () => ({
 vi.mock('react-router-dom', () => ({ useNavigate: () => mocks.navigate }));
 vi.mock('@/common/adapter/ipcBridge', () => ({
   application: { systemInfo: { invoke: mocks.info } },
+  jr: {
+    strata: {
+      status: { invoke: mocks.strataStatus },
+      connect: { invoke: mocks.strataConnect },
+      disconnect: { invoke: mocks.strataDisconnect },
+      organization: { invoke: mocks.strataOrganization },
+    },
+  },
   shell: { openExternal: { invoke: mocks.open } },
   mcpService: {
     listServers: { invoke: mocks.list },
@@ -39,7 +51,13 @@ vi.mock('@/common/adapter/ipcBridge', () => ({
   },
 }));
 
+vi.mock('@arco-design/web-react', async () => ({
+  ...(await vi.importActual<typeof import('@arco-design/web-react')>('@arco-design/web-react')),
+  Message: { info: vi.fn(), error: vi.fn(), success: vi.fn() },
+}));
+
 import Connections from '@/renderer/pages/Jr/Connections';
+import StrataConnection from '@/renderer/pages/Jr/Connections/StrataConnection';
 
 const local: IMcpServer = {
   id: 'mcp-1',
@@ -83,6 +101,14 @@ const beginGmailSetup = async () => {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  mocks.strataStatus.mockResolvedValue({
+    configured: false,
+    linked: false,
+    erpUser: null,
+    organizations: [],
+    organizationId: null,
+    linkedAt: null,
+  });
   mocks.access.status = 'pilot';
   mocks.access.user = null;
   mocks.list.mockResolvedValue([]);
@@ -452,4 +478,84 @@ describe('advanced connection configuration form', () => {
       })
     );
   });
+});
+
+describe('Strata existing account connection', () => {
+  const status = {
+    configured: true,
+    linked: false,
+    erpUser: null,
+    organizations: [],
+    organizationId: null,
+    linkedAt: null,
+  };
+  const mountStrata = (ownerId = 'employee-fixture') =>
+    render(
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <StrataConnection ownerId={ownerId} />
+      </SWRConfig>
+    );
+
+  it('shows missing server configuration without starting a login', async () => {
+    mountStrata();
+    expect(await screen.findByText('common.jr.strata.unconfigured')).toBeTruthy();
+    expect(mocks.strataConnect).not.toHaveBeenCalled();
+  });
+
+  it('starts login only by user action and opens no renderer supplied external URL', async () => {
+    mocks.strataStatus.mockResolvedValue(status);
+    mocks.strataConnect.mockResolvedValue({ expiresAt: new Date(Date.now() + 600000).toISOString() });
+    const mounted = mountStrata();
+    fireEvent.click(await screen.findByRole('button', { name: 'common.jr.strata.connect' }));
+    await waitFor(() => expect(mocks.strataConnect).toHaveBeenCalledTimes(1));
+    expect(mocks.open).not.toHaveBeenCalled();
+    mounted.unmount();
+  });
+
+  it('shows the verified ERP account and permitted organizations from the server', async () => {
+    mocks.strataStatus.mockResolvedValue({
+      ...status,
+      linked: true,
+      erpUser: { id: 'erp-fixture', name: 'Verified ERP account' },
+      organizations: [{ id: 'org-fixture', name: 'Permitted organization' }],
+      organizationId: 'org-fixture',
+    });
+    mountStrata();
+    expect(await screen.findByText('common.jr.strata.linkedAs Verified ERP account')).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: 'common.jr.strata.organization' })).toBeTruthy();
+    expect(mocks.strataConnect).not.toHaveBeenCalled();
+  });
+
+  it('does not show another employee cached account on a profile change', async () => {
+    const cache = new Map();
+    mocks.strataStatus.mockResolvedValueOnce({
+      ...status,
+      linked: true,
+      erpUser: { id: 'erp-a', name: 'Private account A' },
+      organizations: [],
+      organizationId: null,
+    });
+    mocks.strataStatus.mockImplementationOnce(() => new Promise(() => {}));
+    const view = (ownerId: string) => (
+      <SWRConfig value={{ provider: () => cache }}>
+        <StrataConnection ownerId={ownerId} />
+      </SWRConfig>
+    );
+    const mounted = render(view('employee-a'));
+    await screen.findByText('common.jr.strata.linkedAs Private account A');
+    mounted.rerender(view('employee-b'));
+    expect(screen.queryByText('common.jr.strata.linkedAs Private account A')).toBeNull();
+  });
+});
+
+it('offers reconnect and disconnect when the ERP grant can no longer be verified', async () => {
+  mocks.strataStatus.mockRejectedValue(new Error('grant_invalid'));
+  render(
+    <SWRConfig value={{ provider: () => new Map() }}>
+      <StrataConnection ownerId='employee-fixture' />
+    </SWRConfig>
+  );
+  await screen.findByText('common.jr.strata.unavailable');
+  expect(screen.getByRole('button', { name: 'common.jr.strata.connect' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'common.jr.strata.disconnect' })).toBeTruthy();
 });

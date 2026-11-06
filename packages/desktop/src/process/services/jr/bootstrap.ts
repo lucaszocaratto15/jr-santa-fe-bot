@@ -2,6 +2,61 @@ import { randomUUID } from 'node:crypto';
 import { lstat, mkdir, open, readFile, realpath, unlink, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { BUILTIN_TEACH_MCP_NAME } from '@/common/config/constants';
+import { isAionrsAssistant, type Assistant, type CreateAssistantRequest } from '@/common/types/agent/assistantTypes';
+
+type EmployeeAssistantIdentity = { ownerAccountId: string; assistantId: string; generation: number };
+
+/** Serialize the canonical JR creation path; existing assistants and legacy data are never deleted. */
+export function createEmployeeAssistantRegistry(deps: {
+  identity: () => EmployeeAssistantIdentity;
+  list: () => Promise<Assistant[]>;
+  create: (input: CreateAssistantRequest) => Promise<Assistant>;
+  skills: () => Promise<string[]>;
+}): (input: { name: string }) => Promise<Omit<EmployeeAssistantIdentity, 'generation'>> {
+  const pending = new Map<string, Promise<Omit<EmployeeAssistantIdentity, 'generation'>>>();
+  return async (input) => {
+    const identity = deps.identity();
+    if (typeof input?.name !== 'string' || !input.name.trim() || input.name.trim().length > 80)
+      throw new Error('JR_ASSISTANT_INVALID_REQUEST');
+    const current = (): void => {
+      const next = deps.identity();
+      if (next.ownerAccountId !== identity.ownerAccountId || next.generation !== identity.generation)
+        throw new Error('JR_ACCESS_REQUIRED');
+    };
+    let run = pending.get(identity.assistantId);
+    if (!run) {
+      run = (async () => {
+        const assistants = await deps.list();
+        current();
+        const existing = assistants.find((assistant) => assistant.id === identity.assistantId);
+        if (existing && (existing.source !== 'user' || !isAionrsAssistant(existing)))
+          throw new Error('JR_ASSISTANT_ID_CONFLICT');
+        if (!existing) {
+          const runtime = assistants.find(isAionrsAssistant);
+          if (!runtime) throw new Error('JR_ASSISTANT_RUNTIME_UNAVAILABLE');
+          const skillIds = await deps.skills();
+          current();
+          const created = await deps.create({
+            id: identity.assistantId,
+            name: input.name.trim(),
+            agent_id: runtime.agent_id,
+            avatar: '🤖',
+            defaults: { skills: { mode: 'fixed', value: [...new Set(skillIds)].toSorted() } },
+          });
+          if (created.id !== identity.assistantId) throw new Error('JR_ASSISTANT_INVALID_RESPONSE');
+        }
+        current();
+        return { ownerAccountId: identity.ownerAccountId, assistantId: identity.assistantId };
+      })().finally(() => {
+        if (pending.get(identity.assistantId) === run) pending.delete(identity.assistantId);
+      });
+      pending.set(identity.assistantId, run);
+    }
+    const result = await run;
+    current();
+    return result;
+  };
+}
 
 type RelayEnvironment = Record<string, string | undefined>;
 export type JrRelayConfig = { url: string; token: string; model: string };
@@ -26,13 +81,13 @@ const JR_TRUSTED_TEACH_TOOLS = [
   'handbook_show',
   'brain_search',
   'brain_wrong',
+  'strata_list_tools',
 ];
-const allowListConfig = (builtins: readonly string[]): string => {
-  const tools = [
-    ...builtins,
-    ...JR_TRUSTED_TEACH_TOOLS,
-    ...JR_TRUSTED_TEACH_TOOLS.map((tool) => `mcp__${BUILTIN_TEACH_MCP_NAME}__${tool}`),
-  ];
+const allowListConfig = (
+  builtins: readonly string[],
+  teachTools: readonly string[] = JR_TRUSTED_TEACH_TOOLS
+): string => {
+  const tools = [...builtins, ...teachTools, ...teachTools.map((tool) => `mcp__${BUILTIN_TEACH_MCP_NAME}__${tool}`)];
   return `${JR_AIONRS_COMPACT}
 [tools]
 allow_list = [${tools.map((tool) => `"${tool}"`).join(', ')}]
@@ -41,7 +96,19 @@ allow_list = [${tools.map((tool) => `"${tool}"`).join(', ')}]
 /** Engine built-ins that only read: files, search, and looking up its own deferred tools. */
 const JR_AIONRS_CONFIG = allowListConfig(['Read', 'Grep', 'Glob', 'ToolSearch']);
 /** Configs earlier app versions wrote; only these are ever rewritten. */
-const JR_MANAGED_CONFIGS: readonly string[] = [JR_AIONRS_COMPACT, allowListConfig(['Read', 'Grep', 'Glob'])];
+const JR_MANAGED_CONFIGS: ReadonlySet<string> = new Set([
+  JR_AIONRS_COMPACT,
+  allowListConfig(['Read', 'Grep', 'Glob']),
+  ...[
+    ['Read', 'Grep', 'Glob'],
+    ['Read', 'Grep', 'Glob', 'ToolSearch'],
+  ].map((builtins) =>
+    allowListConfig(
+      builtins,
+      JR_TRUSTED_TEACH_TOOLS.filter((tool) => tool !== 'strata_list_tools')
+    )
+  ),
+]);
 
 function isWithin(parent: string, candidate: string): boolean {
   const path = relative(parent, candidate);
@@ -56,7 +123,7 @@ function hasErrorCode(error: unknown, code: string): boolean {
 async function upgradeManagedConfig(configPath: string): Promise<void> {
   const info = await lstat(configPath);
   if (!info.isFile()) return;
-  if (!JR_MANAGED_CONFIGS.includes(await readFile(configPath, 'utf8'))) return;
+  if (!JR_MANAGED_CONFIGS.has(await readFile(configPath, 'utf8'))) return;
   await writeFile(configPath, JR_AIONRS_CONFIG, { encoding: 'utf8', mode: 0o600 });
 }
 

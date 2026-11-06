@@ -1,13 +1,33 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
 import test from 'node:test';
 import { startControl } from './support.mjs';
+import { createBrainPrincipalVerifier } from '../../../../services/brain/access.mjs';
 
 const SECRET = 'brain-test-only-secret-0123456789';
 
+/** Relay tests inject an already verified principal; OAuth authorization is covered separately. */
+function relayAuthorization(control) {
+  control.strata.resolveKnowledgePrincipal = async (session) => ({
+    jrUserId: session.user.id,
+    erpUserId: `erp-${session.user.id}`,
+    organizationId: 'fixture-org',
+    knowledgePolicy: {
+      policy_version: 1,
+      user_id: `erp-${session.user.id}`,
+      organization_id: 'fixture-org',
+      capabilities: { read: true, publish: true, revise: true, withdraw: true, approveOfficial: false },
+      audiences: [{ key: 'empresa', label: 'Fixture company', read: true, publish: true, review: false }],
+    },
+    assertCurrent: async () => {},
+  });
+}
+
 async function fakeBrain(t, handler) {
   const seen = [];
+  const verify = createBrainPrincipalVerifier(SECRET);
   const server = createServer((request, response) => {
     const chunks = [];
     request.on('data', (chunk) => chunks.push(chunk));
@@ -20,7 +40,23 @@ async function fakeBrain(t, handler) {
       };
       seen.push(entry);
       const reply = handler?.(entry) ?? { status: 200, body: { ok: true } };
-      response.writeHead(reply.status, { 'content-type': 'application/json' });
+      const principal = entry.headers['x-brain-erp-context']
+        ? verify(
+            { userId: entry.headers['x-jr-user-id'] },
+            {
+              proof: entry.headers['x-brain-erp-context'],
+              method: entry.method,
+              path: entry.url,
+              bodyHash: createHash('sha256').update(entry.body).digest('hex'),
+            }
+          )
+        : null;
+      response.writeHead(reply.status, {
+        'content-type': 'application/json',
+        ...(principal?.knowledgePolicy
+          ? { 'x-brain-authorization': 'erp-v2', 'x-brain-organization': principal.organizationId }
+          : {}),
+      });
       response.end(JSON.stringify(reply.body));
     });
   });
@@ -33,6 +69,7 @@ async function fakeBrain(t, handler) {
 async function setup(t, handler) {
   const brain = await fakeBrain(t, handler);
   const control = await startControl(t, { brainUrl: brain.url, brainSecret: SECRET });
+  relayAuthorization(control);
   const owner = await control.login();
   return { brain, control, owner };
 }
@@ -41,6 +78,20 @@ test('rejects an unauthenticated request without calling the brain', async (t) =
   const { brain, control } = await setup(t);
   const response = await control.request('/api/brain/facts');
   assert.equal(response.status, 401);
+  assert.equal(brain.seen.length, 0);
+});
+
+test('without delegated ERP configuration a JR administrator cannot reach restricted brain content', async (t) => {
+  const brain = await fakeBrain(t);
+  const control = await startControl(t, { brainUrl: brain.url, brainSecret: SECRET });
+  const owner = await control.login();
+  const response = await control.request('/api/brain/search', {
+    token: owner.token,
+    method: 'POST',
+    body: { query: 'fixture' },
+  });
+  assert.equal(response.status, 503);
+  assert.equal((await response.json()).error.code, 'strata_unconfigured');
   assert.equal(brain.seen.length, 0);
 });
 
@@ -84,6 +135,7 @@ test('overwrites spoofed identity headers and forwards no other client header', 
       'x-jr-role': 'admin',
       'x-jr-title': 'Diretor',
       'x-brain-secret': 'attacker',
+      'x-brain-erp-context': 'attacker.context',
       'x-forwarded-for': '1.2.3.4',
       Cookie: 'a=b',
     },
@@ -97,6 +149,61 @@ test('overwrites spoofed identity headers and forwards no other client header', 
   assert.equal(call.headers['x-forwarded-for'], undefined);
   assert.equal(call.headers.cookie, undefined);
   assert.equal(call.headers.authorization, undefined);
+  const proof = call.headers['x-brain-erp-context'];
+  assert.notEqual(proof, 'attacker.context');
+  const claims = JSON.parse(Buffer.from(proof.split('.')[0], 'base64url').toString());
+  assert.equal(claims.v, 2);
+  assert.equal(claims.jrUserId, employee.user.id);
+  assert.equal(claims.knowledgePolicy.user_id, `erp-${employee.user.id}`);
+});
+
+test('brainRequest signs only the current server-resolved ERP principal and exact forwarded body', async (t) => {
+  const { brain, owner } = await setup(t);
+  const { brainRequest } = await import('../../../../services/control/brain.mjs');
+  const principal = { jrUserId: owner.user.id, erpUserId: 'erp-fixture-owner', organizationId: 'fixture-org' };
+  await brainRequest(
+    { brain: { url: brain.url, secret: SECRET } },
+    owner.user,
+    'POST',
+    '/search',
+    { query: 'fixture' },
+    fetch,
+    4000,
+    principal
+  );
+  const call = brain.seen[0];
+  const result = createBrainPrincipalVerifier(SECRET)(
+    { userId: owner.user.id },
+    {
+      proof: call.headers['x-brain-erp-context'],
+      method: call.method,
+      path: call.url,
+      bodyHash: createHash('sha256').update(call.body).digest('hex'),
+    }
+  );
+  assert.deepEqual(result, principal);
+  assert.equal(call.headers.authorization, undefined);
+});
+
+test('an ERP principal for another JR employee is refused before the internal request', async () => {
+  const { brainRequest } = await import('../../../../services/control/brain.mjs');
+  let calls = 0;
+  await assert.rejects(
+    brainRequest(
+      { brain: { url: 'http://brain.invalid', secret: SECRET } },
+      { id: 'first', role: 'employee' },
+      'POST',
+      '/search',
+      {},
+      async () => {
+        calls += 1;
+      },
+      4000,
+      { jrUserId: 'another', erpUserId: 'erp-fixture', organizationId: 'fixture-org' }
+    ),
+    { code: 'authorization_failed' }
+  );
+  assert.equal(calls, 0);
 });
 
 test('forwards the brain status and body as-is', async (t) => {
@@ -129,6 +236,7 @@ test('a hung brain answers 503 within about 4 s while /auth/session keeps answer
     brainSecret: SECRET,
     brainFetch: hungFetch(signals),
   });
+  relayAuthorization(control);
   const owner = await control.login();
   const started = Date.now();
   const pending = control.request('/api/brain/facts/search?q=x', { token: owner.token });
@@ -189,6 +297,7 @@ test('rejects path traversal and non-brain prefixes', async (t) => {
 
 test('a brain that is down gives 503 brain_unavailable and /auth/session keeps working', async (t) => {
   const control = await startControl(t, { brainUrl: 'http://127.0.0.1:1', brainSecret: SECRET });
+  relayAuthorization(control);
   const owner = await control.login();
   const response = await control.request('/api/brain/facts', { token: owner.token });
   assert.equal(response.status, 503);
@@ -205,6 +314,7 @@ test('a brain that times out or is unreachable via brainFetch gives 503', async 
       throw new Error('boom');
     },
   });
+  relayAuthorization(control);
   const owner = await control.login();
   const response = await control.request('/api/brain/facts', { token: owner.token });
   assert.equal(response.status, 503);

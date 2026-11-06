@@ -1,6 +1,17 @@
 import type { SpeechToTextConfig } from '@/common/types/provider/speech';
 import type { IMcpServer, TProviderWithModel } from '@/common/config/storage';
 
+export type JrStrataStatus = {
+  configured: boolean;
+  linked: boolean;
+  erpUser: { id: string; name: string } | null;
+  organizations: Array<{ id: string; name: string }>;
+  organizationId: string | null;
+  linkedAt: string | null;
+};
+export type JrStrataTool = { name: string; description?: string; inputSchema: Record<string, unknown> };
+export type JrStrataToolCall = { name: string; arguments: Record<string, unknown> };
+
 export type GoogleClientSetting = {
   proxy?: string;
 };
@@ -15,6 +26,8 @@ export type ClientBusinessSettingMap = {
         string,
         {
           workspace: string;
+          /** Proven, issuer-qualified JR account. Unowned legacy records are never auto-assigned. */
+          ownerAccountId?: string;
           appearance?: JrAppearance;
           conversationId?: string;
           instructions?: string;

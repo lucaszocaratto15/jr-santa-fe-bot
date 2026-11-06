@@ -76,7 +76,10 @@ function parseFact(value: unknown): BrainManagedFact {
     typeof value.flagConflict !== 'boolean' ||
     typeof value.humanEdited !== 'boolean' ||
     !nullableNumber(value.updatedAt) ||
-    !(value.effectiveConfidence === undefined || Number.isFinite(value.effectiveConfidence))
+    !(value.effectiveConfidence === undefined || Number.isFinite(value.effectiveConfidence)) ||
+    ['canRevise', 'canWithdraw', 'canReactivate'].some(
+      (key) => value[key] !== undefined && typeof value[key] !== 'boolean'
+    )
   )
     return invalid();
   return {
@@ -97,6 +100,16 @@ function parseFact(value: unknown): BrainManagedFact {
     flagConflict: value.flagConflict,
     humanEdited: value.humanEdited,
     updatedAt: value.updatedAt,
+    ...(value.noteType === 'shared_note' || value.noteType === 'official_procedure'
+      ? { noteType: value.noteType }
+      : {}),
+    ...(typeof value.version === 'number' && Number.isInteger(value.version) ? { version: value.version } : {}),
+    ...(typeof value.canRevise === 'boolean' ? { canRevise: value.canRevise } : {}),
+    ...(typeof value.canWithdraw === 'boolean' ? { canWithdraw: value.canWithdraw } : {}),
+    ...(typeof value.canReactivate === 'boolean' ? { canReactivate: value.canReactivate } : {}),
+    ...(['draft', 'active', 'pending_review', 'rejected', 'superseded', 'suspended'].includes(String(value.status))
+      ? { status: value.status as BrainManagedFact['status'] }
+      : {}),
     ...(value.effectiveConfidence === undefined ? {} : { effectiveConfidence: value.effectiveConfidence as number }),
   };
 }

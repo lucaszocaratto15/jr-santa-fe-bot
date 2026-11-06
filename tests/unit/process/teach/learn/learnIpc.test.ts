@@ -44,6 +44,7 @@ vi.mock('@/common', () => ({
     learn: Object.fromEntries(
       [
         'state',
+        'setConsent',
         'pause',
         'resume',
         'getExclusions',
@@ -56,7 +57,18 @@ vi.mock('@/common', () => ({
         'openScreenRecordingSettings',
       ]
         .map((name) => [name, channel(name)])
-        .concat([['stateChanged', { emit: emitState }]])
+        .concat([
+          ['stateChanged', { emit: emitState }],
+          [
+            'workflow',
+            Object.fromEntries(
+              ['state', 'start', 'step', 'complete', 'review', 'monthly', 'observations'].map((name) => [
+                name,
+                channel(`workflow.${name}`),
+              ])
+            ),
+          ],
+        ])
     ),
   },
 }));
@@ -120,12 +132,12 @@ describe('learnIpc', () => {
 });
 
 describe('startLearnService', () => {
-  it('registers a running service with no consent step, listens for screen lock and writes nothing', async () => {
+  it('registers a disabled service, listens for screen lock and writes nothing', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'learn-start-'));
     try {
       const service = await startLearnService(dir);
       expect(getLearnService()).toBe(service);
-      expect(service.state().status).toBe(process.platform === 'linux' ? 'unavailable' : 'active');
+      expect(service.state().status).toBe(process.platform === 'linux' ? 'unavailable' : 'disabled');
       expect([...powerListeners.keys()].toSorted()).toEqual(['lock-screen', 'unlock-screen']);
       expect(emitState).toHaveBeenCalled();
       await expect(stat(join(dir, 'jr-learn'))).rejects.toThrow();

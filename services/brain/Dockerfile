@@ -7,7 +7,7 @@ ENV NODE_ENV=production \
 
 WORKDIR /app
 RUN mkdir /data && chown node:node /data
-COPY --chown=node:node index.mjs server.mjs store.mjs access.mjs curator.mjs text.mjs ./
+COPY --chown=node:node index.mjs server.mjs store.mjs access.mjs curator.mjs text.mjs notes.mjs ./
 
 USER node
 EXPOSE 8790

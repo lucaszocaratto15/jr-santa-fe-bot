@@ -1,11 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { SWRConfig } from 'swr';
 import { ptBR, withI18n } from '../teach/learn/i18nTestUtils';
 
 const mocks = vi.hoisted(() => ({
   facts: vi.fn(),
+  createNote: vi.fn(),
+  pending: vi.fn(),
+  revise: vi.fn(),
+  consent: vi.fn(),
   updateFact: vi.fn(),
   history: vi.fn(),
   areas: vi.fn(),
@@ -18,11 +22,18 @@ const mocks = vi.hoisted(() => ({
   me: vi.fn(),
   list: vi.fn(),
 }));
+const connection = vi.hoisted(() => ({ changed: null as (() => void) | null }));
 
 vi.mock('@/common', () => ({
   ipcBridge: {
     brain: {
       me: { invoke: mocks.me },
+      notes: {
+        create: { invoke: mocks.createNote },
+        pending: { invoke: mocks.pending },
+        revise: { invoke: mocks.revise },
+        consent: { invoke: mocks.consent },
+      },
       manage: {
         facts: { invoke: mocks.facts },
         updateFact: { invoke: mocks.updateFact },
@@ -36,7 +47,17 @@ vi.mock('@/common', () => ({
         log: { invoke: mocks.log },
       },
     },
-    jr: { admin: { list: { invoke: mocks.list } } },
+    jr: {
+      admin: { list: { invoke: mocks.list } },
+      strata: {
+        changed: {
+          on: (listener: () => void) => {
+            connection.changed = listener;
+            return () => {};
+          },
+        },
+      },
+    },
   },
 }));
 vi.mock('@renderer/pages/Jr/Access/context', () => ({
@@ -81,9 +102,37 @@ const fact = (id: number, over: Record<string, unknown> = {}) => ({
   ...over,
 });
 const employee = (id: string, name: string, revoked = false) => ({ id, name, revoked, role: 'colaborador' });
+const capabilities = { read: true, publish: true, revise: false, withdraw: false, approveOfficial: false };
+const erpMe = (rights = capabilities) => ({
+  areas: [{ id: '2', name: 'Obras', level: 'gestor', primary: true }],
+  isDirector: false,
+  manages: ['2'],
+  permissionsSource: 'erp',
+  capabilities: rights,
+});
 
 beforeEach(() => {
+  Object.defineProperty(window, 'matchMedia', {
+    configurable: true,
+    value: vi.fn(() => ({ matches: false, addListener: vi.fn(), removeListener: vi.fn() })),
+  });
   for (const mock of Object.values(mocks)) mock.mockReset();
+  mocks.pending.mockResolvedValue([]);
+  mocks.me.mockResolvedValue({ areas: [], isDirector: true, manages: [] });
+  mocks.createNote.mockResolvedValue({
+    proposal: {
+      id: 'fixture-proposal',
+      version: 1,
+      hash: 'hash-one',
+      text: 'Fato número 7',
+      sourceQuote: 'trecho literal da conversa',
+      areaId: 2,
+      risk: 'low',
+      kind: 'shared_note',
+      status: 'draft',
+    },
+    audiences: [{ id: 2, name: 'Obras' }],
+  });
   mocks.areas.mockResolvedValue([
     { id: 1, name: 'Geral', isGeneral: true, members: [] },
     { id: 2, name: 'Obras', isGeneral: false, members: [{ userId: 'u1', level: 'gestor', primary: true }] },
@@ -95,6 +144,58 @@ beforeEach(() => {
 });
 
 describe('BrainManager', () => {
+  it('does not grant a JR administrator ERP management rights or load the local permissions matrix', async () => {
+    mocks.me.mockResolvedValue(erpMe());
+    mount('owner');
+    expect(await screen.findByText(i18n.t('common.jr.brainManage.erpPermissions'))).toBeTruthy();
+    expect(mocks.facts).not.toHaveBeenCalled();
+    expect(mocks.pending).not.toHaveBeenCalled();
+    expect(mocks.areas).not.toHaveBeenCalled();
+    expect(mocks.list).not.toHaveBeenCalled();
+    expect(screen.queryByRole('heading', { name: 'Áreas' })).toBeNull();
+  });
+
+  it('uses ERP per-note revision and withdrawal rights without exposing an approval queue', async () => {
+    mocks.me.mockResolvedValue(erpMe({ ...capabilities, revise: true }));
+    mocks.facts.mockResolvedValue([
+      fact(7, { canRevise: true, canWithdraw: false, canReactivate: true }),
+      fact(8, { canRevise: false, canWithdraw: false, canReactivate: false }),
+    ]);
+    mount('owner');
+    await screen.findByText('Fato número 7');
+    expect(screen.getAllByRole('button', { name: i18n.t('common.jr.brainNotes.edit') })).toHaveLength(1);
+    expect(
+      screen
+        .getAllByRole('switch')
+        .every((button) => button.getAttribute('aria-disabled') === 'true' || button.hasAttribute('disabled'))
+    ).toBe(true);
+    expect(mocks.pending).not.toHaveBeenCalled();
+    expect(mocks.areas).not.toHaveBeenCalled();
+    expect(mocks.list).not.toHaveBeenCalled();
+  });
+
+  it('shows official review only with the ERP approval capability', async () => {
+    mocks.me.mockResolvedValue(erpMe({ ...capabilities, approveOfficial: true }));
+    mocks.pending.mockResolvedValue([
+      { id: 'pending-fixture', version: 1, text: 'Procedimento pendente', sourceQuote: 'Fonte autorizada' },
+    ]);
+    mount('manager');
+    expect(await screen.findByText('Procedimento pendente')).toBeTruthy();
+    expect(screen.getByRole('button', { name: i18n.t('common.jr.brainNotes.approve') })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: i18n.t('common.jr.brainNotes.edit') })).toBeNull();
+    expect(mocks.list).not.toHaveBeenCalled();
+  });
+
+  it('drops cached company content immediately when the ERP connection context changes', async () => {
+    mocks.me.mockResolvedValueOnce(erpMe({ ...capabilities, revise: true }));
+    mocks.me.mockImplementationOnce(() => new Promise(() => {}));
+    mount('owner');
+    await screen.findByText('Fato número 7');
+    act(() => connection.changed?.());
+    expect(screen.queryByText('Fato número 7')).toBeNull();
+    expect(screen.queryByText('trecho literal da conversa')).toBeNull();
+  });
+
   it('shows the owner the facts, the areas, the people and the access log', async () => {
     mount('owner');
     expect(await screen.findByText('Fato número 7')).toBeTruthy();
@@ -134,28 +235,24 @@ describe('BrainManager', () => {
     expect(screen.queryByRole('option', { name: 'Financeiro' })).toBeNull();
   });
 
-  it('disables promote to Geral for high-risk facts and promotes a low one', async () => {
+  it('does not expose the legacy direct promotion shortcut without note consent', async () => {
     mount('owner');
     await screen.findByText('Fato número 7');
-    const buttons = screen.getAllByRole('button', { name: 'Promover a Geral' });
-    expect(buttons).toHaveLength(2);
-    expect((buttons[0] as HTMLButtonElement).disabled).toBe(false);
-    expect((buttons[1] as HTMLButtonElement).disabled).toBe(true);
-    mocks.updateFact.mockResolvedValue(fact(7, { areaId: 1 }));
-    fireEvent.click(buttons[0]);
-    await waitFor(() => expect(mocks.updateFact).toHaveBeenCalledWith({ id: 7, patch: { general: true } }));
+    expect(screen.queryByRole('button', { name: 'Promover a Geral' })).toBeNull();
+    expect(mocks.updateFact).not.toHaveBeenCalled();
   });
 
-  it('edits the text through the right IPC call with only the changed fields', async () => {
+  it('edits an active fact through a private version proposal before any publication', async () => {
     mount('owner');
     await screen.findByText('Fato número 7');
-    fireEvent.click(screen.getAllByRole('button', { name: 'Editar fato' })[0]);
-    const dialog = await screen.findByRole('dialog', { name: 'Editar fato' });
-    const area = within(dialog).getByLabelText('Texto do fato');
-    fireEvent.change(area, { target: { value: 'Texto corrigido' } });
-    mocks.updateFact.mockResolvedValue(fact(7, { text: 'Texto corrigido' }));
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Salvar' }));
-    await waitFor(() => expect(mocks.updateFact).toHaveBeenCalledWith({ id: 7, patch: { text: 'Texto corrigido' } }));
+    fireEvent.click(screen.getAllByRole('button', { name: i18n.t('common.jr.brainNotes.edit') })[0]);
+    const dialog = await screen.findByRole('dialog', { name: i18n.t('common.jr.brainNotes.create') });
+    expect(mocks.createNote).toHaveBeenCalledWith({ factId: 7 });
+    fireEvent.change(within(dialog).getByLabelText(i18n.t('common.jr.brainNotes.text')), {
+      target: { value: 'Texto corrigido' },
+    });
+    expect(mocks.updateFact).not.toHaveBeenCalled();
+    expect(mocks.consent).not.toHaveBeenCalled();
   });
 
   it('asks for confirmation before deleting the facts of a person', async () => {

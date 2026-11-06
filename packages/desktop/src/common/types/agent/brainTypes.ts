@@ -9,8 +9,38 @@
  * Purpose: understand the work to help the employee; never performance evaluation or time control.
  */
 
-/** Version of the "Aviso de uso de dados". The employee can only acknowledge it; nothing is gated by it. */
-export const BRAIN_TERM_VERSION = '1.4';
+/** Data-notice version. Explicit excerpt and per-version sharing consent are separate actions. */
+export const BRAIN_TERM_VERSION = '2.0';
+
+export type BrainNoteStatus = 'draft' | 'active' | 'pending_review' | 'rejected' | 'superseded' | 'suspended';
+export type BrainNoteKind = 'shared_note' | 'official_procedure';
+export type BrainNoteProposal = {
+  id: string;
+  version: number;
+  hash: string;
+  text: string;
+  sourceQuote: string;
+  areaId: number;
+  risk: 'low' | 'high';
+  kind: BrainNoteKind;
+  status: BrainNoteStatus;
+  validFrom?: number;
+  validUntil?: number | null;
+};
+export type BrainProposalResult = {
+  proposal: BrainNoteProposal;
+  audiences?: Array<{ id: number; name: string }>;
+};
+export type BrainProposalPatch = Pick<
+  BrainNoteProposal,
+  'version' | 'text' | 'sourceQuote' | 'areaId' | 'kind' | 'validFrom' | 'validUntil'
+>;
+export type BrainProposalConsent = {
+  id: string;
+  version: number;
+  hash: string;
+  decision: 'share' | 'discard';
+};
 
 export type BrainRole = 'user' | 'assistant' | 'tool';
 
@@ -42,12 +72,26 @@ export type BrainFact = {
   date: string | null;
   confidence: number;
   erpRef: string | null;
+  noteType?: BrainNoteKind;
+  version?: number;
+  sourceQuote?: string | null;
 };
 
 export type BrainMe = {
   areas: Array<{ id: string; name: string | null; level: 'colaborador' | 'gestor'; primary: boolean }>;
   isDirector: boolean;
   manages: string[];
+  permissionsSource?: 'erp';
+  capabilities?: BrainCapabilities;
+};
+
+/** Effective rights returned by the ERP, never inferred from a JR role. */
+export type BrainCapabilities = {
+  read: boolean;
+  publish: boolean;
+  revise: boolean;
+  withdraw: boolean;
+  approveOfficial: boolean;
 };
 
 /** Kinds the curator assigns to a fact. */
@@ -76,6 +120,12 @@ export type BrainManagedFact = {
   updatedAt: number | null;
   /** Confidence after recency decay and feedback; absent in history rows. */
   effectiveConfidence?: number;
+  noteType?: BrainNoteKind;
+  version?: number;
+  status?: BrainNoteStatus;
+  canRevise?: boolean;
+  canWithdraw?: boolean;
+  canReactivate?: boolean;
 };
 
 export type BrainFactFilters = {

@@ -7,7 +7,22 @@ export const SECRET = 'brain-secret-test-only-not-real';
 
 export async function startBrain(t, options = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'jr-brain-test-'));
-  const brain = createBrainServer({ databasePath: join(directory, 'brain.sqlite'), secret: SECRET, ...options });
+  let brain;
+  // Test-only verified ERP fixture. Production has no adapter and must fail closed.
+  const resolveAuthorization = async (identity) => ({
+    jrUserId: identity.userId,
+    erpUserId: `erp_${identity.userId}`,
+    organizationId: brain.store.companyId,
+    scope: { all: true },
+    publishAreaIds: brain.store.areas.list().map((area) => area.id),
+    reviewAreaIds: brain.store.areas.list().map((area) => area.id),
+  });
+  brain = createBrainServer({
+    databasePath: join(directory, 'brain.sqlite'),
+    secret: SECRET,
+    resolveAuthorization,
+    ...options,
+  });
   const { port } = await brain.listen(0, '127.0.0.1');
   const baseUrl = `http://127.0.0.1:${port}`;
   t.after(async () => {

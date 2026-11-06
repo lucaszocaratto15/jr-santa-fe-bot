@@ -3,8 +3,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LearnState } from '@/common/types/agent/learnTypes';
-import { createLearnService, PAUSE_MINUTES, type LearnServiceDeps } from '@/process/services/teach/learn/learnService';
-import { createInsightStore, createSampleStore } from '@/process/services/teach/learn/sampleStore';
+import { createLearnService, type LearnServiceDeps } from '@/process/services/teach/learn/learnService';
+import { createInsightStore, createSampleStore, learnProfileDir } from '@/process/services/teach/learn/sampleStore';
+import { createLearnSettings } from '@/process/services/teach/learn/learnSettings';
 import { fakeEncryption, fakeSpawn } from './fakes';
 
 const T0 = Date.parse('2026-10-29T12:00:00Z');
@@ -21,6 +22,12 @@ let root: string;
 beforeEach(async () => {
   base = await mkdtemp(join(tmpdir(), 'learn-service-'));
   root = join(base, 'jr-learn');
+  // Most scenarios exercise an employee who has explicitly opted in.
+  await mkdir(root, { recursive: true });
+  await writeFile(
+    join(root, 'settings.json'),
+    JSON.stringify({ enabled: true, consentUserId: 'u1', consentedAt: T0 - 86_400_000, paused: false })
+  );
 });
 afterEach(async () => {
   await rm(base, { recursive: true, force: true });
@@ -78,7 +85,7 @@ function harness(over: Partial<LearnServiceDeps> = {}, reply?: ((n: number) => s
   return { service, clock, emitted, spawn, children, env, request, tickTimers, ticks, deps };
 }
 
-const store = () => createSampleStore(root, fakeEncryption());
+const store = () => createSampleStore(learnProfileDir(root, 'u1'), fakeEncryption());
 const stored = async () => store().readSince(0);
 const exists = async (path: string) =>
   stat(path).then(
@@ -91,32 +98,119 @@ async function seedSamples(count: number, start = T0 - 3_600_000) {
   for (let i = 0; i < count; i += 1) await s.append({ t: start + i * 15_000, app: 'Excel', title: `NF ${i % 3}` });
 }
 
-describe('always on', () => {
-  it('fresh install samples with no acceptance of any kind', async () => {
+describe('explicit observation consent', () => {
+  it('a fresh install does not sample before explicit consent', async () => {
+    await rm(join(root, 'settings.json'));
     const h = harness();
-    expect((await h.service.init()).status).toBe('active');
-    expect(h.tickTimers()).toHaveLength(1);
+    expect((await h.service.init()).status).toBe('disabled');
     await h.ticks(2);
-    expect(h.spawn).toHaveBeenCalled();
-    expect(await stored()).toHaveLength(2);
+    expect(h.spawn).not.toHaveBeenCalled();
+    expect(await stored()).toEqual([]);
   });
 
-  it('exposes no consent, accept, turn-off or revoke path and writes no consent file', async () => {
+  it('enabling consent starts collection, and revocation stops it without deleting history', async () => {
+    await rm(join(root, 'settings.json'));
     const h = harness();
     await h.service.init();
+    await h.service.setConsent(true);
+    await h.ticks(1);
+    await h.service.setConsent(false);
     await h.ticks(2);
-    for (const name of ['accept', 'turnOn', 'turnOff', 'revoke']) {
-      expect(h.service).not.toHaveProperty(name);
-    }
-    expect(h.service.state()).not.toHaveProperty('acceptedVersion');
-    expect(await exists(join(root, 'consent.json'))).toBe(false);
+    expect(h.service.state().status).toBe('disabled');
+    expect(await stored()).toHaveLength(1);
   });
 
-  it('an old settings.json with enabled:false or a stored accept does not switch it off', async () => {
-    await mkdir(root, { recursive: true });
-    await writeFile(join(root, 'settings.json'), JSON.stringify({ enabled: false, paused: true, pausedUntil: null }));
+  it('an old settings file does not imply work-learning consent', async () => {
+    await writeFile(join(root, 'settings.json'), JSON.stringify({ enabled: true, paused: false }));
     const h = harness();
-    expect((await h.service.init()).status).toBe('active');
+    expect((await h.service.init()).status).toBe('disabled');
+  });
+});
+
+describe('real work observation context', () => {
+  it('starts no receipt before consent, and records no data from a callback invalidated by pause/resume', async () => {
+    await rm(join(root, 'settings.json'));
+    const h = harness();
+    await h.service.init();
+    expect(h.service.beginWorkEvent('erp.read')).toBeNull();
+    await h.service.setConsent(true);
+    const completed = h.service.beginWorkEvent('browser.download', { origin: 'https://portal.gov.br' });
+    await h.service.pause();
+    await h.service.resume();
+    await completed?.();
+    expect((await h.service.workflows.state()).routines).toEqual([]);
+  });
+  it('invalidates pending actions on consent revocation even when consent is granted again', async () => {
+    const h = harness();
+    await h.service.init();
+    await h.service.setConsent(true);
+    const completed = h.service.beginWorkEvent('erp.read');
+    await h.service.setConsent(false);
+    await h.service.setConsent(true);
+    await completed?.();
+    expect((await h.service.workflows.state()).routines).toEqual([]);
+  });
+  it('never credits a download or MCP call to a different employee or a later login of the same employee', async () => {
+    let user: { id: string; name: string } | null = { id: 'u1', name: 'Ana' };
+    const h = harness({ currentUser: () => user });
+    await h.service.init();
+    await h.service.setConsent(true);
+    const completed = h.service.beginWorkEvent('browser.download', { origin: 'https://portal.gov.br' });
+    user = null;
+    await h.service.refreshProfile();
+    user = { id: 'u2', name: 'Other' };
+    await h.service.refreshProfile();
+    await completed?.();
+    expect((await h.service.workflows.state()).routines).toEqual([]);
+    user = { id: 'u1', name: 'Ana' };
+    await h.service.refreshProfile();
+    await completed?.();
+    expect((await h.service.workflows.state()).routines).toEqual([]);
+  });
+  it('records a successful receipt once and leaves it private until review', async () => {
+    const h = harness();
+    await h.service.init();
+    await h.service.setConsent(true);
+    const completed = h.service.beginWorkEvent('erp.read');
+    await completed?.();
+    await completed?.();
+    const [routine] = (await h.service.workflows.state()).routines;
+    expect(routine.steps).toHaveLength(1);
+    expect(routine.status).toBe('candidate');
+    expect(await h.service.workflows.monthly('2026-10')).toBeNull();
+  });
+  it('drops an in-flight storage write when the employee changes before it executes', async () => {
+    let id = 'u1';
+    const h = harness({ currentUser: () => ({ id, name: 'Fixture' }) });
+    await h.service.init();
+    await h.service.setConsent(true);
+    const pending = h.service.beginWorkEvent('erp.read')?.();
+    id = 'u2';
+    await pending;
+    expect((await h.service.workflows.state()).routines).toEqual([]);
+  });
+  it('does not widen an earlier sampler-only consent to include newly added event sources', async () => {
+    const h = harness();
+    await h.service.init();
+    expect(h.service.state().workEventsEnabled).toBe(false);
+    expect(h.service.beginWorkEvent('erp.read')).toBeNull();
+    await h.service.setConsent(true);
+    expect(h.service.state().workEventsEnabled).toBe(true);
+    expect(h.service.beginWorkEvent('erp.read')).toBeTypeOf('function');
+  });
+  it('uses only a transient origin to enforce download exclusions at start and again before storage', async () => {
+    const h = harness();
+    await h.service.init();
+    await h.service.setConsent(true);
+    expect(h.service.beginWorkEvent('browser.download', { origin: 'https://itau.com.br' })).toBeNull();
+    expect(
+      h.service.beginWorkEvent('browser.download', { origin: 'https://portal.gov.br/file?token=private' })
+    ).toBeNull();
+    const complete = h.service.beginWorkEvent('browser.download', { origin: 'https://portal.gov.br' });
+    expect(complete).toBeTypeOf('function');
+    await h.service.setExclusions([{ id: 'private', kind: 'domain', pattern: 'portal.gov.br', builtin: false }]);
+    await complete?.();
+    expect((await h.service.workflows.state()).routines).toEqual([]);
   });
 });
 
@@ -305,84 +399,66 @@ describe('collection', () => {
   });
 });
 
-describe('daily pause', () => {
-  const DAY = 86_400_000;
-
-  it('pause stops writing for 15 min and the first tick after it resumes and emits once', async () => {
+describe('persistent pause', () => {
+  it('pause stops writes and remains paused after hours and explicit ticks', async () => {
     const h = harness();
     await h.service.init();
-    const paused = await h.service.pause();
-    expect(paused.status).toBe('paused');
-    expect(paused.pausedUntil).toBe(T0 + PAUSE_MINUTES * 60_000);
-    expect(PAUSE_MINUTES).toBe(15);
-    await h.ticks(3);
+    await h.service.pause();
+    h.clock.now += 5 * 3_600_000;
+    await h.ticks(2);
+    expect(h.service.state()).toMatchObject({ status: 'paused', pausedUntil: null });
     expect(await stored()).toEqual([]);
-    expect(h.children[0]?.requests ?? 0).toBe(0);
-    // The machine slept past the end of the pause.
-    h.clock.now = T0 + 5 * 3_600_000;
-    h.env.locked = true; // Isolate the resume from a sample write.
-    const before = h.emitted.length;
-    await h.service.tick();
-    expect(h.emitted.slice(before)).toEqual([expect.objectContaining({ status: 'active', pausedUntil: null })]);
-    h.env.locked = false;
-    await h.service.tick();
-    expect(await stored()).toHaveLength(1);
-  });
-
-  it('auto-resumes by itself right after 15 minutes', async () => {
-    const h = harness();
-    await h.service.init();
-    await h.service.pause();
-    h.clock.now = T0 + 15 * 60_000 - 1;
-    expect(h.service.state().status).toBe('paused');
-    await h.ticks(1);
-    expect(h.service.state().status).toBe('active');
-  });
-
-  it('a second pause the same day is refused silently and the control is reported unavailable', async () => {
-    const h = harness();
-    await h.service.init();
-    expect(h.service.state().pauseAvailable).toBe(true);
-    await h.service.pause();
-    expect(h.service.state().pauseAvailable).toBe(false);
     await h.service.resume();
-    const again = await h.service.pause();
-    expect(again.status).toBe('active');
-    expect(again.pauseAvailable).toBe(false);
     await h.ticks(1);
     expect(await stored()).toHaveLength(1);
   });
 
-  it('the pause is available again the next local day, also without a new sample', async () => {
+  it('a pause never auto resumes after 15 minutes', async () => {
     const h = harness();
     await h.service.init();
     await h.service.pause();
-    h.clock.now += DAY;
-    h.env.locked = true;
-    await h.service.tick();
-    expect(h.service.state()).toMatchObject({ status: 'active', pauseAvailable: true });
-    expect((await h.service.pause()).status).toBe('paused');
+    h.clock.now += 15 * 60_000;
+    await h.ticks(1);
+    expect(h.service.state().status).toBe('paused');
   });
 
-  it('the only datum stored is the local date: no times, no durations, nothing in consent', async () => {
+  it('collection can be paused again after an explicit resume', async () => {
+    const h = harness();
+    await h.service.init();
+    await h.service.pause();
+    await h.service.resume();
+    expect((await h.service.pause()).status).toBe('paused');
+    await h.ticks(1);
+    expect(await stored()).toEqual([]);
+  });
+
+  it('the next day does not override a pause', async () => {
+    const h = harness();
+    await h.service.init();
+    await h.service.pause();
+    h.clock.now += 86_400_000;
+    await h.service.tick();
+    expect(h.service.state().status).toBe('paused');
+  });
+
+  it('the paused flag is persisted without a timer deadline', async () => {
     const h = harness();
     await h.service.init();
     await h.service.pause();
     const settings = JSON.parse(await readFile(join(root, 'settings.json'), 'utf8'));
-    expect(settings.pauseDay).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-    const text = JSON.stringify(settings);
-    expect(text).not.toContain(String(T0));
-    expect(text).not.toMatch(/pausedUntil|paused"/);
-    expect(await exists(join(root, 'consent.json'))).toBe(false);
+    expect(settings.paused).toBe(true);
+    expect(settings).not.toHaveProperty('pausedUntil');
   });
 
-  it('a restart in the middle of a pause simply samples again, and today stays used', async () => {
+  it('a restart preserves a pause and does not start a child', async () => {
     const first = harness();
     await first.service.init();
     await first.service.pause();
     first.service.dispose();
     const second = harness();
-    expect(await second.service.init()).toMatchObject({ status: 'active', pauseAvailable: false });
+    expect((await second.service.init()).status).toBe('paused');
+    await second.ticks(2);
+    expect(second.spawn).not.toHaveBeenCalled();
   });
 
   it('reports activeSince for the current active stretch only', async () => {
@@ -395,14 +471,11 @@ describe('daily pause', () => {
     expect((await h.service.resume()).activeSince).toBe(T0 + 60_000);
   });
 
-  it('concurrent pause calls cannot extend the pause', async () => {
+  it('concurrent pause calls keep collection paused without a deadline', async () => {
     const h = harness();
     await h.service.init();
-    const first = h.service.pause();
-    h.clock.now += 5 * 60_000;
-    const second = h.service.pause();
-    await Promise.all([first, second]);
-    expect(h.service.state().pausedUntil).toBe(T0 + 15 * 60_000);
+    await Promise.all([h.service.pause(), h.service.pause()]);
+    expect(h.service.state()).toMatchObject({ status: 'paused', pausedUntil: null });
   });
 
   it('wipeSamples deletes raw samples but keeps insights, and Aprender keeps running', async () => {
@@ -427,8 +500,24 @@ describe('daily pause', () => {
 });
 
 describe('retention and insights runs', () => {
+  it('expires old legacy raw observations without attributing, migrating or replaying recent legacy samples', async () => {
+    const legacy = createSampleStore(root, fakeEncryption());
+    await legacy.append({ t: T0 - 48 * 3_600_000, app: 'Expired legacy', title: null });
+    await legacy.append({ t: T0, app: 'Recent legacy', title: null });
+    const h = harness();
+    await h.service.init();
+    expect((await legacy.readSince(0)).map((sample) => sample.app)).toEqual(['Recent legacy']);
+    expect(await stored()).toEqual([]);
+    h.clock.now += 48 * 3_600_000;
+    await h.service.hourly();
+    expect(await legacy.readSince(0)).toEqual([]);
+  });
   it('hourly purges stale samples and insights', async () => {
-    await createSampleStore(root, fakeEncryption()).append({ t: T0 - 50 * 3_600_000, app: 'old', title: null });
+    await createSampleStore(learnProfileDir(root, 'u1'), fakeEncryption()).append({
+      t: T0 - 50 * 3_600_000,
+      app: 'old',
+      title: null,
+    });
     await createInsightStore(root, fakeEncryption()).add({
       id: 'old',
       createdAt: T0 - 91 * 86_400_000,
@@ -447,7 +536,11 @@ describe('retention and insights runs', () => {
 
   it('a tick purges raw samples so none outlives 48 h', async () => {
     const hourStart = T0 - 47 * 3_600_000;
-    await createSampleStore(root, fakeEncryption()).append({ t: hourStart, app: 'old', title: null });
+    await createSampleStore(learnProfileDir(root, 'u1'), fakeEncryption()).append({
+      t: hourStart,
+      app: 'old',
+      title: null,
+    });
     const h = harness();
     await h.service.init();
     h.env.locked = true; // No new sample: only the purge runs.
@@ -584,5 +677,119 @@ describe('availability', () => {
     h.service.dispose();
     expect(h.tickTimers()).toHaveLength(0);
     expect(h.children[0].kill).toHaveBeenCalled();
+  });
+});
+
+describe('profile isolation and immediate collection controls', () => {
+  it('never attributes legacy samples and wipes only current-profile plus legacy raw data, preserving other profiles', async () => {
+    const legacy = createSampleStore(root, fakeEncryption());
+    const other = createSampleStore(learnProfileDir(root, 'u2'), fakeEncryption());
+    await legacy.append({ t: T0, app: 'Legacy', title: null });
+    await other.append({ t: T0, app: 'Other', title: null });
+    const h = harness();
+    await h.service.init();
+    await h.ticks(1);
+    expect(h.service.state().rawHours).toBe(1);
+    await h.service.wipeSamples();
+    expect(await legacy.readSince(0)).toEqual([]);
+    expect(await other.readSince(0)).toHaveLength(1);
+    expect(await stored()).toEqual([]);
+  });
+
+  it('reads only the current profile when generating insights', async () => {
+    const legacy = createSampleStore(root, fakeEncryption());
+    const other = createSampleStore(learnProfileDir(root, 'u2'), fakeEncryption());
+    await legacy.append({ t: T0, app: 'LegacyOnly', title: null });
+    await other.append({ t: T0, app: 'OtherProfileOnly', title: null });
+    await seedSamples(30);
+    const h = harness();
+    await h.service.init();
+    await h.service.generateNow();
+    const body = String((h.request.mock.calls[0] as unknown as [string, RequestInit])[1].body);
+    expect(body).not.toMatch(/LegacyOnly|OtherProfileOnly/);
+  });
+
+  it.each(['pause', 'revoke'] as const)(
+    'blocks collection immediately while %s persistence is pending',
+    async (control) => {
+      const realSettings = createLearnSettings(root);
+      let release!: () => void;
+      const wait = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const settings = {
+        read: realSettings.read,
+        write: async (patch: Parameters<typeof realSettings.write>[0]) => {
+          await wait;
+          return realSettings.write(patch);
+        },
+      };
+      const h = harness({ settings });
+      await h.service.init();
+      const pending = control === 'pause' ? h.service.pause() : h.service.setConsent(false);
+      await h.ticks(2);
+      expect(h.spawn).not.toHaveBeenCalled();
+      expect(await stored()).toEqual([]);
+      release();
+      await pending;
+    }
+  );
+
+  it('auth refresh stops old polling and restarts it immediately for the consenting owner', async () => {
+    let user: { id: string; name: string } | null = { id: 'u1', name: 'User' };
+    const h = harness({ currentUser: () => user });
+    await h.service.init();
+    user = null;
+    await h.service.refreshProfile();
+    expect(h.tickTimers()).toHaveLength(0);
+    user = { id: 'u1', name: 'User' };
+    await h.service.refreshProfile();
+    expect(h.tickTimers()).toHaveLength(1);
+    await h.ticks(1);
+    expect(await stored()).toHaveLength(1);
+  });
+
+  it('does not return former employee insights if identity changes during the read', async () => {
+    let user = { id: 'u1', name: 'User' };
+    const h = harness({ currentUser: () => user });
+    await h.service.init();
+    await seedSamples(30);
+    await h.service.generateNow();
+    const pending = h.service.listInsights();
+    user = { id: 'u2', name: 'Other' };
+    expect(await pending).toEqual([]);
+  });
+});
+
+describe('private insight response persistence boundary', () => {
+  it('does not return an old employee batch after identity changes during settings persistence', async () => {
+    let user = { id: 'u1', name: 'User' };
+    let release!: () => void;
+    let entered!: () => void;
+    const reachedWrite = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const wait = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const realSettings = createLearnSettings(root);
+    const settings = {
+      read: realSettings.read,
+      write: async (patch: Parameters<typeof realSettings.write>[0]) => {
+        entered();
+        await wait;
+        return realSettings.write(patch);
+      },
+    };
+    const h = harness({ currentUser: () => user, settings });
+    await h.service.init();
+    await seedSamples(30);
+    const pending = h.service.generateNow();
+    await reachedWrite;
+    user = { id: 'u2', name: 'Other' };
+    release();
+    const result = await pending;
+    expect(result).toEqual({ ok: false, code: 'unavailable' });
+    expect(result).not.toHaveProperty('batch');
   });
 });

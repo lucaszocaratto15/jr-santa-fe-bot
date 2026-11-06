@@ -17,7 +17,8 @@ describe('learn settings', () => {
   it('defaults to no pause taken, with the default exclusions', async () => {
     const data = await createLearnSettings(root).read();
     expect(data.pauseDay).toBeNull();
-    expect(data).not.toHaveProperty('enabled');
+    expect(data.enabled).toBe(false);
+    expect(data.consentUserId).toBeNull();
     expect(data.exclusions).toEqual([...DEFAULT_EXCLUSIONS]);
   });
 

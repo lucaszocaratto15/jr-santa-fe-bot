@@ -4,22 +4,30 @@ import {
   type BrainFactFilters,
   type BrainFactPatch,
   type BrainManagedFact,
+  type BrainCapabilities,
 } from '@/common/types/agent/brainTypes';
 import { Alert, Button, Checkbox, Input, Message, Select, Spin, Switch, Tag, Tooltip } from '@arco-design/web-react';
-import { Edit, History, Up } from '@icon-park/react';
+import { History } from '@icon-park/react';
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import useSWR from 'swr';
 import accessStyles from '../Access/Access.module.css';
 import styles from './Brain.module.css';
-import { EditFactModal, HistoryModal } from './BrainFactDialogs';
-import { brainErrorKey, canPromote, type BrainAreaOption, type BrainPeople } from './brainShared';
+import BrainNoteComposer from './Notes';
+import { HistoryModal } from './BrainFactDialogs';
+import { brainErrorKey, useBrainContextVersion, type BrainAreaOption, type BrainPeople } from './brainShared';
 
-type Props = { areas: BrainAreaOption[]; people: BrainPeople };
+type Props = {
+  areas: BrainAreaOption[];
+  people: BrainPeople;
+  ownerId: string | null;
+  capabilities?: BrainCapabilities;
+};
 
 /** Facts of the managed areas: search, filters and per-fact review. */
-const BrainFacts: React.FC<Props> = ({ areas, people }) => {
+const BrainFacts: React.FC<Props> = ({ areas, people, ownerId, capabilities }) => {
   const { t, i18n } = useTranslation();
+  const contextVersion = useBrainContextVersion();
   const [areaId, setAreaId] = useState<number>();
   const [risk, setRisk] = useState<'low' | 'high'>();
   const [kind, setKind] = useState<string>();
@@ -27,7 +35,6 @@ const BrainFacts: React.FC<Props> = ({ areas, people }) => {
   const [conflictOnly, setConflictOnly] = useState(false);
   const [query, setQuery] = useState('');
   const [debounced, setDebounced] = useState('');
-  const [editing, setEditing] = useState<BrainManagedFact>();
   const [historyId, setHistoryId] = useState<number>();
   const [busy, setBusy] = useState<number>();
 
@@ -44,13 +51,12 @@ const BrainFacts: React.FC<Props> = ({ areas, people }) => {
     ...(debounced ? { q: debounced } : {}),
   };
   const facts = useSWR(
-    ['jr.brain.facts', areaId, risk, kind, suspendedOnly, debounced],
+    ownerId ? ['jr.brain.facts', ownerId, contextVersion, areaId, risk, kind, suspendedOnly, debounced] : null,
     () => ipcBridge.brain.manage.facts.invoke(filters),
     { shouldRetryOnError: false, revalidateOnFocus: false }
   );
   const visible = (facts.data ?? []).filter((fact) => !conflictOnly || fact.flagConflict);
   const areaName = (id: number) => areas.find((area) => area.id === id)?.name ?? String(id);
-  const movable = areas.filter((area) => !area.isGeneral);
 
   const update = async (fact: BrainManagedFact, patch: BrainFactPatch): Promise<boolean> => {
     setBusy(fact.id);
@@ -134,6 +140,9 @@ const BrainFacts: React.FC<Props> = ({ areas, people }) => {
       {visible.length > 0 && (
         <div className={styles.list}>
           {visible.map((fact) => {
+            const canRevise = capabilities ? capabilities.revise && fact.canRevise === true : true;
+            const canWithdraw = capabilities ? capabilities.withdraw && fact.canWithdraw === true : true;
+            const canReactivate = capabilities ? capabilities.revise && fact.canReactivate === true : true;
             const who = author(fact);
             const date = new Date(fact.createdAt).toLocaleDateString(i18n.language);
             const origin = who
@@ -144,6 +153,14 @@ const BrainFacts: React.FC<Props> = ({ areas, people }) => {
                 <div className={styles.rowMain}>
                   <p className={styles.text}>{fact.text}</p>
                   <div className={styles.tags}>
+                    {fact.status && <Tag size='small'>{t(`common.jr.brainNotes.status.${fact.status}`)}</Tag>}
+                    <Tag size='small'>
+                      {t(
+                        fact.noteType === 'official_procedure'
+                          ? 'common.jr.brainNotes.officialProcedure'
+                          : 'common.jr.brainNotes.sharedNote'
+                      )}
+                    </Tag>
                     <Tag size='small' color={fact.risk === 'high' ? 'red' : 'gray'}>
                       {t(`common.jr.brainManage.facts.risk.${fact.risk}`)}
                     </Tag>
@@ -178,16 +195,7 @@ const BrainFacts: React.FC<Props> = ({ areas, people }) => {
                   )}
                 </div>
                 <div className={styles.actions}>
-                  <Tooltip content={t('common.jr.brainManage.facts.edit')}>
-                    <Button
-                      size='small'
-                      shape='circle'
-                      aria-label={t('common.jr.brainManage.facts.edit')}
-                      icon={<Edit theme='outline' size={15} />}
-                      disabled={busy === fact.id}
-                      onClick={() => setEditing(fact)}
-                    />
-                  </Tooltip>
+                  {canRevise && <BrainNoteComposer factId={fact.id} onPublished={() => void facts.mutate()} />}
                   <Tooltip content={t('common.jr.brainManage.facts.history')}>
                     <Button
                       size='small'
@@ -200,11 +208,11 @@ const BrainFacts: React.FC<Props> = ({ areas, people }) => {
                   <Switch
                     size='small'
                     checked={fact.active}
-                    disabled={busy === fact.id}
+                    disabled={busy === fact.id || !(fact.active ? canWithdraw : canReactivate)}
                     aria-label={t('common.jr.brainManage.facts.active')}
                     onChange={(active) => void update(fact, { active })}
                   />
-                  {fact.suspended && (
+                  {fact.suspended && canReactivate && (
                     <Button
                       size='small'
                       shape='round'
@@ -214,40 +222,20 @@ const BrainFacts: React.FC<Props> = ({ areas, people }) => {
                       {t('common.jr.brainManage.facts.unsuspend')}
                     </Button>
                   )}
-                  <Tooltip
-                    content={
-                      fact.risk === 'high'
-                        ? t('common.jr.brainManage.facts.promoteHighHint')
-                        : t('common.jr.brainManage.facts.promote')
-                    }
-                  >
-                    <Button
-                      size='small'
-                      shape='round'
-                      icon={<Up theme='outline' size={14} />}
-                      aria-label={t('common.jr.brainManage.facts.promote')}
-                      disabled={busy === fact.id || !canPromote(fact, areas)}
-                      onClick={() => void update(fact, { general: true })}
-                    >
-                      {t('common.jr.brainManage.facts.promoteShort')}
-                    </Button>
-                  </Tooltip>
                 </div>
               </article>
             );
           })}
         </div>
       )}
-      {editing && (
-        <EditFactModal
-          fact={editing}
-          areas={movable}
-          busy={busy === editing.id}
-          onCancel={() => setEditing(undefined)}
-          onSave={(patch) => void update(editing, patch).then((ok) => ok && setEditing(undefined))}
+      {historyId !== undefined && (
+        <HistoryModal
+          factId={historyId}
+          ownerId={ownerId}
+          contextVersion={contextVersion}
+          onClose={() => setHistoryId(undefined)}
         />
       )}
-      {historyId !== undefined && <HistoryModal factId={historyId} onClose={() => setHistoryId(undefined)} />}
     </section>
   );
 };

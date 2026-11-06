@@ -13,7 +13,8 @@ import BrainFacts from './BrainFacts';
 import BrainForget from './BrainForget';
 import BrainLog from './BrainLog';
 import BrainPeople from './BrainPeople';
-import type { BrainAreaOption, BrainPeople as People } from './brainShared';
+import { useBrainContextVersion, type BrainAreaOption, type BrainPeople as People } from './brainShared';
+import ReviewQueue from './Notes/ReviewQueue';
 
 export type BrainManagerProps = {
   /** `owner`: the whole brain (admin page). `manager`: facts of the areas the user manages (settings tab). */
@@ -24,20 +25,33 @@ const BrainManager: React.FC<BrainManagerProps> = ({ mode }) => {
   const { t } = useTranslation();
   const { state } = useJrAccess();
   const owner = mode === 'owner';
-  const areas = useSWR(owner ? 'jr.brain.areas' : null, () => ipcBridge.brain.manage.areas.invoke(), {
+  const ownerId = state.user?.id ?? null;
+  const contextVersion = useBrainContextVersion();
+  const me = useSWR(ownerId ? ['jr.brain.me', ownerId, contextVersion] : null, () => ipcBridge.brain.me.invoke(), {
     shouldRetryOnError: false,
     revalidateOnFocus: false,
   });
-  const employees = useSWR(owner ? 'jr.admin.employees' : null, () => ipcBridge.jr.admin.list.invoke(), {
-    shouldRetryOnError: false,
-  });
-  const me = useSWR(owner ? null : 'jr.brain.me', () => ipcBridge.brain.me.invoke(), {
-    shouldRetryOnError: false,
-    revalidateOnFocus: false,
-  });
-
+  const erp = me.data?.permissionsSource === 'erp';
+  const legacyOwner = owner && Boolean(me.data) && !erp;
+  const capabilities = erp ? me.data?.capabilities : undefined;
+  const canManage = !erp || Boolean(capabilities?.revise || capabilities?.withdraw || capabilities?.approveOfficial);
+  const areas = useSWR(
+    legacyOwner && ownerId ? ['jr.brain.areas', ownerId, contextVersion] : null,
+    () => ipcBridge.brain.manage.areas.invoke(),
+    {
+      shouldRetryOnError: false,
+      revalidateOnFocus: false,
+    }
+  );
+  const employees = useSWR(
+    legacyOwner && ownerId ? ['jr.admin.employees', ownerId] : null,
+    () => ipcBridge.jr.admin.list.invoke(),
+    {
+      shouldRetryOnError: false,
+    }
+  );
   const options = useMemo<BrainAreaOption[]>(() => {
-    if (owner)
+    if (legacyOwner)
       return (areas.data ?? []).map((area) => ({
         id: area.id,
         name: area.name,
@@ -47,25 +61,37 @@ const BrainManager: React.FC<BrainManagerProps> = ({ mode }) => {
     return (me.data?.areas ?? [])
       .filter((area) => me.data?.manages.includes(area.id))
       .map((area) => ({ id: Number(area.id), name: area.name ?? area.id, isGeneral: false, isFallback: false }));
-  }, [owner, areas.data, me.data]);
+  }, [legacyOwner, areas.data, me.data]);
 
   const people = useMemo<People>(() => {
-    if (!owner) return null;
+    if (!legacyOwner) return null;
     const names = new Map((employees.data ?? []).filter((person) => !person.revoked).map((p) => [p.id, p.name]));
     if (state.user) names.set(state.user.id, state.user.name);
     return names;
-  }, [owner, employees.data, state.user]);
+  }, [legacyOwner, employees.data, state.user]);
 
-  const failed = owner ? areas.error : me.error;
-  const loading = owner ? !areas.data : !me.data;
+  const failed = me.error || (legacyOwner && areas.error);
+  const loading = !me.data || (legacyOwner && !areas.data);
   const body = failed ? (
     <Alert type='error' content={t('common.jr.brainManage.loadFailed')} />
   ) : loading ? (
     <Spin />
   ) : (
     <>
-      <BrainFacts areas={options} people={people} />
-      {owner && areas.data && (
+      {erp && <Alert type='info' content={t('common.jr.brainManage.erpPermissions')} />}
+      {canManage && (
+        <BrainFacts
+          key={`${ownerId}-${contextVersion}`}
+          ownerId={ownerId}
+          areas={options}
+          people={people}
+          capabilities={capabilities}
+        />
+      )}
+      {(!erp || capabilities?.approveOfficial) && (
+        <ReviewQueue key={`reviews-${ownerId}-${contextVersion}`} ownerId={ownerId} />
+      )}
+      {legacyOwner && areas.data && (
         <>
           <BrainAreas areas={areas.data} onChanged={() => void areas.mutate()} />
           <BrainPeople areas={areas.data} employees={employees.data ?? []} onChanged={() => void areas.mutate()} />

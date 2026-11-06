@@ -4,19 +4,108 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useCallback } from 'react';
+import React, { useLayoutEffect, useRef } from 'react';
 import type { PreviewTab, PreviewTabPatch } from '../context/PreviewContext';
+import type { PreviewScopeKey } from '../context/previewScope';
+import { isElectronDesktop } from '@/renderer/utils/platform';
 import BrowserViewer from './BrowserViewer';
 import TeachControls, { TeachRecordingBar } from './TeachControls';
 
+export type LiveBrowserSession = {
+  ownerId: string;
+  scopeKey: PreviewScopeKey;
+  tab: PreviewTab;
+  webContentsId?: number;
+};
+export type BrowserViewportState = {
+  tabId: string;
+  ownerId: string;
+  scopeKey: PreviewScopeKey;
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+};
+export type RegisterBrowserViewport = (tabId: string, element: HTMLElement) => () => void;
+
 export interface BrowserTabLayerProps {
   /** 所有浏览器类型的 tab / Every browser-type tab */
-  browserTabs: PreviewTab[];
+  sessions: LiveBrowserSession[];
   /** 当前激活的 tab id（可能不是浏览器 tab）/ Active tab id (may not be a browser tab) */
-  activeTabId: string | null;
+  viewport: BrowserViewportState | null;
+  agentTargetTabId: string | null;
   /** 回写 tab 字段 / Patch fields back onto a tab */
   updateTab: (tabId: string, patch: PreviewTabPatch) => void;
+  registerGuest: (session: LiveBrowserSession, webContentsId: number) => void;
 }
+
+/** A panel supplies geometry only; moving a webview between DOM parents destroys its guest. */
+export const BrowserViewport: React.FC<{ tabId: string; register?: RegisterBrowserViewport }> = ({
+  tabId,
+  register,
+}) => {
+  const element = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (element.current && register) return register(tabId, element.current);
+  }, [register, tabId]);
+  return <div ref={element} className='flex-1 min-h-0 w-full' data-browser-viewport={tabId} />;
+};
+
+const BrowserSessionView: React.FC<{
+  session: LiveBrowserSession;
+  viewport: BrowserViewportState | null;
+  agentTargetTabId: string | null;
+  updateTab: BrowserTabLayerProps['updateTab'];
+  registerGuest: BrowserTabLayerProps['registerGuest'];
+}> = ({ session, viewport, agentTargetTabId, updateTab, registerGuest }) => {
+  const { tab } = session;
+  const container = useRef<HTMLDivElement>(null);
+  const visible = Boolean(
+    viewport &&
+    viewport.tabId === tab.id &&
+    viewport.ownerId === session.ownerId &&
+    viewport.scopeKey === session.scopeKey
+  );
+  const size = useRef({ width: 1024, height: 768 });
+  if (visible && viewport) size.current = { width: viewport.width, height: viewport.height };
+  useLayoutEffect(() => {
+    if (
+      !visible &&
+      container.current?.contains(document.activeElement) &&
+      document.activeElement instanceof HTMLElement
+    )
+      document.activeElement.blur();
+  }, [visible]);
+  return (
+    <div
+      ref={container}
+      data-browser-session={tab.id}
+      aria-hidden={!visible}
+      inert={!visible}
+      className='flex flex-col overflow-hidden bg-1'
+      style={{
+        position: 'fixed',
+        left: visible ? viewport!.left : -10000,
+        top: visible ? viewport!.top : 0,
+        ...size.current,
+        visibility: visible ? 'visible' : 'hidden',
+        pointerEvents: visible ? 'auto' : 'none',
+      }}
+    >
+      <TeachRecordingBar />
+      <BrowserViewer
+        url={tab.content}
+        tabId={tab.id}
+        agentBrowserActive={agentTargetTabId === tab.id}
+        onWebContentsReady={(_id, webContentsId) => registerGuest(session, webContentsId)}
+        onUrlChange={(id, content) => updateTab(id, { content })}
+        onTitleChange={(id, title) => updateTab(id, { title })}
+        onFaviconChange={(id, favicon) => updateTab(id, { metadata: { favicon } })}
+        navBarExtra={<TeachControls agentActive={Boolean(tab.metadata?.agentActive)} />}
+      />
+    </div>
+  );
+};
 
 /**
  * 常驻挂载的浏览器层 / Always-mounted browser layer.
@@ -36,55 +125,26 @@ export interface BrowserTabLayerProps {
  * survives. Inactive tabs are hidden via `visibility` rather than `display:none`
  * so they retain real dimensions and need no relayout when shown again.
  */
-const BrowserTabLayer: React.FC<BrowserTabLayerProps> = ({ browserTabs, activeTabId, updateTab }) => {
-  const handleUrlChange = useCallback(
-    (tabId: string, url: string) => {
-      // 地址存在 content 里，与其他 tab 类型保持一致 / Address lives in content, like other tab types
-      updateTab(tabId, { content: url });
-    },
-    [updateTab]
-  );
-
-  const handleTitleChange = useCallback((tabId: string, title: string) => updateTab(tabId, { title }), [updateTab]);
-
-  const handleFaviconChange = useCallback(
-    (tabId: string, favicon: string) => updateTab(tabId, { metadata: { favicon } }),
-    [updateTab]
-  );
-
-  if (browserTabs.length === 0) return null;
-
-  const isBrowserActive = browserTabs.some((tab) => tab.id === activeTabId);
-
+const BrowserTabLayer: React.FC<BrowserTabLayerProps> = ({
+  sessions,
+  viewport,
+  agentTargetTabId,
+  updateTab,
+  registerGuest,
+}) => {
+  if (!isElectronDesktop() || sessions.length === 0) return null;
   return (
-    <div className='flex-1 flex flex-col overflow-hidden' style={{ display: isBrowserActive ? undefined : 'none' }}>
-      {/* 录制中显示在浏览器顶部的细条 / Thin bar on top of the browser while teaching */}
-      <TeachRecordingBar />
-      <div className='relative flex-1 overflow-hidden'>
-        {browserTabs.map((tab) => {
-          const isActive = tab.id === activeTabId;
-          return (
-            <div
-              key={tab.id}
-              className='absolute inset-0 flex flex-col'
-              style={{
-                visibility: isActive ? 'visible' : 'hidden',
-                pointerEvents: isActive ? undefined : 'none',
-                zIndex: isActive ? 1 : 0,
-              }}
-            >
-              <BrowserViewer
-                url={tab.content}
-                tabId={tab.id}
-                onUrlChange={handleUrlChange}
-                onTitleChange={handleTitleChange}
-                onFaviconChange={handleFaviconChange}
-                navBarExtra={<TeachControls agentActive={Boolean(tab.metadata?.agentActive)} />}
-              />
-            </div>
-          );
-        })}
-      </div>
+    <div data-browser-session-host style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 30 }}>
+      {sessions.map((session) => (
+        <BrowserSessionView
+          key={`${session.ownerId}:${session.tab.id}`}
+          session={session}
+          viewport={viewport}
+          agentTargetTabId={agentTargetTabId}
+          updateTab={updateTab}
+          registerGuest={registerGuest}
+        />
+      ))}
     </div>
   );
 };

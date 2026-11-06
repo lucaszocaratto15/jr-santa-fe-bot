@@ -751,9 +751,10 @@
         "status": {
           "active": "On",
           "paused": "Paused",
-          "unavailable": "Unavailable"
+          "unavailable": "Unavailable",
+          "disabled": "Disabled"
         },
-        "pause": "Pause for 15 min",
+        "pause": "Pause collection",
         "resume": "Resume",
         "unavailableEncryption": "Unavailable: this computer does not offer system encryption, so nothing can be stored safely.",
         "unavailablePlatform": "Unavailable on this system.",
@@ -762,7 +763,7 @@
         "samplerError": "Observation stopped because of an error.",
         "retry": "Try again",
         "actionFailed": "Could not finish that. Try again.",
-        "intro": "Aprender looks at which programs and pages you use to understand your work and help you. It is always on, and raw records stay on this computer only. See the Data Notice for what is collected.",
+        "intro": "Learning starts only with your permission. It uses private app metadata, your manual markers, completed ERP queries and browser downloads to suggest candidate routines. You can pause or turn off collection.",
         "readNotice": "View the Data Notice"
       },
       "insights": {
@@ -774,8 +775,8 @@
         "timePerApp": "Time per program",
         "minutesShort": "{{value}} min",
         "hoursMinutes": "{{hours}}h{{minutes}}",
-        "repetitive": "Repetitive",
-        "times": "{{times}}× · {{minutes}} min",
+        "repetitive": "Routine hypothesis",
+        "times": "Unconfirmed estimate: {{times}} times · {{minutes}} min",
         "tip": "Tip",
         "teach": "Teach this task",
         "delete": "Delete",
@@ -814,6 +815,76 @@
         "rawHours": "Raw records: {{count}} h stored (deleted within 48 h)",
         "wipeNow": "Delete now",
         "wipeConfirm": "Delete the raw records stored on this computer now?"
+      },
+      "consent": {
+        "title": "Learn from my work",
+        "body": "Authorize private app and window metadata, your workflow markers, successful ERP queries and completed JR browser downloads. Only action categories and timestamps from real events are saved, never query arguments, returned data, file names or addresses. Records stay private on this computer; aggregated summaries may be sent to the company AI. No page contents, forms, passwords or documents are collected. An observed action does not prove a complete business routine.",
+        "enable": "Authorize work learning",
+        "disable": "Disable collection",
+        "weakEvidence": "Application and window signals are weak evidence. These suggestions need confirmation.",
+        "eventsRequired": "Your earlier permission does not enable real-event learning. Review the updated notice to authorize these additional sources.",
+        "eventsEnable": "Authorize real work events"
+      },
+      "workflow": {
+        "title": "My workflows",
+        "privacy": "Private. Use only generic step names; do not include people, documents, addresses or credentials.",
+        "name": "Generic workflow name",
+        "start": "Start workflow",
+        "step": "Generic step name",
+        "addStep": "Complete step",
+        "complete": "Complete workflow",
+        "source": "System involved",
+        "action": "Action type",
+        "review": "Routines for review",
+        "confirm": "Confirm routine and save corrections",
+        "reject": "Discard routine",
+        "eventual": "Occasional activity",
+        "exclude": "Exclude from monthly summary",
+        "suppress": "Do not suggest again",
+        "notes": "Private notes",
+        "status": {
+          "candidate": "Awaiting confirmation",
+          "confirmed": "Confirmed by the employee",
+          "rejected": "Discarded"
+        },
+        "sources": {
+          "erp": "ERP",
+          "web": "Web portal or system",
+          "desktop": "Application or spreadsheet",
+          "integration": "Integration",
+          "manual": "Other tool"
+        },
+        "actions": {
+          "consulta": "Query",
+          "exportacao": "Export",
+          "preenchimento": "Fill in",
+          "envio": "Send",
+          "aprovacao": "Approval",
+          "outro": "Other"
+        },
+        "month": "Month (YYYY-MM)",
+        "monthly": "Generate private monthly map",
+        "insufficient": "Confirm at least one completed routine in this month to generate the map.",
+        "frequency": "{{count}} recorded execution(s)",
+        "pending": "{{count}} routine(s) awaiting validation",
+        "saveNotes": "Save notes",
+        "manual": "Prepare private manual draft",
+        "draft": "Private draft — review before use. Nothing will be published to the Brain.",
+        "responsibilities": "Responsibilities and confirmed routines",
+        "systems": "Systems involved",
+        "steps": "Confirmed steps",
+        "exceptions": "Exceptions and notes",
+        "opportunities": "Automation opportunities to validate",
+        "opportunity": "Review whether repeated steps can be automated, without executing actions.",
+        "error": "Could not save. Use generic names without personal data, addresses or credentials.",
+        "inputs": "Known inputs (categories, no documents)",
+        "outputs": "Known outputs (categories, no documents)",
+        "automationCandidate": "Automation possibility: you recorded {{count}} step(s). Review whether this sequence represents a routine and which steps could be automated.",
+        "manualEvidence": "Evidence: markers entered by you; confirm the routine before treating it as knowledge about your role.",
+        "observedName": "Observed sequence in JR",
+        "observedEvidence": "These actions were confirmed by the ERP or browser. Their sequence is only a candidate routine; review its purpose and steps before using it in your role map.",
+        "observedQuery": "ERP query completed",
+        "observedDownload": "Browser download completed"
       }
     },
     "handbook": {
@@ -903,27 +974,27 @@
     },
     "dataNotice": {
       "title": "Data use notice",
-      "intro": "So that you know how JR Bot uses information from your work, here is a plain explanation. This is a notice, not a request for permission: it applies to everyone at the company.",
+      "intro": "This notice explains two separate authorizations: using a selected excerpt to propose a company note, and opting into private work learning. Acknowledging this notice does not grant either authorization.",
       "collectedTitle": "What is collected",
-      "collectedBody": "Stretches of your conversations with the bots, for the company brain, including the tool results the bot used in the conversation (for example pages and system data); samples of your screen (application and window title), for the Aprender feature; and the tasks you teach the bot, for the Manual.",
+      "collectedBody": "Company notes use only the excerpt you explicitly authorize. Work learning records application/window metadata and workflow milestones only after opt-in. It does not collect page contents, forms, credentials or continuous screenshots.",
       "purposeTitle": "What it is for",
-      "purposeBody": "Understanding how the work is done so we can help you: the bots come to know what the company already knows. It is not used to evaluate performance or to track time.",
+      "purposeBody": "Help you recall validated knowledge and identify possible automations. Private learning is not used to rank employees or evaluate performance.",
       "whoTitle": "Who sees what",
-      "whoBody": "What the brain learns is shared by area and by level: each person sees the knowledge of their own areas and what is general for the company. Sensitive information, such as amounts, contracts and client data, is only shown to the managers of the area and to the directors.",
+      "whoBody": "Conversations and workflow records stay private by default. Only the reviewed note and authorized source excerpt can be shared with the chosen audience. Restricted search requires ERP authorization.",
       "blockedTitle": "What is left out",
-      "blockedBody": "We remove the values in your vault before sending, and the server discards facts containing a tax ID, card number, access key or e-mail address.",
+      "blockedBody": "Vault secrets are redacted before processing. Do not include sensitive personal data in excerpts or workflow names. Filters add protection; review remains required.",
       "retentionTitle": "How long it is kept",
-      "retentionBody": "Screen samples are deleted after 48 hours. Conversation stretches are not stored on the server: only the facts extracted from them are kept, each with a short quote from the conversation (up to 120 characters).",
+      "retentionBody": "Raw activity samples expire within 48 hours and private insights within 90 days. Historic conversation queues are not replayed automatically. Shared notes keep approved content and version history.",
       "providerTitle": "Who processes it",
-      "providerBody": "Processing uses the company's AI provider (MiniMax), through the company server. Nothing goes straight from your computer to the provider.",
-      "pauseTitle": "Pausing Aprender",
-      "pauseBody": "You can pause Aprender for a few minutes in its settings when you need privacy.",
+      "providerBody": "Only explicitly authorized excerpts are sent through the company backend to the AI provider. Automatic work suggestions use aggregated data. Authorizing analysis is separate from authorizing sharing.",
+      "pauseTitle": "Pausing work learning",
+      "pauseBody": "Private work learning starts after opt-in. Pausing stops collection until you resume. You can also disable collection. Nothing is published to the Brain automatically.",
       "button": "I have read and understood",
-      "failed": "Could not record this right now. The notice will show again the next time you open the app."
+      "failed": "Could not record this right now. The notice will appear again the next time you open the app."
     },
     "brainManage": {
       "title": "Company brain",
-      "subtitle": "What the company's bots have learned. Review, correct and decide what stays available to each area.",
+      "subtitle": "Review shared notes and official procedures, their approved sources, access and version history.",
       "loadFailed": "Could not load the brain right now.",
       "exEmployee": "former employee",
       "facts": {
@@ -1026,7 +1097,8 @@
         "conflict": "Conflict: the item already exists, or the fact is part of a version chain and cannot change area or risk.",
         "forbidden": "You do not have permission for this.",
         "notFound": "This item no longer exists."
-      }
+      },
+      "erpPermissions": "Knowledge access and approval permissions are managed in Strata Certa. JR administrator status does not grant ERP access."
     },
     "brain": {
       "activity": {
@@ -1036,6 +1108,61 @@
         "doneNone": "Consulted the company brain · nothing found",
         "unavailable": "Brain unavailable"
       }
+    },
+    "brainNotes": {
+      "create": "Create note",
+      "authorizeExcerpt": "Use only this excerpt",
+      "revise": "Update version for review",
+      "shareVersion": "Authorize sharing this version",
+      "excerptNotice": "Only the excerpt below will be sent to the curator when you confirm. Edit it to remove any content you do not want to use.",
+      "reviewNotice": "Review the text, source and audience. Sharing this note does not expose the original conversation. After editing, update the version before authorizing sharing.",
+      "excerpt": "Authorized excerpt",
+      "text": "Note text",
+      "source": "Authorized source excerpt",
+      "audience": "Authorized audience",
+      "kind": "Knowledge type",
+      "sharedNote": "Shared note",
+      "officialProcedure": "Official procedure",
+      "officialNotice": "This will be sent for approval by a responsible reviewer. It stays out of search until approved.",
+      "pending": "Proposal sent for review. It is not published yet.",
+      "shared": "Note shared with the authorized audience.",
+      "failed": "Could not complete this action. Check the connection, ERP authorization and proposal version before trying again.",
+      "reviews": "Procedures awaiting review",
+      "noReviews": "No procedures awaiting review.",
+      "approve": "Approve procedure",
+      "reject": "Reject proposal",
+      "authorizationRequired": "Review requires a verified ERP link and authorization.",
+      "edit": "Propose a new version",
+      "validUntil": "Valid until (optional)",
+      "status": {
+        "draft": "Draft",
+        "active": "Active",
+        "pending_review": "Awaiting approval",
+        "rejected": "Rejected",
+        "superseded": "Superseded",
+        "suspended": "Suspended"
+      }
+    },
+    "strata": {
+      "title": "Strata Certa",
+      "description": "Connect your existing ERP account. Tools use your current permissions.",
+      "connect": "Connect Strata Certa",
+      "disconnect": "Disconnect account",
+      "refresh": "Refresh connection",
+      "unconfigured": "The Strata connection still needs to be configured by an administrator.",
+      "notLinked": "No Strata account connected.",
+      "linkedAs": "Connected account: {{name}}",
+      "organization": "ERP company",
+      "chooseOrganization": "Choose a permitted company",
+      "failed": "Could not complete. Check your Strata access and try again.",
+      "browserOpened": "Continue signing in in your browser. Then refresh the connection here.",
+      "permissions": "Permissions are checked by the ERP for every operation.",
+      "consent": "When the ERP asks for confirmation, complete it on the secure Strata page.",
+      "disconnectTitle": "Disconnect the Strata account?",
+      "disconnectBody": "Future ERP queries and actions will require a new connection.",
+      "disconnected": "Strata account disconnected.",
+      "connecting": "Waiting for Strata sign-in",
+      "unavailable": "Could not verify the connection right now."
     }
   }
 }

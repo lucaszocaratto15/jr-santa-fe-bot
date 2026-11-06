@@ -20,6 +20,15 @@ try {
     compactionEnabled: process.env.COMPACTION_ENABLED,
     brainUrl: process.env.BRAIN_URL,
     brainSecret: process.env.BRAIN_SECRET,
+    strata: {
+      resourceUrl: process.env.STRATA_MCP_RESOURCE_URL,
+      issuer: process.env.STRATA_OAUTH_ISSUER,
+      clientId: process.env.STRATA_OAUTH_CLIENT_ID,
+      clientSecret: process.env.STRATA_OAUTH_CLIENT_SECRET,
+      redirectUri: process.env.STRATA_OAUTH_REDIRECT_URI,
+      encryptionKey: process.env.STRATA_TOKEN_ENCRYPTION_KEY,
+      scopes: process.env.STRATA_OAUTH_SCOPES,
+    },
   });
   control.server.once('error', () => {
     process.stderr.write('Não foi possível iniciar o controle de acesso.\n');

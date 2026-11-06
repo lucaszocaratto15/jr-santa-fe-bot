@@ -69,3 +69,63 @@ function normalizeForScan(text) {
     .normalize('NFD')
     .replace(/\p{M}+/gu, '');
 }
+
+export const BRAIN_SERVICE_VERSION = 'brain-consent-v1';
+const EVENTS = new Set([
+  'capture_queued',
+  'capture_sent',
+  'curator_disabled',
+  'curator_failed',
+  'invalid_curator_response',
+  'budget_exhausted',
+  'batch_full',
+  'proposal_created',
+  'proposal_failed',
+  'consent_granted',
+  'consent_denied',
+  'review_approved',
+  'review_rejected',
+  'note_activated',
+  'search_executed',
+  'search_empty',
+  'search_failed',
+  'authorization_failed',
+]);
+
+/** Operational events accept metadata only; callers cannot accidentally attach conversation text. */
+export function diagnosticEvent(event, details = {}, now = Date.now) {
+  if (!EVENTS.has(event)) throw new Error('invalid_diagnostic_event');
+  const stage = event.startsWith('capture_')
+    ? 'capture'
+    : event.startsWith('search_')
+      ? 'search'
+      : event === 'authorization_failed'
+        ? 'authorization'
+        : event.startsWith('review_')
+          ? 'review'
+          : event.startsWith('consent_')
+            ? 'consent'
+            : event === 'note_activated'
+              ? 'publication'
+              : event.startsWith('proposal_')
+                ? 'proposal'
+                : 'curator';
+  const result = {
+    event,
+    stage,
+    state: event,
+    timestamp: new Date(now()).toISOString(),
+    serviceVersion: BRAIN_SERVICE_VERSION,
+  };
+  for (const key of ['correlationId', 'proposalId', 'noteId', 'searchId']) {
+    if (
+      typeof details[key] === 'string' &&
+      /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u.test(details[key])
+    )
+      result[key] = details[key];
+  }
+  for (const key of ['durationMs', 'itemCount', 'version']) {
+    if (Number.isFinite(details[key]) && details[key] >= 0) result[key] = Math.round(details[key]);
+  }
+  return result;
+}

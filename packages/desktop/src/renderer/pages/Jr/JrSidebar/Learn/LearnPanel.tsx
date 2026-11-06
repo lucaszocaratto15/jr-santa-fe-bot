@@ -9,6 +9,7 @@ import styles from '../JrSidebar.module.css';
 import DataNoticeModal from '../Brain/DataNoticeModal';
 import ExclusionList from './ExclusionList';
 import InsightList from './InsightList';
+import WorkflowPanel from './WorkflowPanel';
 import { useLearnState } from '@renderer/hooks/agent/useLearnState';
 import { PageHeader, SectionLabel } from '../Teach/PanelParts';
 
@@ -20,25 +21,29 @@ type LearnPanelProps = {
 };
 
 const STATUS_KEY = {
+  disabled: 'common.jr.learn.panel.status.disabled',
   active: 'common.jr.learn.panel.status.active',
   paused: 'common.jr.learn.panel.status.paused',
   unavailable: 'common.jr.learn.panel.status.unavailable',
 } as const;
 
 /**
- * Configurações → Aprender: always on, so there is no opt-in and no off switch. Shows status,
- * the one daily pause (hidden once used, without a word about it), insights, exclusions and the
- * employee's data controls, with a link to the Data Notice.
+ * Private work learning requires its own opt-in. Manual markers never publish to the company brain.
  */
 const LearnPanel: React.FC<LearnPanelProps> = ({ onTeach }) => {
   const { t } = useTranslation();
   const { state, refresh } = useLearnState();
   const [noticeOpen, setNoticeOpen] = useState(false);
+  const [consentOpen, setConsentOpen] = useState(false);
   const [confirmWipe, setConfirmWipe] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const available = Boolean(state && state.status !== 'unavailable');
-  const insights = useSWR(state ? INSIGHTS_KEY : null, () => ipcBridge.learn.listInsights.invoke());
-  const exclusions = useSWR(available ? EXCLUSIONS_KEY : null, () => ipcBridge.learn.getExclusions.invoke());
+  const insights = useSWR(state?.ownerId ? [INSIGHTS_KEY, state.ownerId] : null, () =>
+    ipcBridge.learn.listInsights.invoke()
+  );
+  const exclusions = useSWR(available ? [EXCLUSIONS_KEY, state?.ownerId] : null, () =>
+    ipcBridge.learn.getExclusions.invoke()
+  );
 
   const act = async (name: string, action: () => Promise<unknown>) => {
     if (busy) return;
@@ -85,7 +90,7 @@ const LearnPanel: React.FC<LearnPanelProps> = ({ onTeach }) => {
       {t(STATUS_KEY[state.status])}
     </span>
   );
-  // The pause is offered once per local day; afterwards the button just is not there.
+  // Pause persists until an explicit resume; disabling consent stops all new observation.
   const pauseButton =
     state?.status === 'paused' ? (
       <Button
@@ -186,6 +191,20 @@ const LearnPanel: React.FC<LearnPanelProps> = ({ onTeach }) => {
       >
         {t('common.jr.learn.data.wipeConfirm')}
       </Modal>
+      <Modal
+        visible={consentOpen}
+        title={t('common.jr.learn.consent.title')}
+        okText={t('common.jr.learn.consent.enable')}
+        cancelText={t('common.cancel')}
+        onCancel={() => setConsentOpen(false)}
+        onOk={() => {
+          setConsentOpen(false);
+          void act('consent', () => ipcBridge.learn.setConsent.invoke({ enabled: true }));
+        }}
+        unmountOnExit
+      >
+        {t('common.jr.learn.consent.body')}
+      </Modal>
       <DataNoticeModal open={noticeOpen} onClose={() => setNoticeOpen(false)} />
     </>
   );
@@ -211,7 +230,32 @@ const LearnPanel: React.FC<LearnPanelProps> = ({ onTeach }) => {
     <div>
       {header}
       <p className={`${styles.muted} mb-12px`}>{t('common.jr.learn.panel.intro')}</p>
-      <div className='mb-12px'>{noticeLink}</div>
+      <div className='mb-12px flex flex-wrap gap-8px'>
+        {noticeLink}
+        {state.status === 'disabled' ? (
+          <Button type='primary' onClick={() => setConsentOpen(true)}>
+            {t('common.jr.learn.consent.enable')}
+          </Button>
+        ) : (
+          <Button onClick={() => void act('consent', () => ipcBridge.learn.setConsent.invoke({ enabled: false }))}>
+            {t('common.jr.learn.consent.disable')}
+          </Button>
+        )}
+      </div>
+      {state.status !== 'disabled' && !state.workEventsEnabled && (
+        <Alert
+          className='mb-12px'
+          type='info'
+          content={t('common.jr.learn.consent.eventsRequired')}
+          action={<Button onClick={() => setConsentOpen(true)}>{t('common.jr.learn.consent.eventsEnable')}</Button>}
+        />
+      )}
+      <WorkflowPanel
+        key={state.ownerId ?? 'signed-out'}
+        collecting={state.status === 'active'}
+        ownerId={state.ownerId ?? null}
+      />
+      <Alert className='my-12px' type='info' content={t('common.jr.learn.consent.weakEvidence')} />
 
       {state.titles === 'app-only' && (
         <Alert
@@ -245,6 +289,7 @@ const LearnPanel: React.FC<LearnPanelProps> = ({ onTeach }) => {
             shape='round'
             size='small'
             loading={busy === 'generate'}
+            disabled={state.status === 'disabled'}
             onClick={() => void generate()}
           >
             {t('common.jr.learn.insights.generate')}

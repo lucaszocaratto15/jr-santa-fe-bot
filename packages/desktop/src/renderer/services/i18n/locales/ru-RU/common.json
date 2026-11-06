@@ -753,9 +753,10 @@
         "status": {
           "active": "On",
           "paused": "Paused",
-          "unavailable": "Unavailable"
+          "unavailable": "Unavailable",
+          "disabled": "Отключено"
         },
-        "pause": "Pause for 15 min",
+        "pause": "Приостановить сбор данных",
         "resume": "Resume",
         "unavailableEncryption": "Unavailable: this computer does not offer system encryption, so nothing can be stored safely.",
         "unavailablePlatform": "Unavailable on this system.",
@@ -764,7 +765,7 @@
         "samplerError": "Observation stopped because of an error.",
         "retry": "Try again",
         "actionFailed": "Could not finish that. Try again.",
-        "intro": "Aprender looks at which programs and pages you use to understand your work and help you. It is always on, and raw records stay on this computer only. See the Data Notice for what is collected.",
+        "intro": "Обучение начинается только с вашего разрешения. Оно использует приватные метаданные приложений, ваши ручные отметки, выполненные запросы к ERP и загрузки браузера, чтобы предлагать кандидатов на рабочие процедуры. Сбор можно приостановить или отключить.",
         "readNotice": "View the Data Notice"
       },
       "insights": {
@@ -776,8 +777,8 @@
         "timePerApp": "Time per program",
         "minutesShort": "{{value}} min",
         "hoursMinutes": "{{hours}}h{{minutes}}",
-        "repetitive": "Repetitive",
-        "times": "{{times}}× · {{minutes}} min",
+        "repetitive": "Гипотеза о регулярной задаче",
+        "times": "Неподтверждённая оценка: повторений — {{times}} · {{minutes}} мин",
         "tip": "Tip",
         "teach": "Teach this task",
         "delete": "Delete",
@@ -816,6 +817,76 @@
         "rawHours": "Raw records: {{count}} h stored (deleted within 48 h)",
         "wipeNow": "Delete now",
         "wipeConfirm": "Delete the raw records stored on this computer now?"
+      },
+      "consent": {
+        "title": "Учиться на моей работе",
+        "body": "Разрешите использование приватных метаданных приложений и окон, ваших отметок этапов работы, успешных запросов к ERP и завершённых загрузок в браузере JR. Для реальных событий сохраняются только категории действий и время, но не параметры запросов, полученные данные, имена файлов или адреса. Записи остаются приватными на этом компьютере; обобщённые сводки могут отправляться корпоративному ИИ. Содержимое страниц, формы, пароли и документы не собираются. Наблюдаемое действие не доказывает выполнение полной рабочей процедуры.",
+        "enable": "Разрешить обучение на моей работе",
+        "disable": "Отключить сбор данных",
+        "weakEvidence": "Сигналы приложений и окон — слабые свидетельства. Эти предложения требуют подтверждения.",
+        "eventsRequired": "Ваше прежнее разрешение не включает обучение на реальных событиях. Ознакомьтесь с обновлённым уведомлением, чтобы разрешить эти дополнительные источники.",
+        "eventsEnable": "Разрешить реальные рабочие события"
+      },
+      "workflow": {
+        "title": "Мои рабочие процессы",
+        "privacy": "Конфиденциально. Используйте только общие названия шагов; не указывайте людей, документы, адреса или учётные данные.",
+        "name": "Общее название рабочего процесса",
+        "start": "Начать рабочий процесс",
+        "step": "Общее название шага",
+        "addStep": "Завершить шаг",
+        "complete": "Завершить рабочий процесс",
+        "source": "Задействованная система",
+        "action": "Тип действия",
+        "review": "Регулярные задачи для проверки",
+        "confirm": "Подтвердить регулярную задачу и сохранить исправления",
+        "reject": "Отбросить регулярную задачу",
+        "eventual": "Нерегулярная деятельность",
+        "exclude": "Исключить из ежемесячного отчёта",
+        "suppress": "Больше не предлагать",
+        "notes": "Личные заметки",
+        "status": {
+          "candidate": "Ожидает подтверждения",
+          "confirmed": "Подтверждено сотрудником",
+          "rejected": "Отброшено"
+        },
+        "sources": {
+          "erp": "ERP",
+          "web": "Веб-портал или система",
+          "desktop": "Приложение или электронная таблица",
+          "integration": "Интеграция",
+          "manual": "Другой инструмент"
+        },
+        "actions": {
+          "consulta": "Запрос",
+          "exportacao": "Экспорт",
+          "preenchimento": "Заполнение",
+          "envio": "Отправка",
+          "aprovacao": "Одобрение",
+          "outro": "Другое"
+        },
+        "month": "Месяц (YYYY-MM)",
+        "monthly": "Создать личную карту за месяц",
+        "insufficient": "Для создания карты подтвердите хотя бы одну регулярную задачу, выполненную в этом месяце.",
+        "frequency": "Записано выполнений: {{count}}",
+        "pending": "Регулярные задачи, ожидающие проверки: {{count}}",
+        "saveNotes": "Сохранить заметки",
+        "manual": "Подготовить личный черновик вручную",
+        "draft": "Личный черновик — проверьте перед использованием. Ничего не будет опубликовано в «Мозге».",
+        "responsibilities": "Обязанности и подтверждённые регулярные задачи",
+        "systems": "Задействованные системы",
+        "steps": "Подтверждённые шаги",
+        "exceptions": "Исключения и заметки",
+        "opportunities": "Возможности автоматизации для проверки",
+        "opportunity": "Проверьте, можно ли автоматизировать повторяющиеся шаги, без выполнения действий.",
+        "error": "Не удалось сохранить. Используйте общие названия без персональных данных, адресов или учётных данных.",
+        "inputs": "Известные входные данные (категории, без документов)",
+        "outputs": "Известные выходные данные (категории, без документов)",
+        "automationCandidate": "Возможная автоматизация: вы записали {{count}} шаг(ов). Проверьте, является ли эта последовательность регулярной работой и какие шаги можно автоматизировать.",
+        "manualEvidence": "Основание: этапы, введённые вами. Подтвердите регулярную работу, прежде чем считать её знанием о вашей должности.",
+        "observedName": "Последовательность действий, обнаруженная в JR",
+        "observedEvidence": "Эти действия подтверждены ERP или браузером. Их последовательность — лишь кандидат на рабочую процедуру; проверьте её цель и этапы, прежде чем включать в карту должностных обязанностей.",
+        "observedQuery": "Запрос к ERP выполнен",
+        "observedDownload": "Загрузка в браузере завершена"
       }
     },
     "handbook": {
@@ -904,28 +975,28 @@
       "updatedNotice": "Your Handbook was updated — review it if you like"
     },
     "dataNotice": {
-      "title": "Aviso de uso de dados",
-      "intro": "Para você saber como o JR Bot usa as informações do seu trabalho, aqui vai uma explicação simples. Este é um aviso, não um pedido de autorização: ele vale para todos os colaboradores da empresa.",
-      "collectedTitle": "O que é coletado",
-      "collectedBody": "Trechos das suas conversas com os bots, para o cérebro da empresa, incluindo os resultados de ferramentas que o bot usou na conversa (por exemplo, páginas e dados de sistemas); amostras da sua tela (aplicativo e título da janela), para o recurso Aprender; e as tarefas que você ensinar ao bot, para o Manual da função.",
-      "purposeTitle": "Para que serve",
-      "purposeBody": "Entender como o trabalho é feito para ajudar você: os bots passam a saber o que a empresa já sabe. Não serve para avaliar desempenho nem para controlar horário.",
-      "whoTitle": "Quem vê o quê",
-      "whoBody": "O que o cérebro aprende fica disponível por área e por nível: cada pessoa vê o conhecimento das suas áreas e o que for geral para a empresa. Informações sensíveis, como valores, contratos e dados de clientes, só aparecem para gestores da área e para a diretoria.",
-      "blockedTitle": "O que fica de fora",
-      "blockedBody": "Removemos os valores do seu Cofre antes do envio, e o servidor descarta fatos com CPF, CNPJ, cartão, chave de acesso ou e-mail.",
-      "retentionTitle": "Por quanto tempo",
-      "retentionBody": "As amostras de tela são apagadas em 48 horas. Os trechos de conversa não ficam guardados no servidor: só os fatos extraídos deles e, junto de cada fato, uma citação curta da conversa (até 120 caracteres).",
-      "providerTitle": "Quem processa",
-      "providerBody": "O processamento usa o provedor de IA da empresa (MiniMax), pelo servidor da empresa. Nada vai direto do seu computador para o provedor.",
-      "pauseTitle": "Pausar o Aprender",
-      "pauseBody": "Você pode pausar o Aprender por alguns minutos nas configurações dele, quando precisar de privacidade.",
-      "button": "Li e entendi",
-      "failed": "Não foi possível registrar agora. O aviso aparece de novo na próxima abertura."
+      "title": "Уведомление об использовании данных",
+      "intro": "Это уведомление объясняет два отдельных разрешения: использование выбранного фрагмента для предложения заметки компании и согласие на личное обучение на вашей работе. Подтверждение прочтения этого уведомления не даёт ни одного из этих разрешений.",
+      "collectedTitle": "Какие данные собираются",
+      "collectedBody": "Заметки компании используют только фрагмент, на использование которого вы явно дали разрешение. Обучение на вашей работе записывает метаданные приложений и окон и ключевые этапы рабочих процессов только после вашего согласия. Оно не собирает содержимое страниц, формы, учётные данные или непрерывные снимки экрана.",
+      "purposeTitle": "Для чего это нужно",
+      "purposeBody": "Помогать вам вспоминать проверенные знания и находить возможности автоматизации. Личное обучение не используется для ранжирования сотрудников или оценки их работы.",
+      "whoTitle": "Кто что видит",
+      "whoBody": "Переписка и записи рабочих процессов по умолчанию остаются личными. С выбранной аудиторией можно поделиться только проверенной заметкой и разрешённым исходным фрагментом. Поиск с ограниченным доступом требует авторизации в ERP.",
+      "blockedTitle": "Что исключается",
+      "blockedBody": "Секреты из хранилища скрываются перед обработкой. Не включайте конфиденциальные персональные данные во фрагменты или названия рабочих процессов. Фильтры обеспечивают дополнительную защиту; проверка по-прежнему обязательна.",
+      "retentionTitle": "Как долго хранятся данные",
+      "retentionBody": "Необработанные образцы активности удаляются в течение 48 часов, а личные выводы — в течение 90 дней. Исторические очереди переписки не обрабатываются повторно автоматически. Общие заметки сохраняют одобренное содержимое и историю версий.",
+      "providerTitle": "Кто обрабатывает данные",
+      "providerBody": "Поставщику ИИ через сервер компании отправляются только фрагменты, на использование которых вы явно дали разрешение. Автоматические предложения по работе используют агрегированные данные. Разрешение на анализ и разрешение на распространение предоставляются отдельно.",
+      "pauseTitle": "Приостановка обучения на вашей работе",
+      "pauseBody": "Личное обучение на вашей работе начинается после вашего согласия. Пауза останавливает сбор данных до возобновления. Вы также можете отключить сбор данных. Ничего не публикуется в «Мозге» автоматически.",
+      "button": "Я прочитал(а) и понял(а)",
+      "failed": "Сейчас не удалось записать подтверждение. Уведомление появится снова при следующем открытии приложения."
     },
     "brainManage": {
       "title": "Cérebro da empresa",
-      "subtitle": "Os fatos que os bots da empresa aprenderam. Revise, corrija e decida o que fica disponível para cada área.",
+      "subtitle": "Проверяйте общие заметки и официальные процедуры, их одобренные источники, доступ и историю версий.",
       "loadFailed": "Não foi possível carregar o cérebro agora.",
       "exEmployee": "ex-funcionário",
       "facts": {
@@ -1028,7 +1099,8 @@
         "conflict": "Conflito: o item já existe, ou o fato faz parte de uma cadeia de versões e não pode mudar de área ou risco.",
         "forbidden": "Você não tem permissão para isso.",
         "notFound": "Este item não existe mais."
-      }
+      },
+      "erpPermissions": "Доступ к знаниям и права утверждения управляются в Strata Certa. Статус администратора JR не предоставляет доступ к ERP."
     },
     "brain": {
       "activity": {
@@ -1038,6 +1110,61 @@
         "doneNone": "Обращение к мозгу компании · ничего не найдено",
         "unavailable": "Мозг недоступен"
       }
+    },
+    "brainNotes": {
+      "create": "Создать заметку",
+      "authorizeExcerpt": "Использовать только этот фрагмент",
+      "revise": "Обновить версию для проверки",
+      "shareVersion": "Разрешить распространение этой версии",
+      "excerptNotice": "При подтверждении куратору будет отправлен только фрагмент ниже. Отредактируйте его, удалив содержимое, которое вы не хотите использовать.",
+      "reviewNotice": "Проверьте текст, источник и аудиторию. Распространение этой заметки не раскрывает исходную переписку. После редактирования обновите версию, прежде чем разрешать распространение.",
+      "excerpt": "Разрешённый фрагмент",
+      "text": "Текст заметки",
+      "source": "Разрешённый исходный фрагмент",
+      "audience": "Разрешённая аудитория",
+      "kind": "Тип знаний",
+      "sharedNote": "Общая заметка",
+      "officialProcedure": "Официальная процедура",
+      "officialNotice": "Это будет отправлено на одобрение ответственному проверяющему. До одобрения в поиске не появится.",
+      "pending": "Предложение отправлено на проверку. Оно ещё не опубликовано.",
+      "shared": "Заметка доступна разрешённой аудитории.",
+      "failed": "Не удалось выполнить действие. Перед повторной попыткой проверьте соединение, авторизацию в ERP и версию предложения.",
+      "reviews": "Процедуры, ожидающие проверки",
+      "noReviews": "Нет процедур, ожидающих проверки.",
+      "approve": "Одобрить процедуру",
+      "reject": "Отклонить предложение",
+      "authorizationRequired": "Для проверки нужны подтверждённая привязка к ERP и авторизация.",
+      "edit": "Предложить новую версию",
+      "validUntil": "Действует до (необязательно)",
+      "status": {
+        "draft": "Черновик",
+        "active": "Активна",
+        "pending_review": "Ожидает одобрения",
+        "rejected": "Отклонена",
+        "superseded": "Заменена",
+        "suspended": "Приостановлена"
+      }
+    },
+    "strata": {
+      "title": "Strata Certa",
+      "description": "Подключите существующую учётную запись ERP. Инструменты используют ваши текущие разрешения.",
+      "connect": "Подключить Strata Certa",
+      "disconnect": "Отключить учётную запись",
+      "refresh": "Обновить подключение",
+      "unconfigured": "Администратору ещё необходимо настроить подключение к Strata.",
+      "notLinked": "Учётная запись Strata не подключена.",
+      "linkedAs": "Подключённая учётная запись: {{name}}",
+      "organization": "Компания в ERP",
+      "chooseOrganization": "Выберите доступную компанию",
+      "failed": "Не удалось завершить операцию. Проверьте доступ к Strata и повторите попытку.",
+      "browserOpened": "Продолжите вход в браузере. Затем обновите подключение здесь.",
+      "permissions": "ERP проверяет разрешения при каждой операции.",
+      "consent": "Когда ERP запросит подтверждение, выполните его на защищённой странице Strata.",
+      "disconnectTitle": "Отключить учётную запись Strata?",
+      "disconnectBody": "Для последующих запросов и действий в ERP потребуется новое подключение.",
+      "disconnected": "Учётная запись Strata отключена.",
+      "connecting": "Ожидание входа в Strata",
+      "unavailable": "Сейчас не удалось проверить подключение."
     }
   }
 }

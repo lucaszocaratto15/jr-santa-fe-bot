@@ -751,9 +751,10 @@
         "status": {
           "active": "On",
           "paused": "Paused",
-          "unavailable": "Unavailable"
+          "unavailable": "Unavailable",
+          "disabled": "غیرفعال"
         },
-        "pause": "Pause for 15 min",
+        "pause": "توقف موقت جمع‌آوری داده‌ها",
         "resume": "Resume",
         "unavailableEncryption": "Unavailable: this computer does not offer system encryption, so nothing can be stored safely.",
         "unavailablePlatform": "Unavailable on this system.",
@@ -762,7 +763,7 @@
         "samplerError": "Observation stopped because of an error.",
         "retry": "Try again",
         "actionFailed": "Could not finish that. Try again.",
-        "intro": "Aprender looks at which programs and pages you use to understand your work and help you. It is always on, and raw records stay on this computer only. See the Data Notice for what is collected.",
+        "intro": "یادگیری فقط با اجازهٔ شما آغاز می‌شود. از فراداده‌های خصوصی برنامه‌ها، نشانه‌های دستی شما، پرس‌وجوهای تکمیل‌شدهٔ ERP و دانلودهای مرورگر برای پیشنهاد روال‌های احتمالی استفاده می‌کند. می‌توانید جمع‌آوری را موقتاً متوقف یا غیرفعال کنید.",
         "readNotice": "View the Data Notice"
       },
       "insights": {
@@ -774,8 +775,8 @@
         "timePerApp": "Time per program",
         "minutesShort": "{{value}} min",
         "hoursMinutes": "{{hours}}h{{minutes}}",
-        "repetitive": "Repetitive",
-        "times": "{{times}}× · {{minutes}} min",
+        "repetitive": "فرضیهٔ روال",
+        "times": "برآورد تأییدنشده: {{times}} بار · {{minutes}} دقیقه",
         "tip": "Tip",
         "teach": "Teach this task",
         "delete": "Delete",
@@ -814,6 +815,76 @@
         "rawHours": "Raw records: {{count}} h stored (deleted within 48 h)",
         "wipeNow": "Delete now",
         "wipeConfirm": "Delete the raw records stored on this computer now?"
+      },
+      "consent": {
+        "title": "یادگیری از کار من",
+        "body": "اجازهٔ استفاده از فراداده‌های خصوصی برنامه‌ها و پنجره‌ها، نشانه‌های گردش کار شما، پرس‌وجوهای موفق ERP و دانلودهای تکمیل‌شده در مرورگر JR را بدهید. از رویدادهای واقعی فقط دسته‌بندی اقدامات و زمان‌ها ذخیره می‌شوند، نه پارامترهای پرس‌وجو، داده‌های بازگشتی، نام فایل‌ها یا نشانی‌ها. سوابق به‌صورت خصوصی روی این رایانه می‌مانند؛ خلاصه‌های تجمیعی ممکن است به هوش مصنوعی شرکت ارسال شوند. محتوای صفحات، فرم‌ها، گذرواژه‌ها یا اسناد جمع‌آوری نمی‌شوند. یک اقدام مشاهده‌شده، یک روال کاری کامل را اثبات نمی‌کند.",
+        "enable": "اجازهٔ یادگیری از کار من",
+        "disable": "غیرفعال کردن جمع‌آوری داده‌ها",
+        "weakEvidence": "نشانه‌های برنامه‌ها و پنجره‌ها شواهد ضعیفی هستند. این پیشنهادها به تأیید نیاز دارند.",
+        "eventsRequired": "مجوز قبلی شما یادگیری از رویدادهای واقعی را فعال نمی‌کند. برای اجازه دادن به این منابع اضافی، اطلاعیهٔ به‌روزشده را بررسی کنید.",
+        "eventsEnable": "اجازهٔ رویدادهای واقعی کار"
+      },
+      "workflow": {
+        "title": "گردش‌های کار من",
+        "privacy": "خصوصی. فقط از نام‌های کلی برای مراحل استفاده کنید؛ نام افراد، اسناد، نشانی‌ها یا اطلاعات ورود را وارد نکنید.",
+        "name": "نام کلی گردش کار",
+        "start": "شروع گردش کار",
+        "step": "نام کلی مرحله",
+        "addStep": "تکمیل مرحله",
+        "complete": "تکمیل گردش کار",
+        "source": "سامانهٔ مورد استفاده",
+        "action": "نوع اقدام",
+        "review": "روال‌های نیازمند بازبینی",
+        "confirm": "تأیید روال و ذخیرهٔ اصلاحات",
+        "reject": "کنار گذاشتن روال",
+        "eventual": "فعالیت گاه‌به‌گاه",
+        "exclude": "حذف از خلاصهٔ ماهانه",
+        "suppress": "دیگر پیشنهاد نشود",
+        "notes": "یادداشت‌های خصوصی",
+        "status": {
+          "candidate": "در انتظار تأیید",
+          "confirmed": "تأییدشده توسط کارمند",
+          "rejected": "کنار گذاشته شده"
+        },
+        "sources": {
+          "erp": "ERP",
+          "web": "درگاه وب یا سامانه",
+          "desktop": "برنامه یا صفحه‌گسترده",
+          "integration": "یکپارچه‌سازی",
+          "manual": "ابزار دیگر"
+        },
+        "actions": {
+          "consulta": "استعلام",
+          "exportacao": "خروجی گرفتن",
+          "preenchimento": "تکمیل اطلاعات",
+          "envio": "ارسال",
+          "aprovacao": "تأیید",
+          "outro": "سایر"
+        },
+        "month": "ماه (YYYY-MM)",
+        "monthly": "ایجاد نقشهٔ ماهانهٔ خصوصی",
+        "insufficient": "برای ایجاد نقشه، دست‌کم یک روال تکمیل‌شده در این ماه را تأیید کنید.",
+        "frequency": "تعداد اجراهای ثبت‌شده: {{count}}",
+        "pending": "روال‌های در انتظار اعتبارسنجی: {{count}}",
+        "saveNotes": "ذخیرهٔ یادداشت‌ها",
+        "manual": "تهیهٔ پیش‌نویس خصوصی به‌صورت دستی",
+        "draft": "پیش‌نویس خصوصی — پیش از استفاده بازبینی کنید. هیچ چیزی در «مغز» منتشر نخواهد شد.",
+        "responsibilities": "مسئولیت‌ها و روال‌های تأییدشده",
+        "systems": "سامانه‌های مورد استفاده",
+        "steps": "مراحل تأییدشده",
+        "exceptions": "استثناها و یادداشت‌ها",
+        "opportunities": "فرصت‌های خودکارسازی نیازمند اعتبارسنجی",
+        "opportunity": "بررسی کنید که آیا می‌توان مراحل تکراری را خودکار کرد، بدون اینکه اقدامی انجام دهید.",
+        "error": "ذخیره نشد. از نام‌های کلی، بدون داده‌های شخصی، نشانی‌ها یا اطلاعات ورود استفاده کنید.",
+        "inputs": "ورودی‌های شناخته‌شده (دسته‌بندی‌ها، بدون سند)",
+        "outputs": "خروجی‌های شناخته‌شده (دسته‌بندی‌ها، بدون سند)",
+        "automationCandidate": "امکان خودکارسازی: شما {{count}} مرحله ثبت کرده‌اید. بررسی کنید آیا این توالی یک کار تکرارشونده است و کدام مراحل می‌توانند خودکار شوند.",
+        "manualEvidence": "شواهد: نقاط عطفی که خودتان وارد کرده‌اید؛ پیش از در نظر گرفتن این روند به‌عنوان دانش مربوط به نقش خود، آن را تأیید کنید.",
+        "observedName": "توالی مشاهده‌شده در JR",
+        "observedEvidence": "این اقدامات توسط ERP یا مرورگر تأیید شده‌اند. توالی آن‌ها فقط یک روال پیشنهادی است؛ پیش از استفاده در نقشه وظایف خود، هدف و مراحل آن را بررسی کنید.",
+        "observedQuery": "پرس‌وجو از ERP تکمیل شد",
+        "observedDownload": "دانلود مرورگر تکمیل شد"
       }
     },
     "handbook": {
@@ -902,28 +973,28 @@
       "updatedNotice": "Your Handbook was updated — review it if you like"
     },
     "dataNotice": {
-      "title": "Aviso de uso de dados",
-      "intro": "Para você saber como o JR Bot usa as informações do seu trabalho, aqui vai uma explicação simples. Este é um aviso, não um pedido de autorização: ele vale para todos os colaboradores da empresa.",
-      "collectedTitle": "O que é coletado",
-      "collectedBody": "Trechos das suas conversas com os bots, para o cérebro da empresa, incluindo os resultados de ferramentas que o bot usou na conversa (por exemplo, páginas e dados de sistemas); amostras da sua tela (aplicativo e título da janela), para o recurso Aprender; e as tarefas que você ensinar ao bot, para o Manual da função.",
-      "purposeTitle": "Para que serve",
-      "purposeBody": "Entender como o trabalho é feito para ajudar você: os bots passam a saber o que a empresa já sabe. Não serve para avaliar desempenho nem para controlar horário.",
-      "whoTitle": "Quem vê o quê",
-      "whoBody": "O que o cérebro aprende fica disponível por área e por nível: cada pessoa vê o conhecimento das suas áreas e o que for geral para a empresa. Informações sensíveis, como valores, contratos e dados de clientes, só aparecem para gestores da área e para a diretoria.",
-      "blockedTitle": "O que fica de fora",
-      "blockedBody": "Removemos os valores do seu Cofre antes do envio, e o servidor descarta fatos com CPF, CNPJ, cartão, chave de acesso ou e-mail.",
-      "retentionTitle": "Por quanto tempo",
-      "retentionBody": "As amostras de tela são apagadas em 48 horas. Os trechos de conversa não ficam guardados no servidor: só os fatos extraídos deles e, junto de cada fato, uma citação curta da conversa (até 120 caracteres).",
-      "providerTitle": "Quem processa",
-      "providerBody": "O processamento usa o provedor de IA da empresa (MiniMax), pelo servidor da empresa. Nada vai direto do seu computador para o provedor.",
-      "pauseTitle": "Pausar o Aprender",
-      "pauseBody": "Você pode pausar o Aprender por alguns minutos nas configurações dele, quando precisar de privacidade.",
-      "button": "Li e entendi",
-      "failed": "Não foi possível registrar agora. O aviso aparece de novo na próxima abertura."
+      "title": "اطلاعیهٔ استفاده از داده‌ها",
+      "intro": "این اطلاعیه دو اجازهٔ جداگانه را توضیح می‌دهد: استفاده از یک گزیدهٔ انتخاب‌شده برای پیشنهاد یادداشتی برای شرکت، و فعال‌سازی داوطلبانهٔ یادگیری خصوصی از کار. تأیید مطالعهٔ این اطلاعیه، هیچ‌کدام از این دو اجازه را صادر نمی‌کند.",
+      "collectedTitle": "چه داده‌هایی جمع‌آوری می‌شود",
+      "collectedBody": "یادداشت‌های شرکت فقط از گزیده‌ای استفاده می‌کنند که صریحاً اجازهٔ استفاده از آن را داده‌اید. یادگیری از کار، فقط پس از موافقت شما، فراداده‌های برنامه‌ها و پنجره‌ها و مراحل اصلی گردش کار را ثبت می‌کند. محتوای صفحه‌ها، فرم‌ها، اطلاعات ورود یا تصاویر پیوسته از صفحه جمع‌آوری نمی‌شود.",
+      "purposeTitle": "هدف استفاده از داده‌ها",
+      "purposeBody": "کمک به یادآوری دانش اعتبارسنجی‌شده و شناسایی خودکارسازی‌های احتمالی. یادگیری خصوصی برای رتبه‌بندی کارمندان یا ارزیابی عملکرد استفاده نمی‌شود.",
+      "whoTitle": "چه کسی چه چیزی را می‌بیند",
+      "whoBody": "گفتگوها و سوابق گردش کار به‌طور پیش‌فرض خصوصی می‌مانند. فقط یادداشت بازبینی‌شده و گزیدهٔ منبعی که اجازهٔ استفاده از آن داده شده، می‌توانند با مخاطبان انتخاب‌شده به اشتراک گذاشته شوند. جست‌وجوی محدود به مجوز ERP نیاز دارد.",
+      "blockedTitle": "چه چیزهایی کنار گذاشته می‌شود",
+      "blockedBody": "اطلاعات محرمانهٔ خزانه پیش از پردازش پوشانده می‌شوند. داده‌های شخصی حساس را در گزیده‌ها یا نام‌های گردش کار وارد نکنید. فیلترها حفاظت بیشتری ایجاد می‌کنند؛ بازبینی همچنان الزامی است.",
+      "retentionTitle": "مدت نگهداری داده‌ها",
+      "retentionBody": "نمونه‌های خام فعالیت حداکثر تا ۴۸ ساعت و بینش‌های خصوصی حداکثر تا ۹۰ روز منقضی می‌شوند. صف‌های گفتگوهای گذشته به‌طور خودکار دوباره پردازش نمی‌شوند. یادداشت‌های مشترک، محتوای تأییدشده و تاریخچهٔ نسخه‌ها را نگه می‌دارند.",
+      "providerTitle": "چه کسی داده‌ها را پردازش می‌کند",
+      "providerBody": "فقط گزیده‌هایی که صریحاً اجازهٔ استفاده از آن‌ها داده شده، از طریق بک‌اند شرکت به ارائه‌دهندهٔ هوش مصنوعی ارسال می‌شوند. پیشنهادهای خودکار کاری از داده‌های تجمیع‌شده استفاده می‌کنند. اجازهٔ تحلیل از اجازهٔ اشتراک‌گذاری جداست.",
+      "pauseTitle": "توقف موقت یادگیری از کار",
+      "pauseBody": "یادگیری خصوصی از کار پس از موافقت شما آغاز می‌شود. توقف موقت، جمع‌آوری داده‌ها را تا زمان ازسرگیری متوقف می‌کند. همچنین می‌توانید جمع‌آوری داده‌ها را غیرفعال کنید. هیچ چیزی به‌طور خودکار در «مغز» منتشر نمی‌شود.",
+      "button": "خواندم و متوجه شدم",
+      "failed": "در حال حاضر ثبت نشد. این اطلاعیه بار دیگر در نوبت بعدی باز کردن برنامه نمایش داده می‌شود."
     },
     "brainManage": {
       "title": "Cérebro da empresa",
-      "subtitle": "Os fatos que os bots da empresa aprenderam. Revise, corrija e decida o que fica disponível para cada área.",
+      "subtitle": "یادداشت‌های مشترک و رویه‌های رسمی، منابع تأییدشده، دسترسی و تاریخچهٔ نسخه‌های آن‌ها را بازبینی کنید.",
       "loadFailed": "Não foi possível carregar o cérebro agora.",
       "exEmployee": "ex-funcionário",
       "facts": {
@@ -1026,7 +1097,8 @@
         "conflict": "Conflito: o item já existe, ou o fato faz parte de uma cadeia de versões e não pode mudar de área ou risco.",
         "forbidden": "Você não tem permissão para isso.",
         "notFound": "Este item não existe mais."
-      }
+      },
+      "erpPermissions": "دسترسی به دانش و مجوزهای تأیید در Strata Certa مدیریت می‌شوند. مدیر بودن در JR به معنی داشتن دسترسی به ERP نیست."
     },
     "brain": {
       "activity": {
@@ -1036,6 +1108,61 @@
         "doneNone": "مراجعه به مغز شرکت · چیزی پیدا نشد",
         "unavailable": "مغز در دسترس نیست"
       }
+    },
+    "brainNotes": {
+      "create": "ایجاد یادداشت",
+      "authorizeExcerpt": "استفاده فقط از این گزیده",
+      "revise": "به‌روزرسانی نسخه برای بازبینی",
+      "shareVersion": "اجازهٔ اشتراک‌گذاری این نسخه",
+      "excerptNotice": "پس از تأیید شما، فقط گزیدهٔ زیر برای متصدی بررسی ارسال می‌شود. آن را ویرایش کنید تا هر محتوایی که نمی‌خواهید استفاده شود، حذف شود.",
+      "reviewNotice": "متن، منبع و مخاطبان را بازبینی کنید. اشتراک‌گذاری این یادداشت، گفتگوی اصلی را در دسترس دیگران قرار نمی‌دهد. پس از ویرایش، پیش از صدور اجازهٔ اشتراک‌گذاری، نسخه را به‌روزرسانی کنید.",
+      "excerpt": "گزیدهٔ مجاز",
+      "text": "متن یادداشت",
+      "source": "گزیدهٔ مجاز از منبع",
+      "audience": "مخاطبان مجاز",
+      "kind": "نوع دانش",
+      "sharedNote": "یادداشت مشترک",
+      "officialProcedure": "رویهٔ رسمی",
+      "officialNotice": "این مورد برای تأیید به بازبین مسئول ارسال می‌شود. تا زمان تأیید، در نتایج جست‌وجو نمایش داده نمی‌شود.",
+      "pending": "پیشنهاد برای بازبینی ارسال شد. هنوز منتشر نشده است.",
+      "shared": "یادداشت با مخاطبان مجاز به اشتراک گذاشته شد.",
+      "failed": "انجام این اقدام ممکن نشد. پیش از تلاش دوباره، اتصال، مجوز ERP و نسخهٔ پیشنهاد را بررسی کنید.",
+      "reviews": "رویه‌های در انتظار بازبینی",
+      "noReviews": "هیچ رویه‌ای در انتظار بازبینی نیست.",
+      "approve": "تأیید رویه",
+      "reject": "رد پیشنهاد",
+      "authorizationRequired": "بازبینی به پیوند تأییدشده با ERP و مجوز نیاز دارد.",
+      "edit": "پیشنهاد نسخهٔ جدید",
+      "validUntil": "معتبر تا (اختیاری)",
+      "status": {
+        "draft": "پیش‌نویس",
+        "active": "فعال",
+        "pending_review": "در انتظار تأیید",
+        "rejected": "ردشده",
+        "superseded": "جایگزین‌شده",
+        "suspended": "تعلیق‌شده"
+      }
+    },
+    "strata": {
+      "title": "Strata Certa",
+      "description": "حساب موجود خود در ERP را متصل کنید. ابزارها از مجوزهای فعلی شما استفاده می‌کنند.",
+      "connect": "اتصال به Strata Certa",
+      "disconnect": "قطع اتصال حساب",
+      "refresh": "به‌روزرسانی اتصال",
+      "unconfigured": "اتصال به Strata هنوز باید توسط مدیر پیکربندی شود.",
+      "notLinked": "هیچ حساب Strata متصل نیست.",
+      "linkedAs": "حساب متصل: {{name}}",
+      "organization": "شرکت در ERP",
+      "chooseOrganization": "یک شرکت مجاز انتخاب کنید",
+      "failed": "عملیات تکمیل نشد. دسترسی خود به Strata را بررسی و دوباره تلاش کنید.",
+      "browserOpened": "ورود را در مرورگر ادامه دهید. سپس اتصال را اینجا به‌روزرسانی کنید.",
+      "permissions": "ERP در هر عملیات مجوزها را بررسی می‌کند.",
+      "consent": "وقتی ERP تأیید می‌خواهد، آن را در صفحه امن Strata انجام دهید.",
+      "disconnectTitle": "اتصال حساب Strata قطع شود؟",
+      "disconnectBody": "پرس‌وجوها و اقدامات بعدی در ERP به اتصال دوباره نیاز خواهند داشت.",
+      "disconnected": "اتصال حساب Strata قطع شد.",
+      "connecting": "در انتظار ورود به Strata",
+      "unavailable": "در حال حاضر تأیید اتصال ممکن نشد."
     }
   }
 }

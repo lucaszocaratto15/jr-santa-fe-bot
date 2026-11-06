@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createCurator, parseModelFacts } from '../../../../services/brain/curator.mjs';
+import { createCurator, parseModelFacts, requiresHighRisk } from '../../../../services/brain/curator.mjs';
 import { createBrainStore } from '../../../../services/brain/store.mjs';
 
 const T0 = Date.UTC(2026, 9, 30);
 const ana = { userId: 'ana', role: 'employee', title: 'Analista' };
+const say = (facts) => JSON.stringify({ facts });
+const convo = (text) => [{ role: 'user', text }];
+const candidate = (text, extra = {}) => ({ text, quote: text, risk: 'low', ...extra });
 
-function setup({ answer, dailyCuratorCalls } = {}) {
+function setup({ answer, dailyCuratorCalls, disabled = false } = {}) {
   const store = createBrainStore(':memory:', {
     now: () => T0,
     ...(dailyCuratorCalls === undefined ? {} : { dailyCuratorCalls }),
@@ -14,272 +17,247 @@ function setup({ answer, dailyCuratorCalls } = {}) {
   const frota = store.areas.create('Frota').id;
   store.members.set('ana', [{ areaId: frota, level: 'colaborador', primary: true }]);
   const state = { calls: [], answer, status: 200, logs: [] };
-  const modelFetch = async (url, init) => {
-    state.calls.push({ url, init, body: JSON.parse(init.body) });
-    if (state.status !== 200) return { ok: false, status: state.status, json: async () => ({}) };
-    const content = typeof state.answer === 'function' ? state.answer() : state.answer;
-    return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content } }] }) };
-  };
   const curator = createCurator({
     store,
-    modelFetch,
+    modelFetch: async (url, init) => {
+      state.calls.push({ url, init, body: JSON.parse(init.body) });
+      if (state.status !== 200) return { ok: false, status: state.status };
+      const content = typeof state.answer === 'function' ? state.answer() : state.answer;
+      return { ok: true, json: async () => ({ choices: [{ message: { content } }] }) };
+    },
     modelUrl: 'http://model.test/v1/',
-    modelKey: 'key-test',
+    modelKey: disabled ? '' : 'key-test',
     model: 'm',
     now: () => T0,
     log: (line) => state.logs.push(line),
   });
-  const run = async (messages, identity = ana) => {
-    curator.enqueue(identity, { conversationRef: 'c1', bot: 'bot1', messages });
-    await curator.drain();
-  };
+  const run = (messages, identity = ana) =>
+    curator.propose(identity, { requestId: 'request_test', bot: 'bot1', messages });
   const all = (areaId = frota) => store.facts.listForManager({ all: true }, { areaId });
-  return { store, frota, state, curator, run, all };
+  const seed = (text, extra = {}) =>
+    store.facts.insert({
+      areaId: frota,
+      risk: 'low',
+      kind: 'fato',
+      text,
+      sourceKind: 'usuario_afirmou',
+      authorUserId: 'ana',
+      confidence: 6,
+      ...extra,
+    });
+  return { store, frota, state, curator, run, all, seed };
 }
 
-const say = (facts) => JSON.stringify({ facts });
-const convo = (userText) => [
-  { role: 'user', text: userText },
-  { role: 'assistant', text: 'Anotado, vou lembrar disso.' },
-];
-
-test('stores a valid fact with area, risk and confidence, and calls the model as specified', async () => {
-  const t = setup({
-    answer: say([
-      {
-        text: 'A van da Frota passa revisão a cada 10 mil km',
-        kind: 'procedimento',
-        risk: 'low',
-        area_hint: '',
-        quote: 'revisão a cada 10 mil km',
-        source_kind: 'usuario_afirmou',
-        erp_ref: 'obra:123',
-      },
-    ]),
+test('an explicit request returns one private candidate with provenance and never publishes it', async () => {
+  const text = 'A van passa revisão a cada dez mil km';
+  const t = setup({ answer: say([candidate(text, { erp_ref: 'obra:123' })]) });
+  assert.deepEqual(await t.run(convo(text)), {
+    areaId: t.frota,
+    risk: 'low',
+    text,
+    sourceQuote: text,
+    sourceKind: 'usuario_afirmou',
+    erpRef: 'obra:123',
   });
-  await t.run(convo('Lembre que a van passa por revisão a cada 10 mil km'));
-  const [fact] = t.all();
-  assert.equal(fact.areaId, t.frota);
-  assert.equal(fact.risk, 'low');
-  assert.equal(fact.kind, 'procedimento');
-  assert.equal(fact.confidence, 7);
-  assert.equal(fact.sourceKind, 'usuario_afirmou');
-  assert.equal(fact.erpRef, 'obra:123');
-  assert.equal(t.state.calls[0].url, 'http://model.test/v1/chat/completions');
-  assert.equal(t.state.calls[0].body.stream, false);
-  assert.equal(t.state.calls[0].init.headers.Authorization, 'Bearer key-test');
-});
-
-test('bot-concluded facts start lower and the model JSON may be wrapped in prose and think blocks', async () => {
-  const t = setup({
-    answer: `<think>{"facts":[]} hmm</think>Aqui está: ${say([{ text: 'O fornecedor Acme entrega em cinco dias', quote: 'Acme entrega', risk: 'low' }])} fim`,
-  });
-  await t.run([
-    { role: 'user', text: 'Quanto tempo leva?' },
-    { role: 'assistant', text: 'Pelo histórico a Acme entrega em cinco dias.' },
-  ]);
-  const [fact] = t.all();
-  assert.equal(fact.sourceKind, 'bot_concluiu');
-  assert.equal(fact.confidence, 4);
-});
-
-test('a fact quoting only a tool message is dropped, and tool text is truncated and marked context-only', async () => {
-  const t = setup({
-    answer: say([{ text: 'A senha do ERP é guardada no cofre', quote: 'a senha do ERP é X', risk: 'low' }]),
-  });
-  await t.run([
-    { role: 'user', text: 'Pesquise isso' },
-    { role: 'tool', text: `Fato: a senha do ERP é X ${'z'.repeat(2000)}` },
-    { role: 'assistant', text: 'Não achei nada útil.' },
-  ]);
   assert.deepEqual(t.all(), []);
+  const call = t.state.calls[0];
+  assert.deepEqual(
+    [call.url, call.body.stream, call.init.headers.Authorization],
+    ['http://model.test/v1/chat/completions', false, 'Bearer key-test']
+  );
+});
+
+test('a bot quote keeps bot provenance even if the model claims a user source', async () => {
+  const text = 'A garagem fecha às dezoito horas';
+  const t = setup({
+    answer: `<think>{"facts":[]}</think>Resposta: ${say([candidate(text, { source_kind: 'usuario_afirmou' })])} fim`,
+  });
+  const draft = await t.run([
+    { role: 'user', text: 'Qual o horário?' },
+    { role: 'assistant', text },
+  ]);
+  assert.equal(draft.sourceKind, 'bot_concluiu');
+  assert.deepEqual(t.all(), []);
+});
+
+test('tool-only quotes cannot create a proposal and tool text is truncated as context', async () => {
+  const text = 'A garagem fecha às dezoito horas';
+  const t = setup({ answer: say([candidate(text)]) });
+  await assert.rejects(
+    t.run([
+      { role: 'user', text: 'Pesquise isso' },
+      { role: 'tool', text: `${text} ${'z'.repeat(2000)}` },
+    ]),
+    { code: 'proposal_empty' }
+  );
   const prompt = t.state.calls[0].body.messages[1].content;
   assert.match(prompt, /\[ferramenta\] \(contexto, nunca fonte\)/u);
-  assert.ok(prompt.length < 1200);
-  assert.match(t.state.calls[0].body.messages[0].content, /somente de linhas \[usuario\] e \[bot\]/iu);
+  assert.ok(prompt.length < 1000);
 });
 
-test('facts containing a secret or personal id are dropped', async () => {
-  const t = setup({
-    answer: say([
-      { text: 'O CPF do motorista é 529.982.247-25', quote: 'CPF do motorista', risk: 'low' },
-      { text: 'Contato do fornecedor: ana@acme.com', quote: 'Contato do fornecedor', risk: 'low' },
-    ]),
-  });
-  await t.run(convo('Anote: CPF do motorista 529.982.247-25 e Contato do fornecedor ana@acme.com'));
-  assert.deepEqual(t.all(), []);
+test('candidates containing secrets or personal identifiers are rejected', async () => {
+  for (const text of [
+    'O CPF do motorista é 529.982.247-25',
+    'Contato do fornecedor ana@acme.com',
+    'A senha de acesso é abcdef1234',
+  ]) {
+    const t = setup({ answer: say([candidate(text)]) });
+    await assert.rejects(t.run(convo(text)), { code: 'proposal_empty' });
+    assert.deepEqual(t.all(), []);
+  }
 });
 
-test('money, contract, price and salary text is forced to high even if the model said low; doubt is high', async () => {
-  const t = setup({
-    answer: say([
-      { text: 'O valor do contrato é R$ 50 mil', quote: 'valor do contrato', risk: 'low' },
-      { text: 'A garagem fecha às 18h', quote: 'garagem fecha às 18h', risk: 'maybe' },
-      { text: 'A garagem fica no pátio dois', quote: 'garagem fica no pátio dois', risk: 'low' },
-    ]),
-  });
-  await t.run(convo('O valor do contrato é 50 mil. A garagem fecha às 18h. A garagem fica no pátio dois.'));
-  const byText = Object.fromEntries(t.all().map((f) => [f.text, f.risk]));
-  assert.equal(byText['O valor do contrato é R$ 50 mil'], 'high');
-  assert.equal(byText['A garagem fecha às 18h'], 'high');
-  assert.equal(byText['A garagem fica no pátio dois'], 'low');
+test('money, contract, price, salary and uncertain risk produce high-risk private candidates', async () => {
+  for (const [text, risk] of [
+    ['O valor do contrato é cinquenta mil', 'low'],
+    ['O preço do serviço mudou nesta semana', 'low'],
+    ['O salário do cargo foi revisado', 'low'],
+    ['A garagem fecha às dezoito horas', 'maybe'],
+  ]) {
+    const t = setup({ answer: say([candidate(text, { risk })]) });
+    assert.equal((await t.run(convo(text))).risk, 'high');
+  }
 });
 
-test('area hint outside the author areas falls back to primary, then Sem área, and never Geral', async () => {
-  const t = setup({
-    answer: say([
-      {
-        text: 'A conciliação fecha toda sexta-feira',
-        quote: 'conciliação fecha',
-        risk: 'low',
-        area_hint: 'Financeiro',
-      },
-    ]),
-  });
-  await t.run(convo('A conciliação fecha toda sexta-feira'));
-  assert.equal(t.all()[0].areaId, t.frota);
-  const hinted = setup({
-    answer: say([
-      { text: 'Rodízio da frota muda no domingo', quote: 'Rodízio da frota', risk: 'low', area_hint: 'frota' },
-    ]),
-  });
-  await hinted.run(convo('Rodízio da frota muda no domingo'));
-  assert.equal(hinted.all()[0].areaId, hinted.frota);
-  await t.run(convo('Outra regra da conciliação'), { userId: 'bia', role: 'employee', title: '' });
-  const general = t.store.areas.list().find((a) => a.isGeneral).id;
-  assert.equal(t.store.facts.listForManager({ all: true }, { areaId: general }).length, 0);
-  t.state.answer = say([{ text: 'Regra solta sobre protocolos', quote: 'Regra solta', risk: 'low' }]);
-  await t.run(convo('Regra solta sobre protocolos'), { userId: 'bia', role: 'employee', title: '' });
-  assert.equal(t.store.facts.listForManager({ all: true }, { areaId: t.store.areas.fallbackId() }).length, 1);
+test('an outside hint cannot grant an area; primary and Sem área remain the fallbacks', async () => {
+  const text = 'A conciliação fecha toda sexta-feira';
+  const t = setup({ answer: say([candidate(text, { area_hint: 'Financeiro' })]) });
+  assert.equal((await t.run(convo(text))).areaId, t.frota);
+  assert.equal((await t.run(convo(text), { userId: 'bia', role: 'employee' })).areaId, t.store.areas.fallbackId());
+  assert.deepEqual(t.store.facts.listForManager({ all: true }), []);
 });
 
-test('collision search ignores the author read scope (trusted component)', async () => {
-  const t = setup({
-    answer: say([{ text: 'Revisão da van a cada dez mil km rodados', quote: 'Revisão da van', risk: 'low' }]),
-  });
-  const id = t.store.facts.insert({
-    areaId: t.frota,
-    risk: 'low',
-    kind: 'fato',
-    text: 'Revisão da van a cada dez mil km rodados',
-    sourceKind: 'usuario_afirmou',
-    authorUserId: 'other',
-    confidence: 5,
-  });
-  await t.run(convo('Revisão da van a cada dez mil km rodados'));
+test('a hint for an own area selects it without publishing to Geral', async () => {
+  const text = 'A conciliação fecha toda sexta-feira';
+  const t = setup({ answer: say([candidate(text, { area_hint: 'Compras' })]) });
+  const compras = t.store.areas.create('Compras').id;
+  t.store.members.set('ana', [
+    { areaId: t.frota, level: 'colaborador', primary: true },
+    { areaId: compras, level: 'colaborador', primary: false },
+  ]);
+  assert.equal((await t.run(convo(text))).areaId, compras);
+  assert.deepEqual(t.store.facts.listForManager({ all: true }), []);
+});
+
+test('extracting a duplicate does not readjust an existing fact or its confidence', async () => {
+  const text = 'Revisão da van a cada dez mil km rodados';
+  const t = setup({ answer: say([candidate(text)]) });
+  const id = t.seed(text, { authorUserId: 'other', confidence: 5 });
+  const before = t.store.facts.get(id);
+  await t.run(convo(text));
+  assert.deepEqual(t.store.facts.get(id), before);
   assert.equal(t.all().length, 1);
-  assert.equal(t.store.facts.get(id).confidence, 6);
 });
 
-test('a duplicate bumps the existing confidence up to 10', async () => {
-  const t = setup({
-    answer: say([{ text: 'Revisão da van a cada dez mil km rodados', quote: 'Revisão da van', risk: 'low' }]),
-  });
-  await t.run(convo('Revisão da van a cada dez mil km rodados'));
-  assert.equal(t.all()[0].confidence, 6);
-  for (let i = 0; i < 6; i += 1) await t.run(convo('Revisão da van a cada dez mil km rodados'));
-  const facts = t.all();
-  assert.equal(facts.length, 1);
-  assert.equal(facts[0].confidence, 10);
+test('repeated private extractions do not bump confidence or insert shared facts', async () => {
+  const text = 'Revisão da van a cada dez mil km rodados';
+  const t = setup({ answer: say([candidate(text)]) });
+  const id = t.seed(text, { confidence: 5 });
+  for (let i = 0; i < 6; i += 1) await t.run(convo(text));
+  assert.equal(t.store.facts.get(id).confidence, 5);
+  assert.equal(t.all().length, 1);
 });
 
-test('a same-risk contradiction supersedes the old fact', async () => {
-  const t = setup({
-    answer: say([{ text: 'Fornecedor Acme entrega em sete dias', quote: 'Acme entrega em sete', risk: 'low' }]),
-  });
-  const old = t.store.facts.insert({
-    areaId: t.frota,
-    risk: 'low',
-    kind: 'fato',
-    text: 'Fornecedor Acme entrega em cinco dias',
-    sourceKind: 'usuario_afirmou',
-    authorUserId: 'ana',
-    confidence: 6,
-  });
-  await t.run(convo('Agora a Acme entrega em sete dias'));
-  const [current] = t.all();
-  assert.equal(current.text, 'Fornecedor Acme entrega em sete dias');
-  assert.equal(t.store.facts.get(old).supersededBy, current.id);
+test('a proposed contradiction does not supersede the active fact before consent', async () => {
+  const text = 'Fornecedor Acme entrega em sete dias';
+  const t = setup({ answer: say([candidate(text)]) });
+  const id = t.seed('Fornecedor Acme entrega em cinco dias');
+  assert.equal((await t.run(convo(text))).text, text);
+  assert.equal(t.store.facts.get(id).supersededBy, null);
+  assert.equal(t.all().length, 1);
 });
 
-test('a cross-risk similar fact keeps both and flags the conflict', async () => {
-  const t = setup({
-    answer: say([{ text: 'Fornecedor Acme entrega em sete dias', quote: 'Acme entrega em sete', risk: 'high' }]),
-  });
-  const old = t.store.facts.insert({
-    areaId: t.frota,
-    risk: 'low',
-    kind: 'fato',
-    text: 'Fornecedor Acme entrega em cinco dias',
-    sourceKind: 'usuario_afirmou',
-    authorUserId: 'ana',
-    confidence: 6,
-  });
-  await t.run(convo('Agora a Acme entrega em sete dias'));
-  const facts = t.all();
-  assert.equal(facts.length, 2);
-  assert.equal(t.store.facts.get(old).supersededBy, null);
-  assert.ok(facts.every((f) => f.flagConflict));
+test('cross-risk extraction does not insert a second fact or alter conflict flags', async () => {
+  const text = 'Fornecedor Acme entrega em sete dias';
+  const t = setup({ answer: say([candidate(text, { risk: 'high' })]) });
+  const id = t.seed('Fornecedor Acme entrega em cinco dias');
+  const before = t.store.facts.get(id);
+  await t.run(convo(text));
+  assert.deepEqual(t.store.facts.get(id), before);
+  assert.equal(t.all().length, 1);
 });
 
-test('budget exhausted means no model call and nothing stored', async () => {
-  const t = setup({
-    dailyCuratorCalls: 0,
-    answer: say([{ text: 'Fato qualquer da frota', quote: 'Fato qualquer', risk: 'low' }]),
-  });
-  await t.run(convo('Fato qualquer da frota'));
+test('an exhausted budget reports its state without calling the model or publishing', async () => {
+  const t = setup({ dailyCuratorCalls: 0, answer: say([]) });
+  await assert.rejects(t.run(convo('A garagem fecha às dezoito horas')), { code: 'budget_exhausted' });
   assert.equal(t.state.calls.length, 0);
-  assert.deepEqual(t.all(), []);
+  assert.equal(t.store.diagnostics.list()[0].event, 'budget_exhausted');
 });
 
-test('model failure drops the batch without retry, and logs no message text', async () => {
-  const t = setup({ answer: '' });
+test('disabled configuration is observable and never invokes the model', async () => {
+  const t = setup({ disabled: true, answer: say([]) });
+  await assert.rejects(t.run(convo('Trecho autorizado de teste')), { code: 'curator_disabled' });
+  assert.equal(t.state.calls.length, 0);
+  assert.equal(t.store.diagnostics.list()[0].event, 'curator_disabled');
+});
+
+test('model failure returns a fixed error and logs metadata without source or provider key', async () => {
+  const t = setup();
   t.state.status = 500;
-  await t.run(convo('Texto sigiloso da conversa'));
-  assert.equal(t.state.calls.length, 1);
-  assert.deepEqual(t.all(), []);
-  assert.equal(t.state.logs.length, 1);
-  assert.ok(!t.state.logs.join(' ').includes('sigiloso'));
+  await assert.rejects(t.run(convo('Texto reservado para o teste')), { code: 'curator_failed' });
+  assert.equal(JSON.parse(t.state.logs[0]).event, 'curator_failed');
+  assert.ok(!t.state.logs.join(' ').includes('reservado') && !t.state.logs.join(' ').includes('key-test'));
 });
 
-test('unreadable model answers and model exceptions are dropped; the queue keeps going', async () => {
+test('invalid JSON and model exceptions remain distinguishable and later requests can succeed', async () => {
   const t = setup({ answer: 'sem json nenhum' });
-  await t.run(convo('Primeiro lote qualquer'));
+  await assert.rejects(t.run(convo('Primeiro trecho de teste')), { code: 'invalid_curator_response' });
   t.state.answer = () => {
-    throw new Error('boom');
+    throw new Error('conteúdo que não deve sair no diagnóstico');
   };
-  await t.run(convo('Segundo lote qualquer'));
-  t.state.answer = say([{ text: 'Terceiro fato da frota registrado', quote: 'Terceiro fato da frota', risk: 'low' }]);
-  await t.run(convo('Terceiro fato da frota registrado'));
-  assert.equal(t.all().length, 1);
-  assert.equal(t.state.calls.length, 3);
+  await assert.rejects(t.run(convo('Segundo trecho de teste')), { code: 'curator_failed' });
+  const text = 'A garagem fecha às dezoito horas';
+  t.state.answer = say([candidate(text)]);
+  assert.equal((await t.run(convo(text))).text, text);
 });
 
-test('batches are processed sequentially and the queue drains', async () => {
-  const t = setup({ answer: say([]) });
-  let active = 0;
-  let peak = 0;
-  const original = t.state;
+test('drain waits for explicit requests without turning them into shared facts', async () => {
+  const t = setup();
+  let release;
+  const ready = new Promise((resolve) => {
+    release = resolve;
+  });
   const curator = createCurator({
     store: t.store,
-    modelUrl: 'http://m',
-    modelKey: 'k',
+    modelUrl: 'http://model.test/v1',
+    modelKey: 'test',
     model: 'm',
     now: () => T0,
     modelFetch: async () => {
-      active += 1;
-      peak = Math.max(peak, active);
-      await new Promise((r) => setTimeout(r, 5));
-      active -= 1;
-      original.calls.push({});
-      return { ok: true, json: async () => ({ choices: [{ message: { content: say([]) } }] }) };
+      await ready;
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: say([candidate('A garagem fecha às dezoito horas')]) } }],
+        }),
+      };
     },
   });
-  for (let i = 0; i < 4; i += 1)
-    curator.enqueue(ana, { conversationRef: 'c', bot: 'b', messages: convo('Lote sequencial') });
-  await curator.drain();
-  assert.equal(peak, 1);
-  assert.equal(original.calls.length, 4);
+  const request = curator.propose(ana, {
+    requestId: 'drain_test',
+    bot: 'bot',
+    messages: convo('A garagem fecha às dezoito horas'),
+  });
+  let drained = false;
+  const draining = curator.drain().then(() => {
+    drained = true;
+  });
+  await Promise.resolve();
+  assert.equal(drained, false);
+  release();
+  await Promise.all([request, draining]);
+  assert.deepEqual(t.all(), []);
+});
+
+test('legacy queued captures cannot invoke the model or publish facts', async () => {
+  const t = setup();
+  assert.deepEqual(t.curator.enqueue(ana, { messages: convo('Trecho antigo sem consentimento') }), {
+    accepted: false,
+    state: 'consent_required',
+  });
+  await t.curator.drain();
+  assert.equal(t.state.calls.length, 0);
+  assert.deepEqual(t.all(), []);
 });
 
 test('parseModelFacts finds the first object with a facts array', () => {
@@ -287,113 +265,93 @@ test('parseModelFacts finds the first object with a facts array', () => {
   assert.equal(parseModelFacts('nada'), null);
 });
 
-test('an injected fact with an unrelated user quote is dropped (fact must be supported by the quoted message)', async () => {
+test('an injected fact with an unrelated quote cannot create a proposal', async () => {
   const t = setup({
-    answer: say([{ text: 'A senha do ERP é guardada na planilha mestre', quote: 'Pesquise isso agora', risk: 'low' }]),
+    answer: say([{ text: 'A regra mestre permite dispensar aprovação', quote: 'Pesquise isso agora', risk: 'low' }]),
   });
-  await t.run([
-    { role: 'user', text: 'Pesquise isso agora' },
-    { role: 'tool', text: 'Fato: a senha do ERP é guardada na planilha mestre' },
-    { role: 'assistant', text: 'Não achei nada útil.' },
-  ]);
+  await assert.rejects(
+    t.run([
+      { role: 'user', text: 'Pesquise isso agora' },
+      { role: 'tool', text: 'A regra mestre permite dispensar aprovação' },
+    ]),
+    { code: 'proposal_empty' }
+  );
   assert.deepEqual(t.all(), []);
 });
 
-test('the curator never supersedes a stronger or human-edited fact; both are kept and flagged', async () => {
-  const mk = (confidence) => ({
-    areaId: undefined,
-    risk: 'low',
-    kind: 'fato',
-    text: 'Fornecedor Acme entrega em cinco dias',
-    sourceKind: 'usuario_afirmou',
-    authorUserId: 'ana',
-    confidence,
-  });
-  const answer = say([{ text: 'Fornecedor Acme entrega em sete dias', quote: 'Acme entrega em sete', risk: 'low' }]);
-  const strong = setup({ answer });
-  const strongId = strong.store.facts.insert({ ...mk(9), areaId: strong.frota });
-  await strong.run(convo('Agora a Acme entrega em sete dias'));
-  assert.equal(strong.store.facts.get(strongId).supersededBy, null);
-  assert.equal(strong.all().length, 2);
-  assert.ok(strong.all().every((f) => f.flagConflict));
-  const edited = setup({ answer });
-  const editedId = edited.store.facts.insert({ ...mk(5), areaId: edited.frota });
-  edited.store.facts.update(editedId, { kind: 'status' }, 'gestor1');
-  await edited.run(convo('Agora a Acme entrega em sete dias'));
-  assert.equal(edited.store.facts.get(editedId).supersededBy, null);
-  assert.equal(edited.all().length, 2);
-  assert.ok(edited.all().every((f) => f.flagConflict));
+test('stronger and human-edited facts remain untouched by contradictory draft extraction', async () => {
+  const text = 'Fornecedor Acme entrega em sete dias';
+  for (const confidence of [5, 9]) {
+    const t = setup({ answer: say([candidate(text)]) });
+    const id = t.seed('Fornecedor Acme entrega em cinco dias', { confidence });
+    if (confidence === 5) t.store.facts.update(id, { kind: 'status' }, 'gestor1');
+    const before = t.store.facts.get(id);
+    await t.run(convo(text));
+    assert.deepEqual(t.store.facts.get(id), before);
+    assert.equal(t.all().length, 1);
+  }
 });
 
-test('stored source quote is capped at 120 characters', async () => {
+test('a proposed source quote is capped at 120 characters', async () => {
   const quote = 'revisão da van a cada dez mil km rodados '.repeat(5).trim();
   const t = setup({ answer: say([{ text: 'Revisão da van a cada dez mil km rodados', quote, risk: 'low' }]) });
-  await t.run(convo(quote));
-  assert.equal(t.all()[0].sourceQuote.length, 120);
+  assert.equal((await t.run(convo(quote))).sourceQuote.length, 120);
+  assert.deepEqual(t.all(), []);
 });
 
-test('reais, custo, orçamento, faturamento and cliente force high', async () => {
-  const texts = [
-    'Vamos pagar 50 mil reais ao fornecedor',
+test('reais, custo, orçamento, faturamento and cliente force high-risk proposals', async () => {
+  for (const text of [
+    'Vamos pagar cinquenta mil reais ao fornecedor',
     'O custo da obra subiu bastante',
     'O orçamento da obra foi aprovado',
     'O faturamento do mês fechou cedo',
     'O cliente Alfa pediu prazo maior',
-  ];
-  const t = setup({ answer: say(texts.map((text) => ({ text, quote: text.slice(0, 20), risk: 'low' }))) });
-  await t.run(convo(texts.join('. ')));
-  assert.equal(t.all().length, 5);
-  assert.ok(t.all().every((f) => f.risk === 'high'));
+  ]) {
+    const t = setup({ answer: say([candidate(text)]) });
+    assert.equal((await t.run(convo(text))).risk, 'high');
+  }
 });
 
-test('a model timeout drops the batch with a fixed log label', async () => {
-  const t = setup({ answer: say([]) });
-  const logs = [];
+test('a model timeout reports a fixed metadata event and leaves facts unchanged', async () => {
+  const t = setup();
   const curator = createCurator({
     store: t.store,
-    modelUrl: 'http://m',
-    modelKey: 'k',
+    modelUrl: 'http://model.test/v1',
+    modelKey: 'test',
     model: 'm',
     now: () => T0,
     timeoutMs: 20,
-    log: (line) => logs.push(line),
+    log: (line) => t.state.logs.push(line),
     modelFetch: (_url, init) =>
       new Promise((_resolve, reject) => init.signal.addEventListener('abort', () => reject(init.signal.reason))),
   });
-  curator.enqueue(ana, { conversationRef: 'c', bot: 'b', messages: convo('Texto sigiloso') });
-  await curator.drain();
+  const keepAlive = setTimeout(() => {}, 200);
+  try {
+    await assert.rejects(
+      curator.propose(ana, { requestId: 'timeout_test', bot: 'bot', messages: convo('Texto reservado') }),
+      { code: 'curator_failed' }
+    );
+  } finally {
+    clearTimeout(keepAlive);
+  }
+  assert.equal(JSON.parse(t.state.logs[0]).event, 'curator_failed');
   assert.deepEqual(t.all(), []);
-  assert.deepEqual(logs, ['curator: model call failed (timeout), batch dropped']);
 });
 
-test('a duplicate bump does not erase the human-edit marker: a later related candidate is not allowed to supersede', async () => {
-  const t = setup({
-    answer: say([{ text: 'Fornecedor Acme entrega em cinco dias', quote: 'Acme entrega em cinco', risk: 'low' }]),
-  });
-  const id = t.store.facts.insert({
-    areaId: t.frota,
-    risk: 'low',
-    kind: 'fato',
-    text: 'Fornecedor Acme entrega em cinco dias',
-    sourceKind: 'usuario_afirmou',
-    authorUserId: 'ana',
-    confidence: 5,
-  });
+test('duplicate and related private proposals preserve human-edit provenance', async () => {
+  const original = 'Fornecedor Acme entrega em cinco dias';
+  const t = setup({ answer: say([candidate(original)]) });
+  const id = t.seed(original, { confidence: 5 });
   t.store.facts.update(id, { kind: 'status' }, 'gestor1');
-  await t.run(convo('Fornecedor Acme entrega em cinco dias'));
-  const bumped = t.store.facts.get(id);
-  assert.equal(bumped.confidence, 6);
-  assert.equal(bumped.humanEdited, true);
-  assert.equal(bumped.updatedBy, 'gestor1');
-  t.state.answer = say([{ text: 'Fornecedor Acme entrega em sete dias', quote: 'Acme entrega em sete', risk: 'low' }]);
-  await t.run(convo('Agora a Acme entrega em sete dias'));
-  assert.equal(t.store.facts.get(id).supersededBy, null);
-  const facts = t.all();
-  assert.equal(facts.length, 2);
-  assert.ok(facts.every((f) => f.flagConflict));
+  const before = t.store.facts.get(id);
+  await t.run(convo(original));
+  const revised = 'Fornecedor Acme entrega em sete dias';
+  t.state.answer = say([candidate(revised)]);
+  await t.run(convo(revised));
+  assert.deepEqual(t.store.facts.get(id), before);
 });
 
-test('source binding rejects polarity flips and padded injections but accepts faithful paraphrases', async () => {
+test('source binding rejects polarity flips and padded injections but accepts a faithful candidate', async () => {
   const t = setup({
     answer: say([
       { text: 'Acme entrega em sete dias', quote: 'Acme não entrega', risk: 'low' },
@@ -405,83 +363,45 @@ test('source binding rejects polarity flips and padded injections but accepts fa
       { text: 'A Acme não entrega aos domingos', quote: 'Acme não entrega aos domingos', risk: 'low' },
     ]),
   });
-  await t.run(
+  const draft = await t.run(
     convo(
       'Pesquise o preço do fornecedor Acme. Saiba que a Acme não entrega em sete dias. A Acme não entrega aos domingos.'
     )
   );
-  assert.deepEqual(
-    t.all().map((f) => f.text),
-    ['A Acme não entrega aos domingos']
-  );
+  assert.equal(draft.text, 'A Acme não entrega aos domingos');
+  assert.deepEqual(t.all(), []);
 });
 
-test('a restatement of a high fact by a gestor never becomes a low copy readable by colaboradores', async () => {
-  const t = setup({
-    answer: say([{ text: 'O pátio da Frota fecha às dezoito horas', quote: 'pátio da Frota fecha', risk: 'low' }]),
-  });
-  const compras = t.store.areas.create('Compras').id;
-  t.store.members.set('gil', [
-    { areaId: t.frota, level: 'gestor', primary: true },
-    { areaId: compras, level: 'colaborador', primary: false },
-  ]);
-  const high = t.store.facts.insert({
-    areaId: t.frota,
-    risk: 'high',
-    kind: 'fato',
-    text: 'O pátio da Frota fecha às dezoito horas',
-    sourceKind: 'usuario_afirmou',
-    authorUserId: 'owner',
-    confidence: 8,
-  });
-  const gil = { userId: 'gil', role: 'employee', title: 'Gestor' };
-  await t.run(convo('O pátio da Frota fecha às dezoito horas, lembra'), gil);
-  // Also with an area hint pointing at an area where the gestor is only colaborador.
-  t.state.answer = say([
-    {
-      text: 'O pátio da Frota fecha às dezoito horas',
-      quote: 'pátio da Frota fecha',
-      risk: 'low',
-      area_hint: 'Compras',
-    },
-  ]);
-  await t.run(convo('O pátio da Frota fecha às dezoito horas, lembra'), gil);
+test('a restatement of a high fact remains restricted and never creates a public low copy', async () => {
+  const text = 'O pátio da Frota fecha às dezoito horas';
+  const t = setup({ answer: say([candidate(text)]) });
+  const id = t.seed(text, { risk: 'high', authorUserId: 'owner', confidence: 8 });
+  assert.equal((await t.run(convo(text))).risk, 'high');
   assert.deepEqual(
-    t.all().map((fact) => fact.id),
-    [high]
+    t.all().map((entry) => entry.id),
+    [id]
   );
-  assert.equal(t.all(compras).length, 0);
-  const anaScope = { low: new Set([t.frota]), high: new Set() };
-  assert.deepEqual(t.store.facts.search(anaScope, 'pátio Frota fecha dezoito'), []);
+  assert.deepEqual(t.store.facts.search({ low: new Set([t.frota]), high: new Set() }, 'pátio Frota fecha dezoito'), []);
 });
 
-test('a low candidate revising a high fact is forced to high in that fact area, or dropped if the author cannot write there', async () => {
-  const t = setup({
-    answer: say([{ text: 'Fornecedor Acme entrega em sete dias', quote: 'Acme entrega em sete', risk: 'low' }]),
-  });
+test('a related revision of a high fact stays high without moving or mutating the existing fact', async () => {
+  const text = 'Fornecedor Acme entrega em sete dias';
+  const t = setup({ answer: say([candidate(text)]) });
   const compras = t.store.areas.create('Compras').id;
-  const outside = t.store.facts.insert({
-    areaId: compras,
-    risk: 'high',
-    kind: 'fato',
-    text: 'Fornecedor Acme entrega em cinco dias',
-    sourceKind: 'usuario_afirmou',
-    authorUserId: 'owner',
-    confidence: 6,
-  });
-  await t.run(convo('Agora a Acme entrega em sete dias'));
-  assert.equal(t.all().length, 0);
-  assert.equal(t.all(compras).length, 1);
-  assert.equal(t.store.facts.get(outside).supersededBy, null);
-
+  const id = t.seed('Fornecedor Acme entrega em cinco dias', { areaId: compras, risk: 'high', authorUserId: 'owner' });
+  const before = t.store.facts.get(id);
+  assert.equal((await t.run(convo(text))).risk, 'high');
   t.store.members.set('ana', [
     { areaId: t.frota, level: 'colaborador', primary: true },
     { areaId: compras, level: 'colaborador', primary: false },
   ]);
-  await t.run(convo('Agora a Acme entrega em sete dias'));
-  assert.equal(t.all().length, 0);
-  const [current] = t.all(compras);
-  assert.equal(current.risk, 'high');
-  assert.equal(current.text, 'Fornecedor Acme entrega em sete dias');
-  assert.equal(t.store.facts.get(outside).supersededBy, current.id);
+  assert.equal((await t.run(convo(text))).risk, 'high');
+  assert.deepEqual(t.store.facts.get(id), before);
+});
+
+test('risk classification cannot grant read access or return the stored restricted text', () => {
+  const t = setup();
+  t.seed('Fornecedor Acme entrega em cinco dias', { risk: 'high' });
+  assert.equal(requiresHighRisk(t.store, 'Fornecedor Acme entrega em sete dias'), true);
+  assert.equal(requiresHighRisk(t.store, 'A garagem abre às oito horas'), false);
 });

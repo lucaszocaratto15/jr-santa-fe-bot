@@ -89,12 +89,21 @@ export const EditFactModal: React.FC<EditProps> = ({ fact, areas, busy, onSave, 
 };
 
 /** The supersession chain of a fact, oldest first. */
-export const HistoryModal: React.FC<{ factId: number; onClose: () => void }> = ({ factId, onClose }) => {
+export const HistoryModal: React.FC<{
+  factId: number;
+  ownerId: string | null;
+  contextVersion: number;
+  onClose: () => void;
+}> = ({ factId, ownerId, contextVersion, onClose }) => {
   const { t, i18n } = useTranslation();
-  const history = useSWR(['jr.brain.history', factId], () => ipcBridge.brain.manage.history.invoke({ id: factId }), {
-    shouldRetryOnError: false,
-    revalidateOnFocus: false,
-  });
+  const history = useSWR(
+    ownerId ? ['jr.brain.history', ownerId, contextVersion, factId] : null,
+    () => ipcBridge.brain.manage.history.invoke({ id: factId }),
+    {
+      shouldRetryOnError: false,
+      revalidateOnFocus: false,
+    }
+  );
   return (
     <Modal visible title={t('common.jr.brainManage.facts.historyTitle')} footer={null} onCancel={onClose}>
       {history.error && <Alert type='error' content={t('common.jr.brainManage.errors.generic')} />}

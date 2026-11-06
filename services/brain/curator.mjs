@@ -1,4 +1,4 @@
-import { findSecrets, normalize } from './text.mjs';
+import { diagnosticEvent, findSecrets, normalize } from './text.mjs';
 
 // Purpose: understand the employees' work so the company's bots help better. Never performance
 // evaluation or time control. Raw messages live in memory only while a batch is processed.
@@ -33,9 +33,6 @@ const FACT_TEXT_MIN = 5;
 const FACT_TEXT_MAX = 500;
 const MAX_FACTS_PER_BATCH = 10;
 const QUEUE_MAX = 100;
-const DUPLICATE_SCORE = 0.85;
-const RELATED_SCORE = 0.6;
-const KINDS = new Set(['fato', 'decisao', 'procedimento', 'contato', 'status']);
 const HIGH_RISK =
   /r\$|\bvalor(?:es)?\b|\bcontrat|\bsalari|\bprec[oa]s?\b|\d\s*%|\bcnpj\b|\bdesconto|\bpagament|\bdiretor|\breais\b|\bcustos?\b|\borcament|\bfaturament|\bclientes?\b/u;
 
@@ -89,20 +86,22 @@ function objectEnd(text, start) {
 
 const words = (text) => new Set(normalize(text).match(/[\p{L}\p{N}$%]+/gu) ?? []);
 
-/** Jaccard similarity of the word sets of two texts, 0..1. */
-function similarity(a, b) {
-  const left = words(a);
-  const right = words(b);
-  if (!left.size || !right.size) return 0;
-  let shared = 0;
-  for (const word of left) if (right.has(word)) shared += 1;
-  return shared / (left.size + right.size - shared);
+/** A draft cannot downgrade a known restricted fact merely by restating it. */
+export function requiresHighRisk(store, text, scope) {
+  if (HIGH_RISK.test(normalize(text))) return true;
+  const tokens = words(text);
+  if (!tokens.size) return false;
+  return store.areas
+    .list()
+    .filter((area) => !area.isGeneral)
+    .some((area) =>
+      store.facts.similar(area.id, 'high', text, 10, scope).some((fact) => {
+        const other = words(fact.text);
+        const shared = [...tokens].filter((word) => other.has(word)).length;
+        return shared / (tokens.size + other.size - shared) >= 0.6;
+      })
+    );
 }
-
-const bestMatch = (candidates, text) =>
-  candidates
-    .map((fact) => ({ fact, score: similarity(fact.text, text) }))
-    .reduce((best, current) => (current.score > (best?.score ?? 0) ? current : best), null);
 
 function buildPrompt(bot, messages) {
   const lines = messages.map((message) => {
@@ -113,8 +112,8 @@ function buildPrompt(bot, messages) {
 }
 
 /**
- * Automatic curator: one model call per captured batch, then validation and collision handling.
- * The store enforces the daily call budget. Failures drop the batch silently (one log line, no text).
+ * Explicit proposal curator: one model call per authorized excerpt, then provenance validation.
+ * The store enforces the daily call budget; failures expose metadata-only states.
  */
 export function createCurator({
   store,
@@ -126,8 +125,13 @@ export function createCurator({
   timeoutMs = MODEL_TIMEOUT_MS,
   log = () => {},
 }) {
-  const queue = [];
-  let draining = null;
+  const active = new Set();
+  const emit = (event, details) => {
+    const value = diagnosticEvent(event, details, now);
+    store.diagnostics.add(value);
+    log(JSON.stringify(value));
+  };
+  const fail = (code) => Object.assign(new Error(code), { status: 503, code });
 
   async function callModel(prompt) {
     const response = await modelFetch(`${String(modelUrl).replace(/\/+$/u, '')}/chat/completions`, {
@@ -166,79 +170,8 @@ export function createCurator({
     return (own.find((membership) => membership.primary) ?? own[0])?.areaId ?? store.areas.fallbackId();
   }
 
-  /** Areas the curator may write for this author: owner any non-Geral area, others their non-Geral areas. */
-  function canWrite(userId, areaId) {
-    const area = store.areas.list().find((item) => item.id === areaId);
-    if (!area || area.isGeneral) return false;
-    if (userId === 'owner') return true;
-    return store.members.of(userId).some((membership) => membership.areaId === areaId);
-  }
-
-  /**
-   * A low candidate that restates or revises a high fact must never become a readable low copy.
-   * Returns null to drop it, or the area and risk to store it with.
-   */
-  function guardHigh(identity, areaId, risk, text) {
-    if (risk !== 'low') return { areaId, risk };
-    const candidates = store.areas
-      .list()
-      .filter((area) => !area.isGeneral)
-      .flatMap((area) => store.facts.similar(area.id, 'high', text));
-    const match = bestMatch(candidates, text);
-    if (!match || match.score < RELATED_SCORE) return { areaId, risk };
-    if (match.score >= DUPLICATE_SCORE || !canWrite(identity.userId, match.fact.areaId)) return null;
-    return { areaId: match.fact.areaId, risk: 'high' };
-  }
-
-  function storeFact(identity, conversationRef, bot, wantedAreaId, wantedRisk, candidate) {
-    const target = guardHigh(identity, wantedAreaId, wantedRisk, candidate.text);
-    if (!target) {
-      log('curator: restated high fact dropped');
-      return;
-    }
-    const { areaId, risk } = target;
-    const sameRisk = store.facts.similar(areaId, risk, candidate.text);
-    const match = bestMatch(sameRisk, candidate.text);
-    const fact = {
-      areaId,
-      risk,
-      kind: candidate.kind,
-      text: candidate.text,
-      sourceQuote: candidate.quote,
-      sourceKind: candidate.sourceKind,
-      authorUserId: identity.userId,
-      authorBot: bot,
-      conversationRef,
-      erpRef: candidate.erpRef,
-      confidence: (candidate.sourceKind === 'usuario_afirmou' ? 6 : 4) + (candidate.erpRef ? 1 : 0),
-    };
-    if (match && match.score >= DUPLICATE_SCORE) {
-      store.facts.update(match.fact.id, { confidence: Math.min(10, match.fact.confidence + 1) }, 'curator');
-      store.log.add({ userId: identity.userId, action: 'curator_bump', factId: match.fact.id });
-      return;
-    }
-    // A stronger or human-edited fact is never replaced by the curator; keep both and flag.
-    const protectedFact = match && (match.fact.humanEdited || match.fact.confidence > fact.confidence);
-    if (match && match.score >= RELATED_SCORE && !protectedFact) {
-      const id = store.facts.supersede(match.fact.id, fact);
-      store.log.add({ userId: identity.userId, action: 'curator_supersede', factId: id });
-      return;
-    }
-    const other = bestMatch(
-      store.facts.similar(areaId, risk === 'high' ? 'low' : 'high', candidate.text),
-      candidate.text
-    );
-    const id = store.facts.insert(fact);
-    store.log.add({ userId: identity.userId, action: 'curator_insert', factId: id });
-    const rival =
-      protectedFact && match.score >= RELATED_SCORE ? match : other && other.score >= RELATED_SCORE ? other : null;
-    if (rival) {
-      store.facts.flagConflict(id);
-      store.facts.flagConflict(rival.fact.id);
-    }
-  }
-
   function accept(identity, payload, raw) {
+    const candidates = [];
     const user = payload.messages.filter((m) => m.role === 'user').map((m) => normalize(m.text));
     const assistant = payload.messages.filter((m) => m.role === 'assistant').map((m) => normalize(m.text));
     // Tool text is never a match target. The fact must be supported by the one message holding the quote.
@@ -258,6 +191,7 @@ export function createCurator({
         const text = typeof item?.text === 'string' ? item.text.trim() : '';
         const quote = typeof item?.quote === 'string' ? item.quote.trim() : '';
         if (text.length < FACT_TEXT_MIN || text.length > FACT_TEXT_MAX) continue;
+        if (!payload.messages.some((message) => message.role !== 'tool' && message.text.includes(quote))) continue;
         const wanted = normalize(quote);
         if (wanted.length < QUOTE_MIN) continue;
         // Provenance comes from where the quote really is, not from what the model claims.
@@ -266,73 +200,75 @@ export function createCurator({
         if (source === undefined || !supports(source, text, quote)) continue;
         const sourceKind = userHit === undefined ? 'bot_concluiu' : 'usuario_afirmou';
         if (findSecrets(text).length) continue;
-        const risk = item.risk === 'low' && !HIGH_RISK.test(normalize(text)) ? 'low' : 'high';
-        const kind = KINDS.has(normalize(item.kind)) ? normalize(item.kind) : 'fato';
+        const risk = item.risk === 'low' && !requiresHighRisk(store, text, payload.scope) ? 'low' : 'high';
         const erpRef =
           typeof item.erp_ref === 'string' && /^[\w.:-]{1,64}$/u.test(item.erp_ref.trim()) ? item.erp_ref.trim() : null;
-        storeFact(identity, payload.conversationRef, payload.bot, pickArea(identity.userId, item.area_hint), risk, {
+        candidates.push({
+          areaId: pickArea(identity.userId, item.area_hint),
+          risk,
           text,
-          kind,
-          quote: findSecrets(quote).length ? null : quote.slice(0, QUOTE_STORE_MAX),
+          sourceQuote: findSecrets(quote).length ? null : quote.slice(0, QUOTE_STORE_MAX),
           sourceKind,
           erpRef,
         });
       } catch {
-        log('curator: fact dropped');
+        // Invalid candidates never reach a draft.
       }
     }
+    return candidates.filter((candidate) => candidate.sourceQuote !== null);
   }
 
-  async function process({ identity, payload }) {
-    if (!payload.messages.some((m) => m.role === 'user')) return;
+  async function propose(identity, payload) {
+    const details = { correlationId: payload.requestId };
+    if (!modelUrl || !modelKey || !model) {
+      emit('curator_disabled', details);
+      throw fail('curator_disabled');
+    }
+    if (active.size >= QUEUE_MAX) {
+      emit('batch_full', details);
+      throw fail('batch_full');
+    }
     if (!store.budget.take(new Date(now()).toISOString().slice(0, 10))) {
-      log('curator: daily budget used up, batch dropped');
-      return;
+      emit('budget_exhausted', details);
+      throw fail('budget_exhausted');
     }
-    let content;
-    try {
-      content = await callModel(buildPrompt(payload.bot, payload.messages));
-    } catch (error) {
-      log(`curator: model call failed (${error?.name === 'TimeoutError' ? 'timeout' : 'error'}), batch dropped`);
-      return;
-    }
-    const facts = parseModelFacts(content);
-    if (!facts) {
-      log('curator: unreadable model answer, batch dropped');
-      return;
-    }
-    accept(identity, payload, facts);
-  }
-
-  async function run() {
-    await Promise.resolve(); // let `draining` be assigned before the loop can finish
-    try {
-      while (queue.length) {
-        try {
-          await process(queue.shift());
-        } catch {
-          log('curator: batch failed, dropped');
-        }
+    const started = now();
+    const run = (async () => {
+      let content;
+      try {
+        content = await callModel(buildPrompt(payload.bot, payload.messages));
+      } catch {
+        emit('curator_failed', { ...details, durationMs: now() - started });
+        throw fail('curator_failed');
       }
+      const facts = parseModelFacts(content);
+      if (!facts) {
+        emit('invalid_curator_response', { ...details, durationMs: now() - started });
+        throw fail('invalid_curator_response');
+      }
+      const candidates = accept(identity, payload, facts);
+      if (!candidates.length) {
+        emit('proposal_failed', { ...details, itemCount: 0, durationMs: now() - started });
+        throw fail('proposal_empty');
+      }
+      return candidates[0];
+    })();
+    active.add(run);
+    try {
+      return await run;
     } finally {
-      draining = null;
+      active.delete(run);
     }
   }
-
-  const drain = () => {
-    draining ??= run();
-    return draining;
-  };
 
   return {
-    enqueue(identity, payload) {
-      if (queue.length >= QUEUE_MAX) {
-        log('curator: queue full, batch dropped');
-        return;
-      }
-      queue.push({ identity, payload });
-      void drain().catch(() => {});
+    propose,
+    // Legacy capture never invokes the model or creates publishable facts.
+    enqueue() {
+      return { accepted: false, state: 'consent_required' };
     },
-    drain,
+    drain: async () => {
+      await Promise.allSettled(active);
+    },
   };
 }

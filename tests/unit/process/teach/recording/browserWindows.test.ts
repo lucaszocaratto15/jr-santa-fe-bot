@@ -116,6 +116,68 @@ describe('installBrowserWindowHandlers', () => {
     expect(d.onDownload).not.toHaveBeenCalled();
   });
 
+  it('captures learning at download start and reports completion without file metadata', async () => {
+    const first = vi.fn();
+    const later = vi.fn();
+    const beginLearningDownload = vi.fn(() => first);
+    const d = { ...deps(), beginLearningDownload };
+    installBrowserWindowHandlers(makeContents() as never, d);
+    const ses = sessions.get(BROWSER_SESSION_PARTITION) as EventEmitter;
+    const item = makeItem('private-report.pdf', 'https://portal.gov.br/report?token=private');
+    ses.emit('will-download', {}, item);
+    expect(beginLearningDownload).toHaveBeenCalledExactlyOnceWith('https://portal.gov.br');
+    beginLearningDownload.mockReturnValue(later);
+    item.emit('done', {}, 'completed');
+    await vi.waitFor(() => expect(first).toHaveBeenCalledExactlyOnceWith());
+    expect(later).not.toHaveBeenCalled();
+  });
+
+  it.each(['cancelled', 'interrupted'])('does not learn from %s downloads', async (state) => {
+    const complete = vi.fn();
+    const d = { ...deps(), beginLearningDownload: () => complete };
+    installBrowserWindowHandlers(makeContents() as never, d);
+    const ses = sessions.get(BROWSER_SESSION_PARTITION) as EventEmitter;
+    const item = makeItem('rel.pdf');
+    ses.emit('will-download', {}, item);
+    item.emit('done', {}, state);
+    await Promise.resolve();
+    expect(complete).not.toHaveBeenCalled();
+    expect(d.onDownload).not.toHaveBeenCalled();
+  });
+
+  it('does not begin learning at completion when it was disabled at download start', async () => {
+    const complete = vi.fn();
+    const beginLearningDownload = vi.fn<() => (() => void) | null>(() => null);
+    installBrowserWindowHandlers(makeContents() as never, { ...deps(), beginLearningDownload });
+    const ses = sessions.get(BROWSER_SESSION_PARTITION) as EventEmitter;
+    const item = makeItem('rel.pdf');
+    ses.emit('will-download', {}, item);
+    beginLearningDownload.mockReturnValue(complete);
+    item.emit('done', {}, 'completed');
+    await Promise.resolve();
+    expect(beginLearningDownload).toHaveBeenCalledTimes(1);
+    expect(complete).not.toHaveBeenCalled();
+  });
+
+  it.each(['begin', 'complete'])('learning failure at %s never interrupts download reporting', async (failure) => {
+    const d = {
+      ...deps(),
+      beginLearningDownload: () => {
+        if (failure === 'begin') throw new Error('learning unavailable');
+        return async () => {
+          throw new Error('learning unavailable');
+        };
+      },
+    };
+    installBrowserWindowHandlers(makeContents() as never, d);
+    const ses = sessions.get(BROWSER_SESSION_PARTITION) as EventEmitter;
+    const item = makeItem('rel.pdf');
+    ses.emit('will-download', {}, item);
+    expect(() => item.emit('done', {}, 'completed')).not.toThrow();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(d.onDownload).toHaveBeenCalledTimes(1);
+  });
+
   it('registers the session listener once and the window handler idempotently', () => {
     const d = deps();
     const a = makeContents(1);

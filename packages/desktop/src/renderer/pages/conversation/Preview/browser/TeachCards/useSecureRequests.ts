@@ -23,12 +23,12 @@ const drop = (id: string): void => {
   notify();
 };
 
-ipcBridge.teach.secureRequest.on((request) => {
+ipcBridge.teach?.secureRequest?.on((request) => {
   if (queue.some((item) => item.id === request.id)) return;
   queue = [...queue, request];
   notify();
 });
-ipcBridge.teach.secureExpired.on(({ id }) => drop(id));
+ipcBridge.teach?.secureExpired?.on(({ id }) => drop(id));
 
 const subscribe = (listener: () => void): (() => void) => {
   listeners.add(listener);
