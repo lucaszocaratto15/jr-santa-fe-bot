@@ -2,13 +2,19 @@
 
 Esta entrega reúne o vínculo individual com o Strata Certa, o conhecimento compartilhado com permissões do ERP, o aprendizado privado por eventos reais e a continuidade das sessões do navegador.
 
-O servidor JR Control, o Brain e o catálogo MCP foram ativados em produção, com autorização, em 6 de novembro de 2026. O aplicativo desktop precisa de uma nova distribuição para exibir **Conexões → Strata Certa**. Atualizar o servidor ou o GitHub não atualiza o aplicativo instalado.
+O servidor JR Control, o Brain e o catálogo MCP foram ativados em produção, com autorização, em 6 de novembro de 2026. O pacote macOS arm64 foi instalado e validado localmente, incluindo **Conectar aplicativos → Strata Certa** com a conta já vinculada. As demais instalações ainda dependem da distribuição de uma atualização. Atualizar o servidor ou o GitHub não atualiza o aplicativo instalado.
 
 ## Onde revisar
 
 - JR: código desta branch, [controle e OAuth](jr-control.md) e [consentimento e aprendizado](jr-brain-consent.md).
 - ERP: [PR #148](https://github.com/lucaszocaratto15/erp-stratacerta/pull/148), `server/mcp/`, política de acesso e leitores canônicos.
 - Inventários, patches históricos e evidências de produção ficam em `docs/integrations/jr/` no repositório privado do ERP. Credenciais e relatórios de negócio ficam fora dos dois repositórios.
+
+## Atualização sem perda de histórico
+
+A atualização preserva os bots históricos e suas conversas. Antes de carregar a lista, o processo nativo vincula os registros antigos sem proprietário à conta autenticada já vinculada ao aparelho. IDs, instruções, aprendizados, aparência e referências de conversa permanecem iguais; registros de outra conta não são adotados. Todos os bots antigos desse funcionário continuam acessíveis. Novos perfis permitem um assistente, e quem já tem um não recebe a opção de criar outro. Falha na migração exibe erro, sem apresentar o perfil como vazio.
+
+A validação do pacote macOS comparou o banco com o backup, reabriu uma conversa original e conferiu o vínculo Strata na interface. Bots, conversas e mensagens permaneceram iguais; a migração acrescentou somente o proprietário aos registros de workspace. O backup completo anterior à instalação foi mantido.
 
 ## Brain com autorização do Strata
 
@@ -62,7 +68,7 @@ Sair do JR ou trocar de funcionário encerra as sessões integradas e limpa cook
 
 ## Catálogo de consultas
 
-O catálogo registra 370 leituras de 61 arquivos do backend, com os 27 módulos ERP classificados. O JR usa `erp.consultas.buscar`, `erp.consultas.descrever` e `erp.consultas.executar`, com o escopo `mcp:erp:ler`. Identidade, descoberta e consultas do catálogo dispensam selecionar uma empresa; o servidor resolve o grupo da conta vinculada.
+O catálogo registra 370 leituras de 61 arquivos do backend, com os 27 módulos ERP classificados. O JR usa `erp.consultas.buscar`, `erp.consultas.descrever` e `erp.consultas.executar`, com o escopo `mcp:erp:ler`. Identidade, descoberta e consultas do catálogo dispensam selecionar uma empresa; o servidor resolve o grupo da conta vinculada. A tela de conexão informa o acesso ao grupo e não oferece seleção de empresa. Uma seleção antiga salva não restringe as consultas do catálogo.
 
 As consultas reutilizam os leitores e cálculos das telas em transação PostgreSQL somente leitura. Descoberta, execução e revalidação da resposta aplicam as permissões atuais do ERP. O modelo não escolhe a organização e não recebe SQL livre. Mutações MCP permanecem desativadas na configuração de produção validada.
 
@@ -70,7 +76,7 @@ A validação real concluiu o OAuth de uma conta existente e consultou identidad
 
 ## Verificação e limites
 
-Os testes usam SQLite e PostgreSQL temporários, MCP SDK e provedores isolados. Na atualização do código, a suíte JR passou em 6.254 testes Vitest, com cinco ignorados, e 333 testes Node. TypeScript e lint também passaram. As verificações completas antes do push são executadas por `just push`.
+Os testes usam SQLite e PostgreSQL temporários, MCP SDK e provedores isolados. Na atualização do código, a suíte JR passou em 6.261 testes Vitest, com cinco ignorados, e 334 testes Node. TypeScript e lint também passaram. As verificações completas antes do push são executadas por `just push`.
 
 Permanecem pendentes:
 

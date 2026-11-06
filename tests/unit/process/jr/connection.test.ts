@@ -10,7 +10,10 @@ import {
   configureJrProvider,
   providersFromList,
   readLoopbackProviders,
+  createEmployeeAssistantMigration,
 } from '@/process/services/jr/bootstrap';
+import type { ClientBusinessSettingMap } from '@/common/config/clientSettings';
+import type { Assistant } from '@/common/types/agent/assistantTypes';
 import { getJrConnectionStatus } from '@/process/services/jr/usage';
 
 const env = {
@@ -19,7 +22,105 @@ const env = {
   JR_RELAY_TOKEN: 'a'.repeat(64),
   JR_MINIMAX_MODEL: 'MiniMax-M3.1-Flash',
 };
+const employeeIdentity = { ownerAccountId: 'account-a', assistantId: 'jr-employee-account-a', generation: 1 };
+const legacyAssistant = { id: 'custom-legacy', source: 'user', agent: { type: 'aionrs' } } as Assistant;
 beforeEach(() => vi.restoreAllMocks());
+
+it('migrates legacy ownership without replacing bot configuration or conversation bindings, once across restarts', async () => {
+  const original = {
+    workspace: '/local/jr-workspaces/original',
+    conversationId: 'original-chat',
+    instructions: 'Keep these instructions',
+    learning: 'Keep these lessons',
+    section: 'My work',
+    skillIds: ['saved-skill'],
+    useChrome: true,
+  };
+  let workspaces: ClientBusinessSettingMap['jr.botWorkspaces'] = { 'custom-legacy': original };
+  const deps = {
+    identity: () => employeeIdentity,
+    list: async () => [legacyAssistant],
+    read: async () => workspaces,
+    write: vi.fn(async (next: NonNullable<ClientBusinessSettingMap['jr.botWorkspaces']>) => {
+      workspaces = next;
+    }),
+  };
+  const ready = createEmployeeAssistantMigration(deps);
+  await Promise.all([ready(), ready(), ready()]);
+  await createEmployeeAssistantMigration(deps)();
+  expect(workspaces).toEqual({ 'custom-legacy': { ...original, ownerAccountId: 'account-a' } });
+  expect(original).not.toHaveProperty('ownerAccountId');
+  expect(deps.write).toHaveBeenCalledTimes(1);
+});
+
+it('never claims foreign, generated, non-AionRS or missing assistants during an upgrade', async () => {
+  const records = {
+    foreign: { workspace: '/foreign', ownerAccountId: 'account-b' },
+    'jr-employee-account-b': { workspace: '/foreign-canonical' },
+    builtin: { workspace: '/builtin' },
+    claude: { workspace: '/claude' },
+    missing: { workspace: '/missing' },
+  };
+  const write = vi.fn();
+  const ready = createEmployeeAssistantMigration({
+    identity: () => employeeIdentity,
+    list: async () => [
+      { ...legacyAssistant, id: 'foreign' },
+      { ...legacyAssistant, id: 'jr-employee-account-b' },
+      { ...legacyAssistant, id: 'builtin', source: 'generated' },
+      { ...legacyAssistant, id: 'claude', agent: { ...legacyAssistant.agent, type: 'claude' } } as Assistant,
+    ],
+    read: async () => records,
+    write,
+  });
+  await ready();
+  expect(write).not.toHaveBeenCalled();
+});
+
+it('requires an authenticated device owner before reading legacy private data', async () => {
+  const read = vi.fn();
+  const list = vi.fn();
+  const ready = createEmployeeAssistantMigration({
+    identity: () => {
+      throw new Error('JR_ACCESS_REQUIRED');
+    },
+    list,
+    read,
+    write: vi.fn(),
+  });
+  await expect(ready()).rejects.toThrow('JR_ACCESS_REQUIRED');
+  expect(list).not.toHaveBeenCalled();
+  expect(read).not.toHaveBeenCalled();
+});
+
+it('does not migrate a previous employee profile if the session changes during a read', async () => {
+  let identity = employeeIdentity;
+  const write = vi.fn();
+  const ready = createEmployeeAssistantMigration({
+    identity: () => identity,
+    list: async () => [legacyAssistant],
+    read: async () => {
+      identity = { ...employeeIdentity, generation: 2 };
+      return { 'custom-legacy': { workspace: '/legacy' } };
+    },
+    write,
+  });
+  await expect(ready()).rejects.toThrow('JR_ACCESS_REQUIRED');
+  expect(write).not.toHaveBeenCalled();
+});
+
+it('propagates migration failures and retries instead of presenting an empty first-run profile', async () => {
+  const write = vi.fn().mockRejectedValueOnce(new Error('storage unavailable')).mockResolvedValue(undefined);
+  const ready = createEmployeeAssistantMigration({
+    identity: () => employeeIdentity,
+    list: async () => [legacyAssistant],
+    read: async () => ({ 'custom-legacy': { workspace: '/legacy' } }),
+    write,
+  });
+  await expect(ready()).rejects.toThrow('storage unavailable');
+  await expect(ready()).resolves.toEqual({ ownerAccountId: 'account-a', assistantId: 'jr-employee-account-a' });
+  expect(write).toHaveBeenCalledTimes(2);
+});
 
 it('accepts only the temporary loopback relay and never accepts incomplete configuration', () => {
   expect(getJrRelayConfig({})).toBeNull();

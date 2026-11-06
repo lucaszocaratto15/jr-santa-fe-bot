@@ -26,7 +26,7 @@ export type ClientBusinessSettingMap = {
         string,
         {
           workspace: string;
-          /** Proven, issuer-qualified JR account. Unowned legacy records are never auto-assigned. */
+          /** Proven, issuer-qualified JR account. Legacy ownership is migrated by the native device-bound session. */
           ownerAccountId?: string;
           appearance?: JrAppearance;
           conversationId?: string;

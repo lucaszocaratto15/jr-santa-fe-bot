@@ -5,22 +5,23 @@ import { fixture } from './fixture.mjs';
 const call = (f, input = { name: 'obras.listar', arguments: {} }, token = f.owner.token) =>
   f.app.request('/strata/mcp/call', { method: 'POST', token, body: input });
 
-test('group catalog uses the linked account without selecting or injecting a company', async (t) => {
-  const f = await fixture(t);
-  await f.link(f.owner, { select: false });
-  const tools = await f.app.request('/strata/mcp/tools', { token: f.owner.token });
-  assert.equal(tools.status, 200);
-  assert.ok((await tools.json()).tools.some((tool) => tool.name === 'erp.consultas.executar'));
-  assert.equal((await call(f, { name: 'erp.quem_sou', arguments: {} })).status, 200);
-  const response = await call(f, {
-    name: 'erp.consultas.executar',
-    arguments: { id: 'frota.consumo-combustivel', parameters: { de: '2026-01', ate: '2026-01' } },
+for (const select of [false, true])
+  test(`group catalog spans all companies with stored selection ${select}`, async (t) => {
+    const f = await fixture(t);
+    await f.link(f.owner, { select });
+    const tools = await f.app.request('/strata/mcp/tools', { token: f.owner.token });
+    assert.equal(tools.status, 200);
+    assert.ok((await tools.json()).tools.some((tool) => tool.name === 'erp.consultas.executar'));
+    assert.equal((await call(f, { name: 'erp.quem_sou', arguments: {} })).status, 200);
+    const response = await call(f, {
+      name: 'erp.consultas.executar',
+      arguments: { id: 'frota.consumo-combustivel', parameters: { de: '2026-01', ate: '2026-01' } },
+    });
+    assert.equal(response.status, 200);
+    const result = JSON.parse((await response.json()).content[0].text);
+    assert.deepEqual(result.organizations, ['org-a', 'org-b']);
+    assert.equal(Object.hasOwn(result.parameters, 'organization_id'), false);
   });
-  assert.equal(response.status, 200);
-  const result = JSON.parse((await response.json()).content[0].text);
-  assert.deepEqual(result.organizations, ['org-a', 'org-b']);
-  assert.equal(Object.hasOwn(result.parameters, 'organization_id'), false);
-});
 
 test('group catalog refuses a caller-supplied organization override', async (t) => {
   const f = await fixture(t);

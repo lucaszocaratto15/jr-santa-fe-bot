@@ -75,11 +75,6 @@ export function createStrataClient(call: Call) {
       const value = await call('/strata/disconnect', json({}));
       if (!record(value) || value.disconnected !== true) return invalid();
     },
-    async organization(organizationId: string): Promise<void> {
-      if (!text(organizationId, 128)) throw new Error('JR_STRATA_INVALID_REQUEST');
-      const result = await call('/strata/organization', json({ organizationId }));
-      if (!record(result) || result.organizationId !== organizationId) return invalid();
-    },
     async tools(): Promise<JrStrataTool[]> {
       const value = await call('/strata/mcp/tools');
       if (!record(value) || !Array.isArray(value.tools) || value.tools.length > 200) return invalid();

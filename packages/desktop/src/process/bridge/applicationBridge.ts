@@ -7,6 +7,8 @@
 import type { BrowserWindow } from 'electron';
 import { app, session } from 'electron';
 import { ipcBridge } from '@/common';
+import { httpRequest } from '@/common/adapter/httpBridge';
+import type { ClientBusinessSettingMap } from '@/common/config/clientSettings';
 import { BROWSER_SESSION_PARTITION } from '@/common/config/constants';
 import { ProcessConfig } from '@process/utils/initStorage';
 import { getZoomFactor, setZoomFactor } from '@process/utils/zoom';
@@ -22,6 +24,7 @@ import {
   createJrWorkspace,
   readLoopbackProviders,
   createEmployeeAssistantRegistry,
+  createEmployeeAssistantMigration,
 } from '@process/services/jr/bootstrap';
 import { getJrAccessController } from '@process/services/jr/auth';
 import { appendJrOpenLog } from '@process/services/jr/openLog';
@@ -127,19 +130,30 @@ export function initApplicationBridge(): void {
     return configureJrWorkspaceContext(app.getPath('userData'), workspace);
   });
   ipcBridge.jr.accessStatus.provider(() => getJrAccessController().accessStatus());
-  ipcBridge.jr.assistant.identity.provider(() => {
-    const { ownerAccountId, assistantId } = getJrAccessController().employeeAssistantIdentity();
-    return { ownerAccountId, assistantId };
+  const employeeAssistantReady = createEmployeeAssistantMigration({
+    identity: () => getJrAccessController().employeeAssistantIdentity(),
+    list: () => ipcBridge.assistants.list.invoke(),
+    read: async () =>
+      (
+        await httpRequest<Pick<ClientBusinessSettingMap, 'jr.botWorkspaces'>>(
+          'GET',
+          '/api/settings/client?keys=jr.botWorkspaces'
+        )
+      )?.['jr.botWorkspaces'],
+    write: (workspaces) => httpRequest<void>('PUT', '/api/settings/client', { 'jr.botWorkspaces': workspaces }),
   });
-  ipcBridge.jr.assistant.create.provider(
-    createEmployeeAssistantRegistry({
-      identity: () => getJrAccessController().employeeAssistantIdentity(),
-      list: () => ipcBridge.assistants.list.invoke(),
-      create: (input) => ipcBridge.assistants.create.invoke(input),
-      skills: async () =>
-        (await ipcBridge.fs.listAvailableSkills.invoke()).map((skill) => skill.name.trim()).filter(Boolean),
-    })
-  );
+  ipcBridge.jr.assistant.identity.provider(employeeAssistantReady);
+  const createEmployeeAssistant = createEmployeeAssistantRegistry({
+    identity: () => getJrAccessController().employeeAssistantIdentity(),
+    list: () => ipcBridge.assistants.list.invoke(),
+    create: (input) => ipcBridge.assistants.create.invoke(input),
+    skills: async () =>
+      (await ipcBridge.fs.listAvailableSkills.invoke()).map((skill) => skill.name.trim()).filter(Boolean),
+  });
+  ipcBridge.jr.assistant.create.provider(async (input) => {
+    await employeeAssistantReady();
+    return createEmployeeAssistant(input);
+  });
   initStrataBridge();
   ipcBridge.jr.login.provider((input) => getJrAccessController().login(input));
   ipcBridge.jr.logout.provider(() => getJrAccessController().logout());

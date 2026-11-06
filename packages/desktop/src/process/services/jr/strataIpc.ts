@@ -41,11 +41,6 @@ export function initStrataBridge(): void {
     ipcBridge.jr.strata.changed.emit({ reason: 'connection' });
     return { expiresAt: result.expiresAt };
   });
-  ipcBridge.jr.strata.organization.provider(async ({ organizationId }) => {
-    await getStrataClient().organization(organizationId);
-    knownStatus = null;
-    ipcBridge.jr.strata.changed.emit({ reason: 'organization' });
-  });
   ipcBridge.jr.strata.disconnect.provider(async () => {
     await getStrataClient().disconnect();
     knownStatus = null;

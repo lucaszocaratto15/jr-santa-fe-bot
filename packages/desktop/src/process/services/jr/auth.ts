@@ -261,7 +261,13 @@ export class JrAccessController {
   }
   /** Native-only identity for the one employee assistant; callers cannot choose its owner or id. */
   employeeAssistantIdentity(): { ownerAccountId: string; assistantId: string; generation: number } {
-    if (this.current.status !== 'authenticated' || !this.current.user || !this.saved?.token)
+    if (
+      this.current.status !== 'authenticated' ||
+      !this.current.user ||
+      !this.saved?.token ||
+      this.saved.ownerId !== this.current.user.id ||
+      this.saved.issuer !== this.options.url
+    )
       return fail('JR_ACCESS_REQUIRED');
     const ownerAccountId = createHash('sha256').update(`${this.saved.issuer}\0${this.current.user.id}`).digest('hex');
     return { ownerAccountId, assistantId: `jr-employee-${ownerAccountId}`, generation: this.generation };

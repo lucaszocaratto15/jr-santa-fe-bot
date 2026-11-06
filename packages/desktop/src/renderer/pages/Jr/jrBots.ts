@@ -167,8 +167,8 @@ function jrBotFromRecord(
 }
 
 export async function listJrBots(): Promise<JrBot[]> {
-  const [identity, assistants, stored, installed] = await Promise.all([
-    ipcBridge.jr.assistant.identity.invoke(),
+  const identity = await ipcBridge.jr.assistant.identity.invoke();
+  const [assistants, stored, installed] = await Promise.all([
     ipcBridge.assistants.list.invoke(),
     getClientBusinessSetting('jr.botWorkspaces'),
     installedSkillIdsOrNull(),
@@ -191,16 +191,14 @@ export async function listJrBots(): Promise<JrBot[]> {
       )
     )
     .filter((bot) => isPresentableBot(bot));
-  // Explicitly owned legacy assistants stay on disk; the canonical assistant is the only active one.
-  const active =
-    own.find((bot) => bot.id === identity.assistantId) ?? own.toSorted((a, b) => a.id.localeCompare(b.id))[0];
+  // Existing bots retain their history after an upgrade; creation still allows only one new assistant.
   await assertEmployee(identity.ownerAccountId);
-  return active ? [active] : [];
+  return own;
 }
 
 export async function getJrBot(id: string): Promise<JrBot> {
-  const [identity, detail, stored, installed] = await Promise.all([
-    ipcBridge.jr.assistant.identity.invoke(),
+  const identity = await ipcBridge.jr.assistant.identity.invoke();
+  const [detail, stored, installed] = await Promise.all([
     ipcBridge.assistants.get.invoke({ id, locale: 'pt-BR' }),
     getClientBusinessSetting('jr.botWorkspaces'),
     installedSkillIdsOrNull(),

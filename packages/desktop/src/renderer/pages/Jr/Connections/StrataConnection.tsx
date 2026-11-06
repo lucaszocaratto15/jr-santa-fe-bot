@@ -1,5 +1,5 @@
 import { ipcBridge } from '@/common';
-import { Alert, Button, Message, Modal, Select, Spin, Tag } from '@arco-design/web-react';
+import { Alert, Button, Message, Modal, Spin, Tag } from '@arco-design/web-react';
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import useSWR from 'swr';
@@ -83,23 +83,6 @@ export default function StrataConnection({ ownerId }: { ownerId: string | null }
           {status.data.linked && status.data.erpUser ? (
             <>
               <Tag>{t('common.jr.strata.linkedAs', { name: status.data.erpUser.name })}</Tag>
-              <div className='mt-12px mb-12px'>
-                <Select
-                  aria-label={t('common.jr.strata.organization')}
-                  placeholder={t('common.jr.strata.chooseOrganization')}
-                  value={status.data.organizationId ?? undefined}
-                  disabled={busy}
-                  options={status.data.organizations.map((organization) => ({
-                    label: organization.name,
-                    value: organization.id,
-                  }))}
-                  onChange={(organizationId: string) =>
-                    void run(async () => {
-                      await ipcBridge.jr.strata.organization.invoke({ organizationId });
-                    })
-                  }
-                />
-              </div>
               <p>{t('common.jr.strata.permissions')}</p>
               <p>{t('common.jr.strata.consent')}</p>
               <Button disabled={busy} onClick={disconnect}>

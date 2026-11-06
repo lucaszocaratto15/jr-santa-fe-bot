@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackendHttpError } from '@/common/adapter/httpBridge';
 import type { Assistant } from '@/common/types/agent/assistantTypes';
 import type { IProvider } from '@/common/config/storage';
+import type { ClientBusinessSettingMap } from '@/common/config/clientSettings';
+import { createEmployeeAssistantMigration } from '@/process/services/jr/bootstrap';
 
 const mocks = vi.hoisted(() => ({
   list: vi.fn(),
@@ -774,6 +776,55 @@ describe('instructionWithLearning general lessons', () => {
 });
 
 describe('one employee assistant', () => {
+  it('waits for native migration, restores every legacy bot and reopens its original conversation', async () => {
+    const original = {
+      workspace: input.workspace,
+      conversationId: 'original-chat',
+      instructions: input.instructions,
+      learning: 'Original lessons',
+      skillIds: [],
+      useChrome: true,
+    };
+    let records: ClientBusinessSettingMap['jr.botWorkspaces'] = {
+      'legacy-one': original,
+      'legacy-two': { ...original, workspace: '/tmp/second', conversationId: 'second-chat' },
+      'legacy-three': { ...original, workspace: '/tmp/third', conversationId: 'third-chat' },
+    };
+    mocks.list.mockResolvedValue(
+      Object.keys(records).map((id) => ({ ...runtime, id, source: 'user', name: id + ' name' }))
+    );
+    mocks.readSetting.mockImplementation(async () => records);
+    mocks.writeSetting.mockImplementation(async (_key, next) => {
+      records = next;
+    });
+    mocks.identity.mockImplementation(
+      createEmployeeAssistantMigration({
+        identity: () => ({ ownerAccountId: 'account-fixture', assistantId: 'jr-bot', generation: 1 }),
+        list: mocks.list,
+        read: mocks.readSetting,
+        write: (next) => mocks.writeSetting('jr.botWorkspaces', next),
+      })
+    );
+    mocks.get.mockResolvedValue({
+      source: 'user',
+      profile: { name: 'Original bot' },
+      engine: { agent: { type: 'aionrs' } },
+      rules: { content: input.instructions },
+    });
+    const conversation = {
+      id: 'original-chat',
+      type: 'aionrs',
+      assistant: { id: 'legacy-one' },
+      extra: { workspace: input.workspace },
+    };
+    mocks.getConversation.mockResolvedValue(conversation);
+    const bots = await listJrBots();
+    expect(bots.map(({ id }) => id)).toEqual(['legacy-one', 'legacy-two', 'legacy-three']);
+    const restored = await getJrBot('legacy-one');
+    expect(await startJrConversation(restored)).toEqual(conversation);
+    expect(mocks.conversation).not.toHaveBeenCalled();
+  });
+
   it('does not adopt unowned legacy assistants by a matching name', async () => {
     mocks.list.mockResolvedValue([
       runtime,
@@ -785,7 +836,7 @@ describe('one employee assistant', () => {
     expect(mocks.update).not.toHaveBeenCalled();
   });
 
-  it('returns one owned assistant and preserves all other employee and legacy records', async () => {
+  it('keeps every owned legacy bot visible without exposing other employees or unowned records', async () => {
     mocks.list.mockResolvedValue([
       runtime,
       ...['jr-bot', 'owned-old', 'foreign', 'legacy'].map((id) => ({
@@ -801,7 +852,7 @@ describe('one employee assistant', () => {
       foreign: { ownerAccountId: 'another-account', workspace: '/tmp/foreign', useChrome: false },
       legacy: { workspace: '/tmp/legacy', useChrome: false },
     });
-    expect((await listJrBots()).map((bot) => bot.id)).toEqual(['jr-bot']);
+    expect((await listJrBots()).map((bot) => bot.id)).toEqual(['jr-bot', 'owned-old']);
     expect(mocks.writeSetting).not.toHaveBeenCalled();
     expect(mocks.remove).not.toHaveBeenCalled();
   });

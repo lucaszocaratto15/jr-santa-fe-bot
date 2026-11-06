@@ -171,10 +171,9 @@ export const jr = {
     ),
   },
   strata: {
-    changed: bridge.buildEmitter<{ reason: 'organization' | 'connection' | 'disconnection' }>('jr-strata-changed'),
+    changed: bridge.buildEmitter<{ reason: 'connection' | 'disconnection' }>('jr-strata-changed'),
     status: bridge.buildProvider<import('@/common/config/clientSettings').JrStrataStatus, void>('jr-strata-status'),
     connect: bridge.buildProvider<{ expiresAt: string }, void>('jr-strata-connect'),
-    organization: bridge.buildProvider<void, { organizationId: string }>('jr-strata-organization'),
     disconnect: bridge.buildProvider<void, void>('jr-strata-disconnect'),
   },
   status: bridge.buildProvider<JrConnectionStatus, void>('jr-status'),

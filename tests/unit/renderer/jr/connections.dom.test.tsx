@@ -17,7 +17,6 @@ const mocks = vi.hoisted(() => ({
   strataStatus: vi.fn(),
   strataConnect: vi.fn(),
   strataDisconnect: vi.fn(),
-  strataOrganization: vi.fn(),
   access: { status: 'pilot', user: null as { id: string; name: string; role: 'admin' | 'employee' } | null },
 }));
 vi.mock('react-i18next', () => ({
@@ -37,7 +36,6 @@ vi.mock('@/common/adapter/ipcBridge', () => ({
       status: { invoke: mocks.strataStatus },
       connect: { invoke: mocks.strataConnect },
       disconnect: { invoke: mocks.strataDisconnect },
-      organization: { invoke: mocks.strataOrganization },
     },
   },
   shell: { openExternal: { invoke: mocks.open } },
@@ -512,19 +510,26 @@ describe('Strata existing account connection', () => {
     mounted.unmount();
   });
 
-  it('shows the verified ERP account and permitted organizations from the server', async () => {
-    mocks.strataStatus.mockResolvedValue({
-      ...status,
-      linked: true,
-      erpUser: { id: 'erp-fixture', name: 'Verified ERP account' },
-      organizations: [{ id: 'org-fixture', name: 'Permitted organization' }],
-      organizationId: 'org-fixture',
-    });
-    mountStrata();
-    expect(await screen.findByText('common.jr.strata.linkedAs Verified ERP account')).toBeTruthy();
-    expect(screen.getByRole('combobox', { name: 'common.jr.strata.organization' })).toBeTruthy();
-    expect(mocks.strataConnect).not.toHaveBeenCalled();
-  });
+  it.each([null, 'org-fixture'])(
+    'shows group access without a company selector for stored selection %s',
+    async (organizationId) => {
+      mocks.strataStatus.mockResolvedValue({
+        ...status,
+        linked: true,
+        erpUser: { id: 'erp-fixture', name: 'Verified ERP account' },
+        organizations: [
+          { id: 'org-fixture', name: 'Group company A' },
+          { id: 'org-second', name: 'Group company B' },
+        ],
+        organizationId,
+      });
+      mountStrata();
+      expect(await screen.findByText('common.jr.strata.linkedAs Verified ERP account')).toBeTruthy();
+      expect(screen.queryByRole('combobox')).toBeNull();
+      expect(screen.getByText('common.jr.strata.permissions')).toBeTruthy();
+      expect(mocks.strataConnect).not.toHaveBeenCalled();
+    }
+  );
 
   it('does not show another employee cached account on a profile change', async () => {
     const cache = new Map();

@@ -2,9 +2,64 @@ import { randomUUID } from 'node:crypto';
 import { lstat, mkdir, open, readFile, realpath, unlink, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { BUILTIN_TEACH_MCP_NAME } from '@/common/config/constants';
+import type { ClientBusinessSettingMap } from '@/common/config/clientSettings';
 import { isAionrsAssistant, type Assistant, type CreateAssistantRequest } from '@/common/types/agent/assistantTypes';
 
 type EmployeeAssistantIdentity = { ownerAccountId: string; assistantId: string; generation: number };
+type EmployeeWorkspaces = NonNullable<ClientBusinessSettingMap['jr.botWorkspaces']>;
+
+/** Preserve legacy bots only for the authenticated owner of this device-bound local profile. */
+export function createEmployeeAssistantMigration(deps: {
+  identity: () => EmployeeAssistantIdentity;
+  list: () => Promise<Assistant[]>;
+  read: () => Promise<EmployeeWorkspaces | undefined>;
+  write: (workspaces: EmployeeWorkspaces) => Promise<void>;
+}): () => Promise<Omit<EmployeeAssistantIdentity, 'generation'>> {
+  const migrations = new Map<string, Promise<void>>();
+  return async () => {
+    const identity = deps.identity();
+    const key = `${identity.ownerAccountId}:${identity.generation}`;
+    const current = (): void => {
+      const next = deps.identity();
+      if (next.ownerAccountId !== identity.ownerAccountId || next.generation !== identity.generation)
+        throw new Error('JR_ACCESS_REQUIRED');
+    };
+    let migration = migrations.get(key);
+    if (!migration) {
+      migration = (async () => {
+        const assistants = await deps.list();
+        current();
+        const workspaces = await deps.read();
+        current();
+        if (!workspaces) return;
+        const next = { ...workspaces };
+        let changed = false;
+        for (const assistant of assistants) {
+          const record = workspaces[assistant.id];
+          if (
+            !record ||
+            record.ownerAccountId != null ||
+            assistant.source !== 'user' ||
+            !isAionrsAssistant(assistant) ||
+            (assistant.id.startsWith('jr-employee-') && assistant.id !== identity.assistantId)
+          )
+            continue;
+          next[assistant.id] = { ...record, ownerAccountId: identity.ownerAccountId };
+          changed = true;
+        }
+        if (changed) await deps.write(next);
+        current();
+      })().catch((error: unknown) => {
+        migrations.delete(key);
+        throw error;
+      });
+      migrations.set(key, migration);
+    }
+    await migration;
+    current();
+    return { ownerAccountId: identity.ownerAccountId, assistantId: identity.assistantId };
+  };
+}
 
 /** Serialize the canonical JR creation path; existing assistants and legacy data are never deleted. */
 export function createEmployeeAssistantRegistry(deps: {
