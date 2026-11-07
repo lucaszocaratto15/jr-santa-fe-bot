@@ -4,10 +4,10 @@
   gap: 12px;
   margin-bottom: 12px;
   padding: 14px 16px;
-  border-radius: 16px;
-  background: var(--jr-surface);
+  border-radius: 12px;
+  background: var(--jr-card);
   border: 1px solid var(--jr-hairline);
-  box-shadow: var(--jr-composer-shadow);
+  box-shadow: none;
 }
 
 .title {
@@ -199,4 +199,42 @@
   gap: 6px;
   color: var(--color-text-3);
   font-size: 12px;
+}
+
+.suggestion {
+  border-color: color-mix(in srgb, var(--jr-accent) 28%, var(--jr-hairline));
+  max-height: min(420px, 45vh);
+  overflow: auto;
+}
+.suggestion .title {
+  font-size: 13px;
+}
+.suggestion .icon {
+  width: 24px;
+  height: 24px;
+  color: var(--jr-accent);
+  background: transparent;
+}
+.editSuggestion:global(.arco-btn) {
+  margin-inline-start: auto;
+  font-size: 12px;
+}
+.lessonSummary p {
+  margin: 0 0 5px;
+  color: var(--color-text-1);
+  font-size: var(--chat-font-size, 14px);
+  line-height: 1.6;
+}
+.lessonSummary > span {
+  font-size: 11px;
+  color: var(--color-text-3);
+}
+.suggestion .footnote {
+  font-size: 11px;
+  line-height: 1.5;
+}
+.suggestion .actions {
+  position: sticky;
+  bottom: -14px;
+  background: var(--jr-card);
 }

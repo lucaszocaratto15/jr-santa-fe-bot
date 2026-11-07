@@ -775,7 +775,7 @@ describe('instructionWithLearning general lessons', () => {
   });
 });
 
-describe('one employee assistant', () => {
+describe('account-owned employee bots', () => {
   it('waits for native migration, restores every legacy bot and reopens its original conversation', async () => {
     const original = {
       workspace: input.workspace,
@@ -857,17 +857,35 @@ describe('one employee assistant', () => {
     expect(mocks.remove).not.toHaveBeenCalled();
   });
 
-  it('refuses a second creation instead of overwriting the employee assistant', async () => {
-    mocks.list.mockResolvedValue([
-      runtime,
-      { id: 'jr-bot', name: input.name, source: 'user', agent: { type: 'aionrs' } },
-    ]);
-    mocks.readSetting.mockResolvedValue({
-      'jr-bot': { ownerAccountId: 'account-fixture', workspace: input.workspace, skillIds: [], useChrome: true },
-    });
-    await expect(saveJrBot(input)).rejects.toThrow('JR_ASSISTANT_EXISTS');
-    expect(mocks.employeeCreate).not.toHaveBeenCalled();
+  it('creates a second bot without replacing existing history or another employees records', async () => {
+    const original = {
+      ownerAccountId: 'account-fixture',
+      workspace: '/tmp/first',
+      conversationId: 'historic-chat',
+      skillIds: [],
+      useChrome: true,
+    };
+    const foreign = { ownerAccountId: 'another-account', workspace: '/tmp/foreign' };
+    mocks.readSetting.mockResolvedValue({ 'jr-bot': original, foreign });
+    mocks.employeeCreate.mockResolvedValue({ ownerAccountId: 'account-fixture', assistantId: 'jr-bot-new' });
+    const saved = await saveJrBot(input);
+    expect(saved.id).toBe('jr-bot-new');
+    expect(mocks.writeSetting).toHaveBeenCalledWith(
+      'jr.botWorkspaces',
+      expect.objectContaining({
+        'jr-bot': original,
+        foreign,
+        'jr-bot-new': expect.objectContaining({ ownerAccountId: 'account-fixture' }),
+      })
+    );
+    expect(mocks.remove).not.toHaveBeenCalled();
+  });
+
+  it('rejects a creation response bound to another account', async () => {
+    mocks.employeeCreate.mockResolvedValue({ ownerAccountId: 'another-account', assistantId: 'jr-bot-new' });
+    await expect(saveJrBot(input)).rejects.toThrow('JR_ACCESS_REQUIRED');
     expect(mocks.writeRules).not.toHaveBeenCalled();
+    expect(mocks.writeSetting).not.toHaveBeenCalled();
   });
 
   it('does not open or edit a workspace belonging to another employee', async () => {

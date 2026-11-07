@@ -1,10 +1,11 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   accessUser: { id: 'owner', name: 'Lucas Zocaratto', role: 'admin' as 'admin' | 'employee' },
   update: vi.fn(),
+  setFontSize: vi.fn(),
 }));
 
 vi.mock('react-i18next', () => ({
@@ -18,7 +19,14 @@ vi.mock('@/renderer/pages/Jr/Access/context', () => ({
   useJrAccess: () => ({ state: { status: 'active', user: mocks.accessUser }, logout: vi.fn() }),
 }));
 vi.mock('@/renderer/hooks/context/ThemeContext', () => ({
-  useThemeContext: () => ({ theme: 'dark', setTheme: vi.fn(), selectTheme: vi.fn(), activeId: 'dark' }),
+  useThemeContext: () => ({
+    theme: 'dark',
+    setTheme: vi.fn(),
+    selectTheme: vi.fn(),
+    activeId: 'dark',
+    fontSizes: { chat: 14 },
+    setFontSize: mocks.setFontSize,
+  }),
 }));
 vi.mock('@/renderer/components/settings/checkForUpdatesShared', () => ({
   getIncludePrerelease: () => false,
@@ -34,13 +42,27 @@ beforeEach(() => {
 });
 
 describe('JR settings panels', () => {
-  it('shows the account initials with the role beside the company', () => {
+  it('shows account initials and role without repeating the company', () => {
     render(<GeneralPanel />);
     const account = screen.getByLabelText('common.jr.look.account');
     expect(account).toHaveTextContent('LZ');
     expect(account).toHaveTextContent('Lucas Zocaratto');
-    expect(account).toHaveTextContent('common.jr.access.roleAdmin · common.jr.companyName');
+    expect(account).toHaveTextContent('common.jr.access.roleAdmin');
     expect(screen.getByRole('button', { name: 'common.jr.access.signOut' })).toBeInTheDocument();
+  });
+
+  it('saves the existing shared chat font setting for larger text', () => {
+    render(<GeneralPanel />);
+    fireEvent.click(screen.getByLabelText('common.jr.look.textLarger'));
+    expect(mocks.setFontSize).toHaveBeenCalledWith('chat', 17);
+  });
+
+  it('keeps character motion disabled after reopening settings', () => {
+    const first = render(<GeneralPanel />);
+    fireEvent.click(screen.getByRole('switch', { name: 'common.jr.look.animations' }));
+    first.unmount();
+    render(<GeneralPanel />);
+    expect(screen.getByRole('switch', { name: 'common.jr.look.animations' })).toHaveAttribute('aria-checked', 'false');
   });
 
   it('hides the computer name row when no name is available', () => {

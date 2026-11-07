@@ -476,7 +476,8 @@
         "learn": "Aprender",
         "handbook": "Manual da função",
         "lessons": "Lições",
-        "brain": "Cérebro"
+        "brain": "Cérebro",
+        "bot": "Meu bot"
       },
       "generalTitle": "Geral",
       "account": "Conta",
@@ -524,10 +525,30 @@
       "usedThisWeek": "Uso semanal",
       "usedTotal": "Total",
       "usageAmount": "{{used}} / {{limit}}",
-      "toggleTheme": "Alternar tema claro/escuro"
+      "toggleTheme": "Alternar tema claro/escuro",
+      "recordHint": "Gravar um procedimento para o bot aprender.",
+      "recordProcedure": "Gravar procedimento",
+      "settingsHint": "Seu bot, seus dados e sua forma de trabalhar.",
+      "textSize": "Tamanho do texto",
+      "textSizeHint": "Suas mensagens e as respostas sempre usam o mesmo tamanho.",
+      "textNormal": "Padrão",
+      "textLarger": "Maior",
+      "readingSample": "Sua mensagem e a resposta do bot usam o mesmo tamanho de texto.",
+      "animations": "Animações dos bots",
+      "animationsHint": "Movimentos e piscadas respeitam a redução de movimento.",
+      "yourBots": "Seus bots",
+      "knowledge": "Conhecimento",
+      "roleManuals": "Manuais de funções",
+      "searchPeople": "Buscar pessoa ou função",
+      "filterStatus": "Filtrar por status",
+      "allStatuses": "Todos os status",
+      "noPeopleMatch": "Nenhuma pessoa corresponde aos filtros.",
+      "finishEditing": "Concluir edição",
+      "attach": "Anexar",
+      "enterToSend": "Enter para enviar"
     },
     "search": "Buscar",
-    "newBot": "Novo Bot",
+    "newBot": "Criar bot",
     "learningTitle": "O que este bot deve aprender e lembrar",
     "learningHint": "Registre procedimentos aprovados. O conteúdo fica salvo para este bot e acompanha as conversas futuras.",
     "learningPlaceholder": "Ex.: para fechar o relatório, confira primeiro os pedidos pendentes.",
@@ -1141,7 +1162,8 @@
         "rejected": "Rejeitada",
         "superseded": "Substituída",
         "suspended": "Suspensa"
-      }
+      },
+      "createHint": "Guarde uma informação desta resposta no conhecimento da empresa. Você revisa o texto e quem poderá acessar antes de compartilhar."
     },
     "strata": {
       "title": "Strata Certa",

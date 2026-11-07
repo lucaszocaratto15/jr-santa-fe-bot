@@ -10,7 +10,7 @@ import {
   runUpdateCheck,
   type CheckUpdateOutcome,
 } from '@/renderer/components/settings/checkForUpdatesShared';
-import { Alert, Button, Dropdown, Menu, Select, Spin, Switch } from '@arco-design/web-react';
+import { Alert, Button, Dropdown, Menu, Radio, Select, Spin, Switch } from '@arco-design/web-react';
 import { CheckOne, Down } from '@icon-park/react';
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -18,10 +18,12 @@ import { useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
 import {
   readComputerIdentity,
+  readCharacterMotion,
   readExecutionPreference,
   readSpellcheck,
   writeExecutionPreference,
   writeSpellcheck,
+  writeCharacterMotion,
   type ExecutionPreference,
 } from './preferences';
 import { sidebarProfile } from './sidebarProfile';
@@ -34,11 +36,12 @@ const appVersion = (): string => (typeof __APP_VERSION__ === 'string' ? __APP_VE
 const isConnectionStatus = (value: unknown): value is JrConnectionStatus =>
   Boolean(value) && typeof value === 'object' && value !== null && 'connected' in value;
 
-export const GeneralPanel: React.FC = () => {
+export const GeneralPanel: React.FC<{ onNavigate?: () => void }> = ({ onNavigate }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { state, logout } = useJrAccess();
-  const { theme, setTheme, selectTheme, activeId } = useThemeContext();
+  const { theme, setTheme, selectTheme, activeId, fontSizes, setFontSize } = useThemeContext();
+  const [motion, setMotion] = useState(readCharacterMotion);
   const [spellcheck, setSpellcheck] = useState(() => readSpellcheck());
   const themeValue =
     activeId === SYSTEM_THEME_ID || activeId === LIGHT_THEME_ID || activeId === DARK_THEME_ID
@@ -77,13 +80,18 @@ export const GeneralPanel: React.FC = () => {
         </span>
         <div className={styles.rowCopy}>
           <strong>{profileName}</strong>
-          <p className={styles.muted}>
-            {roleLabel ? `${roleLabel} · ${t('common.jr.companyName')}` : t('common.jr.companyName')}
-          </p>
+          <p className={styles.muted}>{roleLabel}</p>
         </div>
         <div className={styles.rowActions}>
           {isJrAdmin(state.user) && (
-            <Button type='secondary' className={styles.softButton} onClick={() => void navigate('/admin')}>
+            <Button
+              type='secondary'
+              className={styles.softButton}
+              onClick={() => {
+                onNavigate?.();
+                void navigate('/admin');
+              }}
+            >
               {t('common.jr.access.adminTitle')}
             </Button>
           )}
@@ -97,6 +105,41 @@ export const GeneralPanel: React.FC = () => {
         </div>
       </section>
       <section className={`${styles.card} ${styles.cardList}`} aria-label={t('common.jr.look.appearance')}>
+        <div className={styles.row}>
+          <div className={styles.rowCopy}>
+            <strong className={styles.rowTitle}>{t('common.jr.look.textSize')}</strong>
+            <p className={styles.muted}>{t('common.jr.look.textSizeHint')}</p>
+          </div>
+          <Radio.Group
+            type='button'
+            size='small'
+            value={fontSizes.chat}
+            onChange={(value: number) => void setFontSize('chat', value)}
+            aria-label={t('common.jr.look.textSize')}
+          >
+            <Radio value={14}>{t('common.jr.look.textNormal')}</Radio>
+            <Radio value={17}>{t('common.jr.look.textLarger')}</Radio>
+            {fontSizes.chat !== 14 && fontSizes.chat !== 17 && (
+              <Radio value={fontSizes.chat}>{fontSizes.chat} px</Radio>
+            )}
+          </Radio.Group>
+        </div>
+        <p className={styles.readingSample}>{t('common.jr.look.readingSample')}</p>
+        <div className={styles.row}>
+          <div className={styles.rowCopy}>
+            <strong className={styles.rowTitle}>{t('common.jr.look.animations')}</strong>
+            <p className={styles.muted}>{t('common.jr.look.animationsHint')}</p>
+          </div>
+          <Switch
+            size='small'
+            checked={motion}
+            aria-label={t('common.jr.look.animations')}
+            onChange={(value) => {
+              writeCharacterMotion(value);
+              setMotion(value);
+            }}
+          />
+        </div>
         <div className={styles.row}>
           <span>{t('common.jr.look.theme')}</span>
           <Dropdown

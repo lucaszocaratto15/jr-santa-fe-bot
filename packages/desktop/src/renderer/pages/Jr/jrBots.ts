@@ -191,7 +191,7 @@ export async function listJrBots(): Promise<JrBot[]> {
       )
     )
     .filter((bot) => isPresentableBot(bot));
-  // Existing bots retain their history after an upgrade; creation still allows only one new assistant.
+  // Existing bots retain their history and account ownership after an upgrade.
   await assertEmployee(identity.ownerAccountId);
   return own;
 }
@@ -234,11 +234,12 @@ export async function saveJrBot(input: JrBotInput, id?: string): Promise<JrBot> 
   const skillIds = await listInstalledSkillIds();
   const useChrome = true;
   const previous = id ? await getJrBot(id) : null;
-  const workspaces = (await getClientBusinessSetting('jr.botWorkspaces')) || {};
   if (!id) {
-    if ((await listJrBots()).length) throw new Error('JR_ASSISTANT_EXISTS');
     const created = await ipcBridge.jr.assistant.create.invoke({ name });
-    if (created.ownerAccountId !== identity.ownerAccountId || created.assistantId !== identity.assistantId)
+    if (
+      created.ownerAccountId !== identity.ownerAccountId ||
+      (created.assistantId !== identity.assistantId && !created.assistantId.startsWith(`${identity.assistantId}-`))
+    )
       throw new Error('JR_ACCESS_REQUIRED');
     id = created.assistantId;
   }
@@ -258,10 +259,12 @@ export async function saveJrBot(input: JrBotInput, id?: string): Promise<JrBot> 
       defaults: { skills: { mode: 'fixed', value: skillIds } },
     });
     await assertEmployee(identity.ownerAccountId);
+    const latestWorkspaces = (await getClientBusinessSetting('jr.botWorkspaces')) || {};
+    await assertEmployee(identity.ownerAccountId);
     await setClientBusinessSetting('jr.botWorkspaces', {
-      ...workspaces,
+      ...latestWorkspaces,
       [id]: {
-        ...workspaces[id],
+        ...latestWorkspaces[id],
         ownerAccountId: identity.ownerAccountId,
         workspace: input.workspace,
         instructions: input.instructions,
@@ -287,7 +290,7 @@ export async function saveJrBot(input: JrBotInput, id?: string): Promise<JrBot> 
         defaults: { skills: { mode: 'fixed', value: previous.skillIds ?? [] } },
       });
     }
-    // Keep an unsaved canonical assistant for retry; another window may already be using it.
+    // Never delete an assistant on a partial save; another window may already be using it.
     throw error;
   }
 }

@@ -150,18 +150,27 @@ describe('JrSidebar rows', () => {
     expect(screen.queryByText('Sent 1 archive')).not.toBeInTheDocument();
   });
 
-  it('moves search into the header without allowing another assistant', () => {
+  it('keeps search in the header and bot creation in the sidebar', () => {
     const slot = document.createElement('div');
     slot.id = 'jr-sider-actions-slot';
     document.body.appendChild(slot);
     try {
       render(<JrSidebar />);
       expect(slot.querySelector('[aria-label="common.jr.search"]')).not.toBeNull();
-      expect(slot.querySelector('[aria-label="common.jr.newBot"]')).toBeNull();
+      expect(
+        within(screen.getByRole('navigation')).getByRole('button', { name: 'common.jr.newBot' })
+      ).toBeInTheDocument();
       expect(screen.getByRole('navigation').querySelector('[aria-label="common.jr.search"]')).toBeNull();
     } finally {
       slot.remove();
     }
+  });
+
+  it('hides between-bot navigation without deleting any bots', () => {
+    render(<JrSidebar />);
+    expect(screen.queryByText('common.jr.teamChats')).not.toBeInTheDocument();
+    expect(screen.queryByText('common.jr.teamChat')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Compras' })).toBeInTheDocument();
   });
 
   it('keeps search in the sidebar when the header slot is missing', () => {
@@ -185,7 +194,7 @@ describe('JrSidebar rows', () => {
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /Funcionário JR/ }));
     });
-    expect(await screen.findByText('common.settings')).toBeInTheDocument();
+    expect(await screen.findByRole('menuitem', { name: 'common.settings' })).toBeInTheDocument();
     expect(screen.queryByText('common.jr.access.adminTitle')).not.toBeInTheDocument();
   });
 
@@ -195,7 +204,7 @@ describe('JrSidebar rows', () => {
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /Lucas/ }));
     });
-    fireEvent.click(await screen.findByText('common.jr.access.adminTitle'));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'common.jr.access.adminTitle' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/admin');
   });
 

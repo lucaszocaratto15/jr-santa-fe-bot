@@ -52,6 +52,7 @@ const LessonCard: React.FC<LessonCardProps> = ({ conversationId, proposals, upTo
   const [oldTexts, setOldTexts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -124,10 +125,20 @@ const LessonCard: React.FC<LessonCardProps> = ({ conversationId, proposals, upTo
   const nothingChecked = !rows.some((row) => row.checked && row.text.trim());
 
   return (
-    <div className={styles.card} role='dialog' aria-label={title}>
+    <div className={`${styles.card} ${styles.suggestion}`} role='region' aria-label={title}>
       <div className={styles.title}>
         <BookOpen theme='outline' size={16} className={styles.icon} />
         <span>{title}</span>
+        <Button
+          type='text'
+          size='small'
+          className={styles.editSuggestion}
+          disabled={busy}
+          aria-expanded={editing}
+          onClick={() => setEditing((value) => !value)}
+        >
+          {t(editing ? 'common.jr.look.finishEditing' : 'common.edit')}
+        </Button>
       </div>
       {proposals.map((proposal, index) => {
         const row = rows[index];
@@ -148,24 +159,33 @@ const LessonCard: React.FC<LessonCardProps> = ({ conversationId, proposals, upTo
                   {oldText && <del>{oldText}</del>}
                 </div>
               )}
-              <Input.TextArea
-                value={row.text}
-                onChange={(text) => patch(index, { text })}
-                disabled={busy || !row.checked}
-                maxLength={200}
-                showWordLimit
-                autoSize={{ minRows: 1, maxRows: 4 }}
-                aria-label={t('common.jr.teach.lessons.textLabel')}
-              />
-              <Select
-                size='small'
-                value={row.scope}
-                onChange={(scope) => patch(index, { scope })}
-                // An update keeps the existing lesson's scope: the store does not move lessons.
-                disabled={busy || !row.checked || Boolean(proposal.updateId)}
-                options={optionsFor(row.scope)}
-                aria-label={t('common.jr.teach.lessons.scopeLabel')}
-              />
+              {editing ? (
+                <>
+                  <Input.TextArea
+                    value={row.text}
+                    onChange={(text) => patch(index, { text })}
+                    disabled={busy || !row.checked}
+                    maxLength={200}
+                    showWordLimit
+                    autoSize={{ minRows: 1, maxRows: 4 }}
+                    aria-label={t('common.jr.teach.lessons.textLabel')}
+                  />
+                  <Select
+                    size='small'
+                    value={row.scope}
+                    onChange={(scope) => patch(index, { scope })}
+                    // An update keeps the existing lesson's scope: the store does not move lessons.
+                    disabled={busy || !row.checked || Boolean(proposal.updateId)}
+                    options={optionsFor(row.scope)}
+                    aria-label={t('common.jr.teach.lessons.scopeLabel')}
+                  />
+                </>
+              ) : (
+                <div className={styles.lessonSummary}>
+                  <p>{row.text}</p>
+                  <span>{optionsFor(row.scope).find((option) => option.value === row.scope)?.label}</span>
+                </div>
+              )}
               <span className={styles.footnote}>
                 {t('common.jr.teach.lessons.quote', { quote: proposal.sourceQuote })}
               </span>

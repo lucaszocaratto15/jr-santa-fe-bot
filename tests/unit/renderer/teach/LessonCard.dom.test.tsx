@@ -62,6 +62,16 @@ describe('LessonCard', () => {
     expect(screen.getByText('common.jr.teach.lessons.updates')).toBeTruthy();
   });
 
+  it('starts with a readable suggestion and keeps edits when closing the editor', async () => {
+    mount();
+    expect(screen.queryByRole('textbox')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'common.edit' }));
+    fireEvent.change(screen.getAllByRole('textbox')[0], { target: { value: 'Conferir antes de enviar' } });
+    fireEvent.click(screen.getByRole('button', { name: 'common.jr.look.finishEditing' }));
+    expect(screen.getByText('Conferir antes de enviar')).toBeTruthy();
+    expect(save).not.toHaveBeenCalled();
+  });
+
   it('unchecking one sends one accepted and discarded:1', async () => {
     mount();
     fireEvent.click(screen.getAllByRole('checkbox')[1]);
@@ -78,6 +88,7 @@ describe('LessonCard', () => {
 
   it('editing the text marks edited:true', async () => {
     mount();
+    fireEvent.click(screen.getByRole('button', { name: 'common.edit' }));
     fireEvent.change(screen.getAllByRole('textbox')[0], { target: { value: 'Usar vírgula sempre' } });
     fireEvent.click(screen.getByText('common.jr.teach.lessons.save'));
     await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
@@ -106,6 +117,7 @@ describe('LessonCard', () => {
 
   it('changing only the scope sends edited:true', async () => {
     mount();
+    fireEvent.click(screen.getByRole('button', { name: 'common.edit' }));
     await waitFor(() => expect(listSkills).toHaveBeenCalled());
     await act(async () => {});
     fireEvent.click(
@@ -126,6 +138,7 @@ describe('LessonCard', () => {
 
   it('locks the scope of an update proposal to the existing lesson', async () => {
     mount();
+    fireEvent.click(screen.getByRole('button', { name: 'common.edit' }));
     await waitFor(() => expect(listSkills).toHaveBeenCalled());
     await act(async () => {});
     const selects = document.querySelectorAll('.arco-select');

@@ -257,6 +257,7 @@ const SendBox: React.FC<{
   lockMultiLine?: boolean;
   sendButtonPrefix?: React.ReactNode;
   onAddToDraft?: () => void;
+  showDraftButton?: boolean;
   addToDraftDisabled?: boolean;
   addToDraftTooltip?: React.ReactNode;
   sendDisabledTooltip?: React.ReactNode;
@@ -325,6 +326,7 @@ const SendBox: React.FC<{
   lockMultiLine = false,
   sendButtonPrefix,
   onAddToDraft,
+  showDraftButton = true,
   addToDraftDisabled = false,
   addToDraftTooltip,
   sendDisabledTooltip,
@@ -1767,24 +1769,25 @@ const SendBox: React.FC<{
       : draftActionBaseTooltip;
   const draftActionTitle = typeof draftActionTooltip === 'string' ? draftActionTooltip : addToDraftLabel;
   const draftActionIcon = <DraftBoxActionIcon size={20} strokeWidth={1.25} />;
-  const draftActionButton = hasDraftAction ? (
-    <Tooltip content={draftActionTooltip} position='top'>
-      <span className='sendbox-draft-tooltip-anchor'>
-        <Button
-          shape='circle'
-          type='secondary'
-          disabled={isDraftActionDisabled}
-          className={`sendbox-draft-tool-action ${
-            isDraftActionDisabled ? 'sendbox-draft-tool-action--disabled' : 'sendbox-draft-tool-action--enabled'
-          }`}
-          icon={draftActionIcon}
-          onClick={handleAddToDraftClick}
-          data-testid='sendbox-add-to-draft-btn'
-          aria-label={draftActionTitle}
-        />
-      </span>
-    </Tooltip>
-  ) : null;
+  const draftActionButton =
+    hasDraftAction && showDraftButton ? (
+      <Tooltip content={draftActionTooltip} position='top'>
+        <span className='sendbox-draft-tooltip-anchor'>
+          <Button
+            shape='circle'
+            type='secondary'
+            disabled={isDraftActionDisabled}
+            className={`sendbox-draft-tool-action ${
+              isDraftActionDisabled ? 'sendbox-draft-tool-action--disabled' : 'sendbox-draft-tool-action--enabled'
+            }`}
+            icon={draftActionIcon}
+            onClick={handleAddToDraftClick}
+            data-testid='sendbox-add-to-draft-btn'
+            aria-label={draftActionTitle}
+          />
+        </span>
+      </Tooltip>
+    ) : null;
 
   const stopButton = (
     <Button

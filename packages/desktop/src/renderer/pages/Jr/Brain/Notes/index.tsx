@@ -1,7 +1,8 @@
 import { ipcBridge } from '@/common';
 import type { BrainNoteKind, BrainNoteProposal, BrainProposalResult } from '@/common/types/agent/brainTypes';
 import { loadLatestConversationMessages } from '@renderer/utils/chat/messagePagination';
-import { Alert, Button, DatePicker, Form, Input, Message, Modal, Radio, Select } from '@arco-design/web-react';
+import { Alert, Button, DatePicker, Form, Input, Message, Modal, Radio, Select, Tooltip } from '@arco-design/web-react';
+import { BookOpen } from '@icon-park/react';
 import dayjs from 'dayjs';
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -13,14 +14,19 @@ export default function BrainNoteComposer({
   conversationId,
   factId,
   onPublished,
+  compact = false,
+  sourceText,
 }: {
   conversationId?: string;
   factId?: number;
   onPublished?: () => void;
+  compact?: boolean;
+  sourceText?: string;
 }): React.JSX.Element {
   const { t } = useTranslation();
   const contextVersion = useBrainContextVersion();
   const [visible, setVisible] = useState(false);
+  const [hintVisible, setHintVisible] = useState(false);
   const [busy, setBusy] = useState(false);
   const [excerpt, setExcerpt] = useState('');
   const [sourceRole, setSourceRole] = useState<'user' | 'assistant'>('assistant');
@@ -96,12 +102,19 @@ export default function BrainNoteComposer({
         setVisible(true);
         return;
       }
-      if (!conversationId) return;
-      const page = await loadLatestConversationMessages(conversationId, { limit: 30, contentMode: 'compact' });
+      if (!conversationId && sourceText === undefined) return;
+      const selected = selection.trim();
+      const source =
+        sourceText !== undefined
+          ? (selected && sourceText.includes(selected) ? selected : sourceText).slice(0, 4000)
+          : authorizedExcerpt(
+              (await loadLatestConversationMessages(conversationId!, { limit: 30, contentMode: 'compact' })).items,
+              selection
+            );
       if (currentOwner !== owner.current || currentContext !== getBrainContextVersion()) return;
       setResult(null);
       setSourceRole('assistant');
-      setExcerpt(authorizedExcerpt(page.items, selection));
+      setExcerpt(source);
       setVisible(true);
     });
   };
@@ -166,9 +179,40 @@ export default function BrainNoteComposer({
   };
   return (
     <>
-      <Button size='small' loading={busy && !visible} onClick={open}>
-        {t(factId === undefined ? 'common.jr.brainNotes.create' : 'common.jr.brainNotes.edit')}
-      </Button>
+      <Tooltip
+        content={
+          factId === undefined ? (
+            <div className='jr-note-tooltip'>
+              <strong>{t('common.jr.brainNotes.create')}</strong>
+              <span>{t('common.jr.brainNotes.createHint')}</span>
+            </div>
+          ) : (
+            t('common.jr.brainNotes.edit')
+          )
+        }
+        className='jr-note-tooltip-popup'
+        popupVisible={hintVisible}
+        onVisibleChange={setHintVisible}
+        trigger={['hover', 'focus']}
+      >
+        <Button
+          type={compact ? 'text' : 'secondary'}
+          size='small'
+          className={compact ? 'jr-note-chat-btn' : undefined}
+          aria-label={t(factId === undefined ? 'common.jr.brainNotes.create' : 'common.jr.brainNotes.edit')}
+          icon={compact ? <BookOpen size={17} /> : undefined}
+          loading={busy && !visible}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') setHintVisible(false);
+          }}
+          onClick={() => {
+            setHintVisible(false);
+            open();
+          }}
+        >
+          {compact ? null : t(factId === undefined ? 'common.jr.brainNotes.create' : 'common.jr.brainNotes.edit')}
+        </Button>
+      </Tooltip>
       <Modal
         visible={visible}
         title={t('common.jr.brainNotes.create')}

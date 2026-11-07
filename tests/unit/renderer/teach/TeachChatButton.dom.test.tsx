@@ -45,7 +45,7 @@ describe('TeachChatButton', () => {
         <Phase />
       </>
     );
-    fireEvent.click(screen.getByText('common.jr.teach.controls.teach'));
+    fireEvent.click(screen.getByRole('button', { name: 'common.jr.look.recordProcedure' }));
     expect(openBrowserTab).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId('phase').textContent).toBe('describing');
   });
@@ -53,11 +53,11 @@ describe('TeachChatButton', () => {
   it('is hidden when teach is unavailable or a teaching is under way', () => {
     resetTeachUiForTests({ available: false, hosts: ['c1'] });
     const { unmount } = render(<TeachChatButton />);
-    expect(screen.queryByText('common.jr.teach.controls.teach')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'common.jr.look.recordProcedure' })).toBeNull();
     unmount();
     resetTeachUiForTests({ available: true, hosts: ['c1'], phase: 'recording' });
     render(<TeachChatButton />);
-    expect(screen.queryByText('common.jr.teach.controls.teach')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'common.jr.look.recordProcedure' })).toBeNull();
   });
 });
 

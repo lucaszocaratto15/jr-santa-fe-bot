@@ -602,6 +602,7 @@ const AionrsSendBox: React.FC<{
         tools={
           <>
             <FileAttachButton
+              label={t('common.jr.look.attach')}
               openFileSelector={openFileSelector}
               onLocalFilesAdded={handleFilesAdded}
               loadedMcpStatuses={loadedMcpStatuses}
@@ -609,6 +610,7 @@ const AionrsSendBox: React.FC<{
             <TeachChatButton />
           </>
         }
+        rightTools={<span className='jr-composer-hint'>{t('common.jr.look.enterToSend')}</span>}
         prefix={
           <>
             {uploadFile.length > 0 && (
@@ -655,6 +657,7 @@ const AionrsSendBox: React.FC<{
         slash_commands={slash_commands}
         onSlashBuiltinCommand={onSlashBuiltinCommand}
         onAddToDraft={handleAddToQueue}
+        showDraftButton={false}
         addToDraftDisabled={!canQueueCurrentDraft}
         addToDraftTooltip={
           isBusy

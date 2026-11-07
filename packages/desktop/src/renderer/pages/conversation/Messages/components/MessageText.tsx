@@ -13,7 +13,7 @@ import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { useLocalFilePreview } from '@/renderer/pages/conversation/Preview/hooks/useLocalFilePreview';
 import { iconColors } from '@/renderer/styles/colors';
 import { Alert, Button, Dropdown, Menu, Message, Tooltip } from '@arco-design/web-react';
-import { Comment, Copy, ThumbsUp } from '@icon-park/react';
+import { Copy, More } from '@icon-park/react';
 import classNames from 'classnames';
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -27,7 +27,7 @@ import { buildTurnClipboardText } from '@renderer/utils/chat/turnCopy';
 import { stripSkillSuggest, hasSkillSuggest } from '@renderer/utils/chat/skillSuggestParser';
 import { isForkEnabled } from '@/common/chat/forkConversation';
 import { useForkConversation } from '@/renderer/hooks/chat/useForkConversation';
-import ForkBranchIcon from '@renderer/components/base/ForkBranchIcon';
+import BrainNoteComposer from '@renderer/pages/Jr/Brain/Notes';
 import { emitter } from '@/renderer/utils/emitter';
 
 /**
@@ -201,13 +201,14 @@ const MessageText: React.FC<{
 
   const copyButton = (
     <Tooltip content={t('common.copy', { defaultValue: 'Copy' })}>
-      <div
-        className='p-4px rd-4px cursor-pointer hover:bg-3 transition-colors opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto'
+      <Button
+        type='text'
+        size='mini'
+        className='jr-response-action'
+        aria-label={t('common.copy')}
         onClick={handleCopy}
-        style={{ lineHeight: 0 }}
-      >
-        <Copy theme='outline' size='16' fill={iconColors.secondary} />
-      </div>
+        icon={<Copy theme='outline' size={16} />}
+      />
     </Tooltip>
   );
 
@@ -218,19 +219,6 @@ const MessageText: React.FC<{
     isLastMessage,
     hasTurnAnchor: hasForkAnchor,
   });
-  const forkButton = showForkButton ? (
-    <Tooltip content={t('messages.fork.action')}>
-      <div
-        className='p-4px rd-4px cursor-pointer hover:bg-3 transition-colors opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto'
-        onClick={() => void forkConversation(message.msg_id ?? message.id)}
-        style={{ lineHeight: 0 }}
-        data-testid='message-fork-button'
-      >
-        <ForkBranchIcon size={16} fill={iconColors.secondary} />
-      </div>
-    </Tooltip>
-  ) : null;
-
   const cronMeta = message.content.cronMeta;
   const displaySenderName = senderName === 'team_system' ? t('team.systemNotice.sender') : senderName;
   const fallbackBackendLogo = senderAgentType ? resolveAgentLogo(logos, { backend: senderAgentType }) : null;
@@ -369,44 +357,49 @@ const MessageText: React.FC<{
             })}
           >
             {copyButton}
-            {forkButton}
+            {!isUserMessage && !streaming && (
+              <BrainNoteComposer
+                compact
+                conversationId={message.conversation_id}
+                sourceText={turnTexts?.length ? buildTurnClipboardText(turnTexts) : renderedText}
+              />
+            )}
             <Dropdown
               trigger='click'
               droplist={
                 <Menu
                   onClickMenuItem={(key) => {
-                    setReaction(key);
+                    if (key === 'reply') {
+                      emitter.emit('sendbox.reply', {
+                        messageId: message.msg_id ?? message.id,
+                        content: typeof message.content.content === 'string' ? message.content.content : '',
+                        position: message.position ?? 'left',
+                      });
+                    } else if (key === 'fork') {
+                      void forkConversation(message.msg_id ?? message.id);
+                    } else setReaction(key);
                   }}
                 >
-                  <Menu.Item key='👍'>👍</Menu.Item>
-                  <Menu.Item key='❤️'>❤️</Menu.Item>
-                  <Menu.Item key='😂'>😂</Menu.Item>
+                  <Menu.Item key='reply'>{t('common.jr.look.reply')}</Menu.Item>
+                  {showForkButton && (
+                    <Menu.Item key='fork' data-testid='message-fork-button'>
+                      {t('messages.fork.action')}
+                    </Menu.Item>
+                  )}
+                  <Menu.Item key='👍'>{t('common.jr.look.react')} 👍</Menu.Item>
+                  <Menu.Item key='❤️'>{t('common.jr.look.react')} ❤️</Menu.Item>
+                  <Menu.Item key='😂'>{t('common.jr.look.react')} 😂</Menu.Item>
                 </Menu>
               }
             >
               <Button
                 type='text'
                 size='mini'
-                className='opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto'
-                aria-label={t('common.jr.look.react')}
-                icon={reaction ? <span aria-hidden='true'>{reaction}</span> : <ThumbsUp theme='outline' size='16' />}
+                className='jr-response-action'
+                aria-label={t('common.more')}
+                icon={reaction ? <span aria-hidden='true'>{reaction}</span> : <More theme='outline' size={16} />}
               />
             </Dropdown>
-            <Button
-              type='text'
-              size='mini'
-              className='opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto'
-              aria-label={t('common.jr.look.reply')}
-              icon={<Comment theme='outline' size='16' />}
-              onClick={() => {
-                const content = typeof message.content.content === 'string' ? message.content.content : '';
-                emitter.emit('sendbox.reply', {
-                  messageId: message.msg_id ?? message.id,
-                  content,
-                  position: message.position ?? 'left',
-                });
-              }}
-            />
             {message.created_at && (
               <span className='text-12px text-t-secondary opacity-0 group-hover:opacity-100 transition-opacity select-none'>
                 {formatMessageTime(message.created_at)}

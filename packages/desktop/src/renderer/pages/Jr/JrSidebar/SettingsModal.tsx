@@ -1,4 +1,4 @@
-import { Button, Message } from '@arco-design/web-react';
+import { Alert, Button, Message, Select, Spin } from '@arco-design/web-react';
 import {
   Analysis,
   BookOpen,
@@ -12,11 +12,11 @@ import {
   Lock,
   SettingTwo,
 } from '@icon-park/react';
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import useSWR from 'swr';
+import useSWR, { mutate } from 'swr';
 import type { LearnSuggestion } from '@/common/types/agent/learnTypes';
 import { JR_BOTS_KEY } from '@renderer/pages/Jr/index';
 import { listJrBots, startJrConversation } from '@renderer/pages/Jr/jrBots';
@@ -34,11 +34,15 @@ import TasksPanel from './Teach/TasksPanel';
 import { pickRunBot } from './Teach/taskActions';
 import UsagePanel from './Usage/UsagePanel';
 import VaultPanel from './Teach/VaultPanel';
+import JrBotDialog from '../JrBotDialog';
+import Connections from '../Connections';
 import styles from './JrSidebar.module.css';
 
 export const SETTINGS_TABS = [
   'general',
+  'bot',
   'computer',
+  'connections',
   'usage',
   'vault',
   'tasks',
@@ -52,7 +56,9 @@ export type SettingsTab = (typeof SETTINGS_TABS)[number];
 
 const TAB_LABEL = {
   general: 'common.jr.look.tabs.general',
+  bot: 'common.jr.look.tabs.bot',
   computer: 'common.jr.look.tabs.computer',
+  connections: 'common.jr.mcp.title',
   usage: 'common.jr.look.tabs.usage',
   vault: 'common.jr.look.tabs.vault',
   tasks: 'common.jr.look.tabs.tasks',
@@ -84,6 +90,9 @@ const JrSettingsModal: React.FC<{
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [params] = useSearchParams();
+  const [selectedBot, setSelectedBot] = useState<string>();
+  const contentRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   // Without the company access provider nobody is a manager: the tab stays hidden.
   let access: JrAccessContextValue | null = null;
   try {
@@ -93,9 +102,11 @@ const JrSettingsModal: React.FC<{
     access = null;
   }
   const bots = useSWR(
-    tab === 'learn' && access?.state.user?.id ? [JR_BOTS_KEY, access.state.user.id] : null,
+    (tab === 'learn' || tab === 'bot') && access?.state.user?.id ? [JR_BOTS_KEY, access.state.user.id] : null,
     listJrBots
   );
+  const botList = Array.isArray(bots.data) ? bots.data : [];
+  const activeBot = botList.find((bot) => bot.id === (selectedBot ?? params.get('bot'))) ?? botList[0];
   const contextVersion = useBrainContextVersion();
   const ownerId = access?.state.user?.id;
   // ERP capabilities, not a JR administrator role, decide whether the management tab exists.
@@ -135,11 +146,25 @@ const JrSettingsModal: React.FC<{
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape' && !document.querySelector('.arco-modal-wrapper:not([style*="display: none"])'))
+        onClose();
     };
+    const previousFocus = document.activeElement;
+    const workspace = document.getElementById('jr-workspace-content');
+    const wasInert = workspace?.inert ?? false;
+    if (workspace) workspace.inert = true;
+    panelRef.current?.focus();
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      if (workspace) workspace.inert = wasInert;
+      if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus();
+    };
+  }, []);
+
+  useEffect(() => {
+    contentRef.current?.scrollTo?.({ top: 0 });
+  }, [current]);
 
   const dismissBackdrop = (event: React.MouseEvent<HTMLDivElement>) => {
     if (event.target !== event.currentTarget) return;
@@ -147,25 +172,35 @@ const JrSettingsModal: React.FC<{
   };
 
   return createPortal(
-    <div className={isMacOS() ? `${styles.overlay} ${styles.overlayMac}` : styles.overlay} onClick={dismissBackdrop}>
+    <div
+      className={`${styles.overlay} ${styles.workspaceOverlay} ${isMacOS() ? styles.overlayMac : ''}`}
+      onClick={dismissBackdrop}
+    >
       <div className={styles.windowDrag} aria-hidden='true' />
       <div
+        ref={panelRef}
+        tabIndex={-1}
         className={styles.panel}
-        role='dialog'
-        aria-modal='true'
+        role='region'
         aria-label={t('common.jr.look.settingsNav')}
         onMouseDown={(event) => event.stopPropagation()}
         onClick={(event) => event.stopPropagation()}
       >
-        <Button
-          type='text'
-          shape='circle'
-          className={styles.close}
-          aria-label={t('common.jr.look.closeSettings')}
-          icon={<Close size={18} />}
-          onMouseDown={(event) => event.stopPropagation()}
-          onClick={onClose}
-        />
+        <header className={styles.settingsHeader}>
+          <div>
+            <h1>{t('common.settings')}</h1>
+            <p>{t('common.jr.look.settingsHint')}</p>
+          </div>
+          <Button
+            type='text'
+            shape='circle'
+            className={styles.close}
+            aria-label={t('common.jr.look.closeSettings')}
+            icon={<Close size={18} />}
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={onClose}
+          />
+        </header>
         <nav className={styles.nav} aria-label={t('common.jr.look.settingsNav')}>
           {tabs.map((id) => (
             <Button
@@ -181,8 +216,43 @@ const JrSettingsModal: React.FC<{
             </Button>
           ))}
         </nav>
-        <div className={styles.content}>
-          {current === 'general' && <GeneralPanel />}
+        <div className={styles.content} ref={contentRef}>
+          {current === 'general' && <GeneralPanel onNavigate={onClose} />}
+          {current === 'bot' && (
+            <div>
+              <h2 className={styles.pageTitle}>{t('common.jr.look.tabs.bot')}</h2>
+              {bots.error ? (
+                <Alert type='error' content={t('common.jr.loadError')} />
+              ) : bots.isLoading ? (
+                <Spin />
+              ) : activeBot ? (
+                <>
+                  <Select
+                    className={styles.botSelect}
+                    value={activeBot.id}
+                    onChange={setSelectedBot}
+                    aria-label={t('common.jr.botName')}
+                    options={botList.map((bot) => ({ value: bot.id, label: bot.name }))}
+                  />
+                  <JrBotDialog
+                    embedded
+                    visible
+                    bot={activeBot}
+                    onClose={() => onTab('general')}
+                    onSaved={async (saved) => {
+                      await bots.mutate();
+                      await mutate(['jr.bot', saved.id]);
+                      await mutate(['jr.bot', ownerId, saved.id]);
+                      Message.success(t('common.saveSuccess'));
+                    }}
+                  />
+                </>
+              ) : (
+                <p className={styles.muted}>{t('common.jr.noBots')}</p>
+              )}
+            </div>
+          )}
+          {current === 'connections' && <Connections embedded onClose={() => onTab('general')} />}
           {current === 'computer' && <ComputerPanel />}
           {current === 'usage' && <UsagePanel />}
           {current === 'vault' && <VaultPanel />}
@@ -195,7 +265,7 @@ const JrSettingsModal: React.FC<{
         </div>
       </div>
     </div>,
-    document.body
+    document.getElementById('jr-settings-host') ?? document.body
   );
 };
 

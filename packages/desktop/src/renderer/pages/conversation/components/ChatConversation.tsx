@@ -188,7 +188,7 @@ const AionrsConversationPanel: React.FC<{ conversation: AionrsConversation; slid
     title: jrBot ? <span className='jr-chat-bot-title'>{jrBot.name}</span> : conversation.name,
     headerLeading: jrBot ? (
       <span className='jr-chat-bot-mark'>
-        <JrCharacter appearance={jrBot.appearance} size={32} still />
+        <JrCharacter appearance={jrBot.appearance} size={32} />
       </span>
     ) : undefined,
     siderTitle: sliderTitle,

@@ -149,9 +149,10 @@
   min-height: 0;
   overflow: auto;
   box-sizing: border-box;
-  max-width: 920px;
+  width: 100%;
+  max-width: 1480px;
   margin: 0 auto;
-  padding: 48px 40px 96px;
+  padding: 46px clamp(24px, 4vw, 64px) 64px;
   display: flex;
   flex-direction: column;
   gap: 28px;
@@ -512,4 +513,89 @@
   margin: 8px 0 0;
   font-size: 12px;
   color: var(--color-text-3);
+}
+
+.adminLayout {
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1fr);
+  gap: 32px;
+}
+.adminNav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-self: start;
+}
+.adminNav :global(.arco-btn) {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  height: 40px;
+  border-radius: 8px;
+  color: var(--color-text-3);
+  font-size: 12px;
+}
+.adminNav :global(.arco-btn[aria-current='page']) {
+  background: var(--bg-hover);
+  color: var(--color-text-1);
+}
+.adminContent {
+  min-width: 0;
+}
+.adminContent [hidden] {
+  display: none !important;
+}
+.peopleToolbar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.peopleToolbar :global(.arco-select) {
+  max-width: 170px;
+}
+.admin .list,
+.admin .usageTile,
+.admin .usageTable {
+  border: 1px solid var(--jr-hairline);
+  border-radius: 10px;
+}
+.admin .list {
+  padding: 0 20px;
+}
+.admin .row {
+  min-height: 78px;
+}
+.admin .rowActions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.admin .pageTitle {
+  font-size: 26px;
+}
+@media (max-width: 1000px) {
+  .adminLayout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+  .adminNav {
+    flex-direction: row;
+    overflow: auto;
+  }
+  .adminNav :global(.arco-btn) {
+    flex-shrink: 0;
+  }
+}
+@media (max-width: 600px) {
+  .peopleToolbar {
+    flex-direction: column;
+  }
+  .peopleToolbar :global(.arco-select) {
+    max-width: none;
+  }
+  .admin .rowActions {
+    width: 100%;
+    justify-content: flex-start;
+  }
 }

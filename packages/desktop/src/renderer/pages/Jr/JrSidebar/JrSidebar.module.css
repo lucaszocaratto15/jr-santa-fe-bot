@@ -508,8 +508,9 @@
    `.card` is a padded block; `.card.cardList` holds `.row`s split by hairlines. */
 .card {
   background: var(--jr-card);
-  border-radius: 14px;
-  padding: 16px 18px;
+  border: 1px solid var(--jr-hairline);
+  border-radius: 10px;
+  padding: 18px 20px;
   margin-bottom: 14px;
 }
 
@@ -978,5 +979,190 @@
   .tab:global(.arco-btn) {
     animation: none;
     transition: none;
+  }
+}
+
+/* The settings workspace reuses the existing panels without unmounting the chat. */
+.workspaceOverlay,
+.workspaceOverlay.overlayMac {
+  position: absolute;
+  inset: 0;
+  padding: 0;
+  background: var(--jr-surface);
+  animation: jr-fade 160ms ease-out;
+}
+.workspaceOverlay .windowDrag {
+  display: none;
+}
+.workspaceOverlay .panel {
+  display: grid;
+  grid-template-columns: 188px minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  outline: none;
+}
+.settingsHeader {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 78px;
+  padding: 18px 60px 18px 30px;
+  border-bottom: 1px solid var(--jr-hairline);
+}
+.settingsHeader h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+.settingsHeader p {
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: var(--color-text-3);
+}
+.settingsHeader .close {
+  position: static;
+}
+.workspaceOverlay .nav {
+  width: auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 24px 12px;
+  gap: 3px;
+  border: 0;
+}
+.workspaceOverlay .nav .tab:global(.arco-btn.arco-btn-long) {
+  height: 39px;
+  padding: 10px 12px;
+  gap: 9px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+.workspaceOverlay .nav .tab :global(.i-icon),
+.workspaceOverlay .nav .tab svg {
+  width: 16px;
+  height: 16px;
+}
+.workspaceOverlay .content {
+  min-height: 0;
+  padding: 30px clamp(20px, 4vw, 56px) 48px 24px;
+  background: var(--jr-surface);
+}
+.workspaceOverlay .content > * {
+  width: 100%;
+  max-width: 1100px;
+}
+.workspaceOverlay .pageTitle {
+  font-size: 22px;
+  margin-bottom: 8px;
+}
+.workspaceOverlay .pageTitle + .card {
+  margin-top: 22px;
+}
+.botSelect {
+  width: min(100%, 320px);
+  margin: 16px 0;
+}
+.readingSample {
+  margin: 0 0 12px;
+  padding: 16px;
+  border-radius: 8px;
+  background: var(--jr-modal-content);
+  font-size: var(--chat-font-size, 14px);
+  line-height: 1.65;
+  color: var(--color-text-2);
+}
+.listLabel {
+  color: var(--color-text-3);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 0 12px;
+  margin: 0 0 10px;
+}
+.botCard:global(.arco-btn) {
+  min-height: 66px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 10px;
+}
+.botActive:global(.arco-btn) {
+  background: color-mix(in srgb, var(--jr-accent) 8%, transparent);
+  border-color: color-mix(in srgb, var(--jr-accent) 26%, transparent);
+}
+.botCopy .botName {
+  font-size: 13px;
+  font-weight: 550;
+}
+.preview {
+  font-size: 11px;
+}
+.workspaceNav {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 12px 0;
+  gap: 3px;
+}
+
+.botSetupAction:global(.arco-btn) {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 9px;
+  width: calc(100% - 24px);
+  margin: 0 12px 5px;
+  padding: 10px 13px;
+  height: 40px;
+  font-size: 13px;
+  font-weight: 550;
+  border: 1px solid var(--jr-hairline);
+  border-radius: 9px;
+  color: var(--color-text-1);
+  background: var(--jr-card);
+}
+.botSetupAction :global(.arco-btn-icon) {
+  color: var(--jr-accent);
+}
+.workspaceNav :global(.arco-btn) {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 9px;
+  height: 38px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--color-text-3);
+  border-radius: 8px;
+}
+.workspaceNav .navActive,
+.workspaceNav :global(.arco-btn:hover) {
+  background: var(--bg-hover);
+  color: var(--color-text-1);
+}
+@media (max-width: 900px) {
+  .workspaceOverlay .panel {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr);
+  }
+  .workspaceOverlay .nav {
+    flex-direction: row;
+    overflow: auto;
+    padding: 12px 18px;
+  }
+  .workspaceOverlay .nav .tab:global(.arco-btn.arco-btn-long) {
+    width: auto;
+    flex-shrink: 0;
+  }
+  .workspaceOverlay .content {
+    padding: 22px 20px 40px;
+  }
+  .settingsHeader {
+    padding-inline-start: 20px;
   }
 }

@@ -476,7 +476,8 @@
         "learn": "Learn",
         "handbook": "Role handbook",
         "lessons": "Lessons",
-        "brain": "Cérebro"
+        "brain": "Cérebro",
+        "bot": "My bot"
       },
       "generalTitle": "General",
       "account": "Account",
@@ -524,10 +525,30 @@
       "usedThisWeek": "每週用量",
       "usedTotal": "Total",
       "usageAmount": "{{used}} / {{limit}}",
-      "toggleTheme": "Switch light / dark theme"
+      "toggleTheme": "Switch light / dark theme",
+      "recordHint": "Record a procedure for your bot to learn.",
+      "recordProcedure": "Record a procedure",
+      "settingsHint": "Your bot, your data and your way of working.",
+      "textSize": "Text size",
+      "textSizeHint": "Your messages and replies always use the same size.",
+      "textNormal": "Standard",
+      "textLarger": "Larger",
+      "readingSample": "Your messages and the bot’s replies use the same text size.",
+      "animations": "Bot animations",
+      "animationsHint": "Movement and blinking respect reduced motion.",
+      "yourBots": "Your bots",
+      "knowledge": "Knowledge",
+      "roleManuals": "Role manuals",
+      "searchPeople": "Search people or roles",
+      "filterStatus": "Filter by status",
+      "allStatuses": "All statuses",
+      "noPeopleMatch": "No people match these filters.",
+      "finishEditing": "Done editing",
+      "attach": "附加檔案",
+      "enterToSend": "按 Enter 傳送"
     },
     "search": "Buscar",
-    "newBot": "Novo Bot",
+    "newBot": "建立機器人",
     "learningTitle": "O que este bot deve aprender e lembrar",
     "learningHint": "Registre procedimentos aprovados. O conteúdo fica salvo para este bot e acompanha as conversas futuras.",
     "learningPlaceholder": "Ex.: para fechar o relatório, confira primeiro os pedidos pendentes.",
@@ -1141,7 +1162,8 @@
         "rejected": "已拒絕",
         "superseded": "已取代",
         "suspended": "已暫停"
-      }
+      },
+      "createHint": "將此回覆中的資訊儲存至公司知識庫。分享前，您可以審閱文字及其存取權限。"
     },
     "strata": {
       "title": "Strata Certa",

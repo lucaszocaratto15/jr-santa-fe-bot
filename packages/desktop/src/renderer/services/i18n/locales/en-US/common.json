@@ -476,7 +476,8 @@
         "learn": "Learn",
         "handbook": "Role handbook",
         "lessons": "Lessons",
-        "brain": "Company brain"
+        "brain": "Company brain",
+        "bot": "My bot"
       },
       "generalTitle": "General",
       "account": "Account",
@@ -524,10 +525,30 @@
       "usedThisWeek": "Weekly usage",
       "usedTotal": "Total",
       "usageAmount": "{{used}} / {{limit}}",
-      "toggleTheme": "Switch light / dark theme"
+      "toggleTheme": "Switch light / dark theme",
+      "recordHint": "Record a procedure for your bot to learn.",
+      "recordProcedure": "Record a procedure",
+      "settingsHint": "Your bot, your data and your way of working.",
+      "textSize": "Text size",
+      "textSizeHint": "Your messages and replies always use the same size.",
+      "textNormal": "Standard",
+      "textLarger": "Larger",
+      "readingSample": "Your messages and the bot’s replies use the same text size.",
+      "animations": "Bot animations",
+      "animationsHint": "Movement and blinking respect reduced motion.",
+      "yourBots": "Your bots",
+      "knowledge": "Knowledge",
+      "roleManuals": "Role manuals",
+      "searchPeople": "Search people or roles",
+      "filterStatus": "Filter by status",
+      "allStatuses": "All statuses",
+      "noPeopleMatch": "No people match these filters.",
+      "finishEditing": "Done editing",
+      "attach": "Attach",
+      "enterToSend": "Enter to send"
     },
     "search": "Buscar",
-    "newBot": "Novo Bot",
+    "newBot": "Create bot",
     "learningTitle": "O que este bot deve aprender e lembrar",
     "learningHint": "Registre procedimentos aprovados. O conteúdo fica salvo para este bot e acompanha as conversas futuras.",
     "learningPlaceholder": "Ex.: para fechar o relatório, confira primeiro os pedidos pendentes.",
@@ -1141,7 +1162,8 @@
         "rejected": "Rejected",
         "superseded": "Superseded",
         "suspended": "Suspended"
-      }
+      },
+      "createHint": "Save information from this reply to company knowledge. Review the text and who can access it before sharing."
     },
     "strata": {
       "title": "Strata Certa",

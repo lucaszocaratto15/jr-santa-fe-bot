@@ -77,3 +77,20 @@ describe('streaming caret', () => {
     expect(css).toMatch(/\.jr-bubble\s*\{[^}]*user-select:\s*text/);
   });
 });
+
+describe('consistent chat typography', () => {
+  it('uses the user message font size for reply paragraphs and headings, including the default', () => {
+    const rules = parsedRules().filter((rule) =>
+      ['*', 'h1', 'h2,h3,h4,h5,h6'].includes(selectorOf(rule).replace(/\s/g, ''))
+    ) as CSSStyleRule[];
+    expect(rules).toHaveLength(3);
+    expect(rules.every((rule) => rule.style.getPropertyValue('font-size') === 'var(--chat-font-size, 14px)')).toBe(
+      true
+    );
+  });
+  it('keeps the same fallback on narrow screens instead of enlarging desktop answers', () => {
+    const mobile = createInitStyle('dark', undefined, undefined, true).textContent;
+    expect(mobile).toContain('font-size:var(--chat-font-size, 14px)');
+    expect(mobile).not.toContain('font-size: 24px');
+  });
+});

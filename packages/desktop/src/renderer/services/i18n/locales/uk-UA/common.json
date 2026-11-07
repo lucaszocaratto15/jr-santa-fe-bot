@@ -479,7 +479,8 @@
         "learn": "Learn",
         "handbook": "Role handbook",
         "lessons": "Lessons",
-        "brain": "Cérebro"
+        "brain": "Cérebro",
+        "bot": "My bot"
       },
       "generalTitle": "General",
       "account": "Account",
@@ -527,10 +528,30 @@
       "usedThisWeek": "Використання за тиждень",
       "usedTotal": "Total",
       "usageAmount": "{{used}} / {{limit}}",
-      "toggleTheme": "Switch light / dark theme"
+      "toggleTheme": "Switch light / dark theme",
+      "recordHint": "Record a procedure for your bot to learn.",
+      "recordProcedure": "Record a procedure",
+      "settingsHint": "Your bot, your data and your way of working.",
+      "textSize": "Text size",
+      "textSizeHint": "Your messages and replies always use the same size.",
+      "textNormal": "Standard",
+      "textLarger": "Larger",
+      "readingSample": "Your messages and the bot’s replies use the same text size.",
+      "animations": "Bot animations",
+      "animationsHint": "Movement and blinking respect reduced motion.",
+      "yourBots": "Your bots",
+      "knowledge": "Knowledge",
+      "roleManuals": "Role manuals",
+      "searchPeople": "Search people or roles",
+      "filterStatus": "Filter by status",
+      "allStatuses": "All statuses",
+      "noPeopleMatch": "No people match these filters.",
+      "finishEditing": "Done editing",
+      "attach": "Додати файл",
+      "enterToSend": "Enter — надіслати"
     },
     "search": "Buscar",
-    "newBot": "Novo Bot",
+    "newBot": "Створити бота",
     "learningTitle": "O que este bot deve aprender e lembrar",
     "learningHint": "Registre procedimentos aprovados. O conteúdo fica salvo para este bot e acompanha as conversas futuras.",
     "learningPlaceholder": "Ex.: para fechar o relatório, confira primeiro os pedidos pendentes.",
@@ -1144,7 +1165,8 @@
         "rejected": "Відхилена",
         "superseded": "Замінена",
         "suspended": "Призупинена"
-      }
+      },
+      "createHint": "Збережіть інформацію з цієї відповіді в базі знань компанії. Перед публікацією перевірте текст і коло користувачів із доступом."
     },
     "strata": {
       "title": "Strata Certa",

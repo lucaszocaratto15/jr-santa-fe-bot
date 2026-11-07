@@ -24,7 +24,7 @@ const JrWorkspace: React.FC = () => {
     isLoading: botLoading,
     mutate: refreshBot,
   } = useSWR(selectedId ? ['jr.bot', state.user?.id, selectedId] : null, () => getJrBot(selectedId!));
-  const creating = params.get('create') === '1' && bots?.length === 0;
+  const creating = params.get('create') === '1';
   const editing = params.get('edit') === '1';
   const newConversation = params.get('new') === '1';
   const dialogVisible = creating || editing;

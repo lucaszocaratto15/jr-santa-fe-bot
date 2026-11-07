@@ -518,7 +518,10 @@ const Layout: React.FC<{
                       : undefined
                 }
               >
-                <Outlet />
+                <div id='jr-workspace-content' className='jr-workspace-content'>
+                  <Outlet />
+                </div>
+                <div id='jr-settings-host' className='jr-settings-host' />
                 <PwaPullToRefresh />
                 <Suspense fallback={null}>
                   <UpdateModal />

@@ -22,8 +22,25 @@ export function browserStore(): KeyValueStore {
 const EXECUTION_KEY = 'jr.executionPreference';
 const SPELLCHECK_KEY = 'jr.spellcheck';
 const SIDEBAR_KEY = 'jr.sidebarLayout';
+const MOTION_KEY = 'jr.characterMotion';
+export const MOTION_EVENT = 'jr-character-motion-change';
 
 export const SPELLCHECK_EVENT = 'jr-spellcheck-change';
+
+/** Animated characters remain optional and respect reduced motion inside the SVG. */
+export function readCharacterMotion(store: KeyValueStore = browserStore()): boolean {
+  return store.getItem(MOTION_KEY) !== '0';
+}
+
+export function writeCharacterMotion(enabled: boolean, store: KeyValueStore = browserStore()): void {
+  store.setItem(MOTION_KEY, enabled ? '1' : '0');
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(MOTION_EVENT));
+}
+
+export function subscribeCharacterMotion(listener: () => void): () => void {
+  window.addEventListener(MOTION_EVENT, listener);
+  return () => window.removeEventListener(MOTION_EVENT, listener);
+}
 
 /** Local composer preference. `allow` is the default until the user picks `ask`. */
 export type ExecutionPreference = 'allow' | 'ask';

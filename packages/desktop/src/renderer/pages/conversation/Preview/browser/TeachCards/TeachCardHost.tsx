@@ -16,7 +16,6 @@ import { useLessonCard } from './lessonCardStore';
 import { closeHandbookCard, startHandbookCards, useHandbookCard } from './handbookCardStore';
 import ReviewCard from './ReviewCard';
 import SecureCard from './SecureCard';
-import BrainNoteComposer from '@renderer/pages/Jr/Brain/Notes';
 import { useLessonOffer } from './useLessonOffer';
 import {
   openDescribe,
@@ -105,11 +104,7 @@ const TeachCardHost: React.FC<TeachCardHostProps> = ({ conversationId }) => {
     return null;
   })();
   // Same column as the composer below it.
-  return (
-    <div className={CHAT_SURFACE_WIDTH_CLASS}>
-      {card ?? <BrainNoteComposer key={conversationId} conversationId={conversationId} />}
-    </div>
-  );
+  return card ? <div className={CHAT_SURFACE_WIDTH_CLASS}>{card}</div> : null;
 };
 
 export default TeachCardHost;

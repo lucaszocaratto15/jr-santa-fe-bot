@@ -29,8 +29,8 @@ export const createInitStyle = (
         .join('\n    ')
     : '';
 
-  const lineHeight = isMobile ? '19.6px' : '24px';
-  const fontSize = isMobile ? 'var(--chat-font-size, 14px)' : 'var(--chat-font-size, 16px)';
+  const lineHeight = '1.65';
+  const fontSize = 'var(--chat-font-size, 14px)';
   // Desktop paragraph spacing trimmed from 16px to 12px (~0.85em) for a more
   // compact reply; mobile spacing is left untouched (tuned separately).
   const paragraphMargin = isMobile ? '16px' : '12px';
@@ -136,13 +136,13 @@ export const createInitStyle = (
     color: var(--text-primary);
   }
   h1{
-    font-size: 24px;
-    line-height: 32px;
+    font-size: ${fontSize};
+    line-height: ${lineHeight};
     font-weight: bold;
   }
   h2,h3,h4,h5,h6{
-    font-size: 16px;
-    line-height: 24px;
+    font-size: ${fontSize};
+    line-height: ${lineHeight};
     font-weight: bold;
     margin-top: 20px;
     margin-bottom: 12px;

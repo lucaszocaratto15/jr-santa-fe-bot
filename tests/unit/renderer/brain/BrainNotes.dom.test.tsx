@@ -141,6 +141,30 @@ describe('note consent in chat', () => {
     expect(mocks.create).not.toHaveBeenCalled();
   });
 
+  it('explains sharing on keyboard focus and dismisses the explanation with Escape', async () => {
+    render(withI18n(i18n, <BrainNoteComposer compact sourceText='Resposta escolhida' />));
+    const button = screen.getByRole('button', { name: key('create') });
+    fireEvent.focus(button);
+    const hint = await screen.findByText(key('createHint'));
+    expect(hint).toBeVisible();
+    fireEvent.keyDown(button, { key: 'Escape' });
+    await waitFor(() => expect(hint).not.toBeVisible());
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it('uses the clicked response instead of loading a newer or private conversation', async () => {
+    render(withI18n(i18n, <BrainNoteComposer compact conversationId='fixture-chat' sourceText='Resposta escolhida' />));
+    fireEvent.click(screen.getByRole('button', { name: key('create') }));
+    expect(await screen.findByRole('textbox', { name: key('excerpt') })).toHaveValue('Resposta escolhida');
+    expect(mocks.load).not.toHaveBeenCalled();
+    expect(mocks.create).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: key('authorizeExcerpt') }));
+    await waitFor(() =>
+      expect(mocks.create).toHaveBeenCalledWith({ excerpt: 'Resposta escolhida', sourceRole: 'assistant' })
+    );
+    expect(mocks.consent).not.toHaveBeenCalled();
+  });
+
   it('sends only the edited authorized excerpt and requires another action to share', async () => {
     render(withI18n(i18n, <BrainNoteComposer conversationId='fixture-chat' />));
     fireEvent.click(screen.getByRole('button', { name: key('create') }));

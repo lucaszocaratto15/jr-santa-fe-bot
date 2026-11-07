@@ -681,3 +681,26 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.inlineEditor {
+  max-width: 700px;
+  padding: 24px;
+  border: 1px solid var(--jr-hairline);
+  border-radius: 12px;
+  background: var(--jr-card);
+}
+.inlineEditor .characterEditor {
+  align-items: stretch;
+}
+.inlineEditor .characterPreview {
+  align-self: center;
+}
+.inlineEditor .characterName {
+  font-size: 18px;
+}
+.inlineActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 24px;
+}
