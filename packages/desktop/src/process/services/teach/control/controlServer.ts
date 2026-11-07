@@ -24,6 +24,8 @@ export const TEACH_TOOL_NAMES = [
   'brain_wrong',
   'strata_list_tools',
   'strata_call_tool',
+  'web_search',
+  'web_fetch',
 ] as const;
 
 export type TeachToolName = (typeof TEACH_TOOL_NAMES)[number];

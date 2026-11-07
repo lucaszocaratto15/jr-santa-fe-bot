@@ -13,6 +13,7 @@ import { formatHandbookForBot, handbookEmptyText, HANDBOOK_UNAVAILABLE_TEXT } fr
 import { BRAIN_UNAVAILABLE_TEXT, BRAIN_WRONG_RECORDED_TEXT, formatBrainFacts } from './brainForBot';
 import type { SecureInputBroker, SecureKind } from './secureInput';
 import type { createStrataClient } from '../../jr/strataClient';
+import { createWebTools, type WebTools } from './webTools';
 
 export type TeachHandlerDeps = {
   vault(): VaultStore | null;
@@ -35,6 +36,8 @@ export type TeachHandlerDeps = {
   /** Whether the signed-in JR user is an administrator (only admins may ask for another role). */
   isAdmin(): boolean;
   strata?: () => ReturnType<typeof createStrataClient>;
+  /** Server-side internet search/fetch (DuckDuckGo); injected for tests. */
+  web?: WebTools;
 };
 
 const INVALID = { ok: false, error: 'pedido inválido' } as const;
@@ -69,6 +72,7 @@ export function buildTeachHandlers(deps: TeachHandlerDeps): TeachHandlers {
 
   /** Role key of an admin's last handbook_lookup of another role (handbook_show falls back to it). */
   let adminLookedUpRole: string | null = null;
+  const web = deps.web ?? createWebTools();
 
   return {
     strata_list_tools: async () => {
@@ -78,6 +82,19 @@ export function buildTeachHandlers(deps: TeachHandlerDeps): TeachHandlers {
       } catch {
         return { ok: false, error: 'strata_unavailable' };
       }
+    },
+    web_search: async (body) => {
+      const query = field(body, 'query');
+      const limit = field(body, 'limit');
+      if (typeof query !== 'string' || !query.trim() || query.length > 300) return INVALID;
+      if (limit !== undefined && (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > 10))
+        return INVALID;
+      return web.search({ query, ...(limit === undefined ? {} : { limit }) });
+    },
+    web_fetch: async (body) => {
+      const url = field(body, 'url');
+      if (typeof url !== 'string' || !url.trim() || url.length > 2048) return INVALID;
+      return web.fetchPage({ url });
     },
     strata_call_tool: async (body) => {
       const name = field(body, 'name');

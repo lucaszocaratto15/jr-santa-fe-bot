@@ -13,6 +13,7 @@ import { showNotification } from '@process/bridge/notificationBridge';
 import { getJrAccessController } from '@process/services/jr/auth';
 import i18n from '@process/services/i18n';
 import { getStrataClient } from '@process/services/jr/strataIpc';
+import { createWebTools } from './webTools';
 import { getCdpBridgeHandle } from '@process/utils/cdpBridgeRegistry';
 import { getBrainService } from '../../brain/brainIpc';
 import { getHandbookService, getTeachServices, setSecureInputBroker, setTeachSession } from '../registry';
@@ -120,6 +121,7 @@ export function createMainTeachDeps(): TeachHandlerDeps {
     handbook: getHandbookService,
     brain: getBrainService,
     strata: getStrataClient,
+    web: createWebTools(),
     showHandbook: (request) => ipcBridge.teach.showHandbook.emit(request),
     isAdmin: () => {
       try {

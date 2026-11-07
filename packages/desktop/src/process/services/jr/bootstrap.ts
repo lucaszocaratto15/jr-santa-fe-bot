@@ -138,6 +138,8 @@ const JR_TRUSTED_TEACH_TOOLS = [
   'brain_wrong',
   'strata_list_tools',
   ...JR_STRATA_READ_TOOLS,
+  'web_search',
+  'web_fetch',
 ];
 const allowListConfig = (
   builtins: readonly string[],
