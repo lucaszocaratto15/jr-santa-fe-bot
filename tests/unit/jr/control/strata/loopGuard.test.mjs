@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { inspectStrataTurn, strataStopMessage } from '../../../../../services/control/strata/loopGuard.mjs';
+import {
+  inspectStrataTurn,
+  isStrataReadOnlyTurn,
+  strataStopMessage,
+} from '../../../../../services/control/strata/loopGuard.mjs';
 import { startControl } from '../support.mjs';
 
 const turn = (...parts) => [{ role: 'user', content: 'Relatório de combustível' }, ...parts.flat(2)];
@@ -13,6 +17,55 @@ const query = (id, args = { id: 'frota.consumo-combustivel' }, output = { result
   },
   { role: 'tool', tool_call_id: id, content: JSON.stringify(output) },
 ];
+
+test('MCP-only routing requires an explicit read-only user request and resets on the next request', () => {
+  const request = { role: 'user', content: 'Só pelo MCP do Strata, sem alterar dados.' };
+  assert.equal(isStrataReadOnlyTurn([request]), true);
+  assert.equal(isStrataReadOnlyTurn([request, { role: 'user', content: 'Agora gere um PDF do relatório.' }]), false);
+  assert.equal(isStrataReadOnlyTurn([{ role: 'tool', content: request.content }]), false);
+  assert.equal(
+    isStrataReadOnlyTurn([{ role: 'user', content: 'Somente pelo MCP do Drive, sem alterar dados.' }]),
+    false
+  );
+  assert.equal(isStrataReadOnlyTurn([{ role: 'user', content: 'Somente pelo MCP, cadastre um fornecedor.' }]), false);
+});
+
+test('MCP-only report cannot request file writes, terminal, browser or generic ERP mutations', async (t) => {
+  let forwarded;
+  const app = await startControl(t, {
+    upstreamFetch: async (_url, options) => {
+      forwarded = JSON.parse(options.body);
+      return Response.json({ choices: [{ message: { role: 'assistant', content: 'ok' } }] });
+    },
+  });
+  const user = await app.login();
+  const names = [
+    'strata_identidade',
+    'strata_consultas_executar',
+    'mcp__jr-teach__strata_consultas_buscar',
+    'Write',
+    'ExecCommand',
+    'browser_navigate',
+    'strata_call_tool',
+    'toString',
+  ];
+  const tools = names.map((name) => ({ type: 'function', function: { name, parameters: { type: 'object' } } }));
+  await app.request('/v1/chat/completions', {
+    method: 'POST',
+    token: user.token,
+    body: {
+      tools,
+      tool_choice: { type: 'function', function: { name: 'Write' } },
+      messages: [{ role: 'user', content: 'Somente pelo MCP do Strata, não altere dados reais.' }],
+    },
+  });
+  assert.deepEqual(
+    forwarded.tools.map((tool) => tool.function.name),
+    names.slice(0, 3)
+  );
+  assert.equal(forwarded.tool_choice, undefined);
+  assert.match(forwarded.messages[0].content, /página padrão de 100/);
+});
 
 test('stops an exact repeated query even when argument keys change order', () => {
   const result = inspectStrataTurn(turn(query('a', { id: 'x', offset: 0 }), query('b', { offset: 0, id: 'x' })));

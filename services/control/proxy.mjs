@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { compactMessages, estimateTokens } from './compact.mjs';
-import { inspectStrataTurn, strataStopMessage } from './strata/loopGuard.mjs';
+import { inspectStrataTurn, isStrataReadOnlyTurn, isStrataReadTool, strataStopMessage } from './strata/loopGuard.mjs';
 import {
   createSseReader,
   DEFAULT_ATTEMPT_MS,
@@ -195,6 +195,15 @@ export function createModelProxy({
         if (body.reasoning_effort === 'none') delete body.reasoning_effort;
         // M3.1 defaults to maximum thinking; routine JR requests should not pay that latency implicitly.
         if (model === 'MiniMax-M3.1-Flash' && body.reasoning_effort === undefined) body.reasoning_effort = 'low';
+        const mcpReadOnly = isStrataReadOnlyTurn(body.messages);
+        if (mcpReadOnly && Array.isArray(body.tools)) {
+          body.tools = body.tools.filter((tool) => isStrataReadTool(tool?.function?.name));
+          if (body.tool_choice?.function && !isStrataReadTool(body.tool_choice.function.name)) delete body.tool_choice;
+          if (!body.tools.length) {
+            delete body.tools;
+            delete body.tool_choice;
+          }
+        }
         const readStop = inspectStrataTurn(body.messages);
         if (readStop) {
           const content = strataStopMessage(readStop);
@@ -237,8 +246,11 @@ export function createModelProxy({
           body.max_tokens = outputLimit;
           if (body.max_completion_tokens !== undefined) body.max_completion_tokens = outputLimit;
         }
-        const policy =
+        let policy =
           'Responda sempre em português do Brasil, inclusive nas mensagens de andamento. Seja claro e breve. Não apresente raciocínio interno. Preserve literalmente arquivos, comandos, parâmetros, endereços e resultados das ferramentas. Mantenha todas as regras de confirmação e segurança anteriores. Para consultar o ERP, prefira strata_consultas_buscar, strata_consultas_descrever e strata_consultas_executar. Use o summary calculado pelo ERP e leia data.columns com data.rows como uma tabela. Se page.hasMore for false, não repita nem fragmente a mesma consulta. Se faltarem unidades ou houver medições inválidas, informe a limitação e entregue os dados confirmados. Em erro de permissão ou limite de chamadas, responda e encerre; não use terminal, sleep ou navegador como alternativa. Entregue primeiro o resultado do relatório; não faça buscas extras que não mudem a resposta.';
+        if (mcpReadOnly)
+          policy +=
+            ' Este pedido autoriza somente consultas MCP. Use a página padrão de 100 registros (omita limit ou use 100); o ERP ajusta o tamanho automaticamente. Mantenha os dados no contexto e responda no chat, sem criar notas em arquivos.';
         const system = body.messages.find(
           (message) => message?.role === 'system' && typeof message.content === 'string'
         );

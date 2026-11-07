@@ -19,6 +19,32 @@ const TERMINAL_ERRORS = new Set([
   'strata_link_required',
 ]);
 
+/** Honor explicit MCP-only read requests; ERP remains the authority for permissions. */
+export function isStrataReadOnlyTurn(messages) {
+  const user = messages.findLast((message) => message?.role === 'user');
+  const content = Array.isArray(user?.content)
+    ? user.content
+        .filter((part) => part?.type === 'text')
+        .map((part) => part.text)
+        .join('\n')
+    : user?.content;
+  if (typeof content !== 'string') return false;
+  const text = content
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+  return (
+    /\b(strata|erp)\b/.test(text) &&
+    /\b(somente|apenas|so|exclusivamente)\b[^.!?\n]{0,60}\bmcp\b/.test(text) &&
+    /\b(sem alterar|nao altere|nao alterar|somente (leitura|consultas)|apenas (leitura|consultas))\b/.test(text)
+  );
+}
+
+/** Only fixed catalog reads qualify, never the generic ERP command tool. */
+export function isStrataReadTool(name) {
+  return typeof name === 'string' && Object.hasOwn(DIRECT_TOOLS, name.replace(/^mcp__jr-teach__/, ''));
+}
+
 function json(value) {
   try {
     return typeof value === 'string' ? JSON.parse(value) : value;
