@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { lstat, mkdir, open, readFile, realpath, unlink, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
-import { BUILTIN_TEACH_MCP_NAME } from '@/common/config/constants';
+import { BUILTIN_TEACH_MCP_NAME, JR_STRATA_READ_TOOLS } from '@/common/config/constants';
 import type { ClientBusinessSettingMap } from '@/common/config/clientSettings';
 import { isAionrsAssistant, type Assistant, type CreateAssistantRequest } from '@/common/types/agent/assistantTypes';
 
@@ -137,6 +137,7 @@ const JR_TRUSTED_TEACH_TOOLS = [
   'brain_search',
   'brain_wrong',
   'strata_list_tools',
+  ...JR_STRATA_READ_TOOLS,
 ];
 const allowListConfig = (
   builtins: readonly string[],
@@ -161,7 +162,18 @@ const JR_MANAGED_CONFIGS: ReadonlySet<string> = new Set([
   ].map((builtins) =>
     allowListConfig(
       builtins,
-      JR_TRUSTED_TEACH_TOOLS.filter((tool) => tool !== 'strata_list_tools')
+      JR_TRUSTED_TEACH_TOOLS.filter((tool) => !(JR_STRATA_READ_TOOLS as readonly string[]).includes(tool))
+    )
+  ),
+  ...[
+    ['Read', 'Grep', 'Glob'],
+    ['Read', 'Grep', 'Glob', 'ToolSearch'],
+  ].map((builtins) =>
+    allowListConfig(
+      builtins,
+      JR_TRUSTED_TEACH_TOOLS.filter(
+        (tool) => tool !== 'strata_list_tools' && !(JR_STRATA_READ_TOOLS as readonly string[]).includes(tool)
+      )
     )
   ),
 ]);

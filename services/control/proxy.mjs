@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { compactMessages, estimateTokens } from './compact.mjs';
+import { inspectStrataTurn, strataStopMessage } from './strata/loopGuard.mjs';
 import {
   createSseReader,
   DEFAULT_ATTEMPT_MS,
@@ -192,6 +193,36 @@ export function createModelProxy({
         // thinking and answers 400 (2013), so every summary failed and the history kept growing.
         if (body.thinking?.type === 'disabled') delete body.thinking;
         if (body.reasoning_effort === 'none') delete body.reasoning_effort;
+        // M3.1 defaults to maximum thinking; routine JR requests should not pay that latency implicitly.
+        if (model === 'MiniMax-M3.1-Flash' && body.reasoning_effort === undefined) body.reasoning_effort = 'low';
+        const readStop = inspectStrataTurn(body.messages);
+        if (readStop) {
+          const content = strataStopMessage(readStop);
+          safeLog(`MCP: execução encerrada motivo=${readStop.reason} chamadas=${readStop.count}`);
+          const message = {
+            id: `jr-stop-${id}`,
+            object: body.stream ? 'chat.completion.chunk' : 'chat.completion',
+            created: Math.floor(now() / 1000),
+            model,
+            choices: [
+              {
+                index: 0,
+                ...(body.stream
+                  ? { delta: { role: 'assistant', content } }
+                  : { message: { role: 'assistant', content } }),
+                finish_reason: 'stop',
+              },
+            ],
+            usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+          };
+          response.writeHead(200, {
+            'Content-Type': body.stream ? 'text/event-stream' : 'application/json',
+            'Cache-Control': 'no-store',
+          });
+          response.end(body.stream ? `data: ${JSON.stringify(message)}\n\ndata: [DONE]\n\n` : JSON.stringify(message));
+          status = 'completed';
+          return;
+        }
         const tokenPolicy = store.tokenPolicy(session.user.id);
         if (tokenPolicy) {
           if ([...active.values()].filter((entry) => entry.userId === session.user.id).length > 1)
@@ -207,7 +238,7 @@ export function createModelProxy({
           if (body.max_completion_tokens !== undefined) body.max_completion_tokens = outputLimit;
         }
         const policy =
-          'Responda sempre em português do Brasil, inclusive nas mensagens de andamento. Seja claro e breve. Não apresente raciocínio interno. Preserve literalmente arquivos, comandos, parâmetros, endereços e resultados das ferramentas. Mantenha todas as regras de confirmação e segurança anteriores.';
+          'Responda sempre em português do Brasil, inclusive nas mensagens de andamento. Seja claro e breve. Não apresente raciocínio interno. Preserve literalmente arquivos, comandos, parâmetros, endereços e resultados das ferramentas. Mantenha todas as regras de confirmação e segurança anteriores. Para consultar o ERP, prefira strata_consultas_buscar, strata_consultas_descrever e strata_consultas_executar. Use o summary calculado pelo ERP e leia data.columns com data.rows como uma tabela. Se page.hasMore for false, não repita nem fragmente a mesma consulta. Se faltarem unidades ou houver medições inválidas, informe a limitação e entregue os dados confirmados. Em erro de permissão ou limite de chamadas, responda e encerre; não use terminal, sleep ou navegador como alternativa. Entregue primeiro o resultado do relatório; não faça buscas extras que não mudem a resposta.';
         const system = body.messages.find(
           (message) => message?.role === 'system' && typeof message.content === 'string'
         );

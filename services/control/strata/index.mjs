@@ -26,6 +26,7 @@ export function createStrataService({ databasePath, strata: input, now = Date.no
   const store = config ? createStrataStore(databasePath, config, now) : null;
   const pending = new Map();
   const refreshes = new Map();
+  const clients = new Map();
   let metadataPromise = null;
   const configured = () => {
     if (!config) throw httpError(503, 'strata_unconfigured');
@@ -129,6 +130,22 @@ export function createStrataService({ databasePath, strata: input, now = Date.no
       )
     );
   };
+  const initializedClient = (grant, erpUserId) => {
+    const key = `${digest(grant.accessToken)}:${erpUserId}`;
+    const current = clients.get(key);
+    if (current && current.expiresAt > now()) return current.promise;
+    clients.delete(key);
+    if (clients.size >= 1000) clients.delete(clients.keys().next().value);
+    const entry = {
+      expiresAt: Math.min(grant.expiresAt, now() + FLOW_MS),
+      promise: mcpClient(config, strataFetch, grant.accessToken, erpUserId).catch((error) => {
+        if (clients.get(key) === entry) clients.delete(key);
+        throw error;
+      }),
+    };
+    clients.set(key, entry);
+    return entry.promise;
+  };
   const verifyGrant = async (grant) => {
     const url = new URL(config.resourceUrl);
     url.pathname = `${url.pathname}/vinculo`;
@@ -148,7 +165,8 @@ export function createStrataService({ databasePath, strata: input, now = Date.no
       !Array.isArray(identity.empresas)
     )
       throw httpError(503, 'strata_invalid_identity');
-    const client = await mcpClient(config, strataFetch, grant.accessToken, identity.app_user_id);
+    // Reuse only protocol initialization, never identity, permissions, catalogs or business results.
+    const client = await initializedClient(grant, identity.app_user_id);
     const principal = toolJson(await client.rpc('tools/call', { name: 'erp.quem_sou', arguments: {} }));
     if (
       !record(principal) ||
@@ -425,6 +443,7 @@ export function createStrataService({ databasePath, strata: input, now = Date.no
     },
     close() {
       pending.clear();
+      clients.clear();
       store?.close();
     },
   };

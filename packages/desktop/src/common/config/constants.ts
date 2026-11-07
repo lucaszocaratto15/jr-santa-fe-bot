@@ -49,6 +49,12 @@ export const BUILTIN_BROWSER_MCP_NAME = 'aionui-browser';
 
 /** Name of the built-in MCP server that lets the agent use the vault and submit taught-task drafts. */
 export const BUILTIN_TEACH_MCP_NAME = 'jr-teach';
+export const JR_STRATA_READ_TOOLS = [
+  'strata_identidade',
+  'strata_consultas_buscar',
+  'strata_consultas_descrever',
+  'strata_consultas_executar',
+] as const;
 
 // ===== 文件处理相关常量 =====
 

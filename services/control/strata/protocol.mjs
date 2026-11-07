@@ -37,12 +37,14 @@ export async function request(config, fetcher, url, init = {}) {
     const text = await boundedText(response);
     if (!response.ok)
       throw httpError(
-        [401, 403].includes(response.status) ? 403 : 503,
+        response.status === 429 ? 429 : [401, 403].includes(response.status) ? 403 : 503,
         response.status === 401
           ? 'strata_reconnect_required'
           : response.status === 403
             ? 'strata_forbidden'
-            : 'strata_unavailable'
+            : response.status === 429
+              ? 'strata_rate_limited'
+              : 'strata_unavailable'
       );
     return { response, text };
   } catch (error) {
@@ -109,7 +111,7 @@ export async function discover(config, fetcher) {
   throw httpError(503, 'strata_invalid_metadata');
 }
 
-/** One standard initialization per operation; ERP revalidates identity and permissions on every RPC. */
+/** Initialize a transport; ERP revalidates identity and permissions on every subsequent RPC. */
 export async function mcpClient(config, fetcher, accessToken, erpUserId) {
   const headers = {
     Authorization: `Bearer ${accessToken}`,

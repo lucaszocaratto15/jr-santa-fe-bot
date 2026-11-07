@@ -37,6 +37,7 @@ export async function startErp(t) {
     permissions: true,
     knowledgeGroup: null,
     unavailable: false,
+    rateLimited: false,
     useSse: false,
     mismatchIdentity: false,
     refreshCalls: 0,
@@ -102,6 +103,7 @@ export async function startErp(t) {
       seen.push({ path: url.pathname, headers: request.headers, raw });
       if (state.unavailable && !url.pathname.startsWith('/oauth/authorize'))
         return asJson(response, 503, { error: 'fixture_unavailable' });
+      if (state.rateLimited && url.pathname.startsWith('/mcp')) return asJson(response, 429, { error: 'rate_limited' });
       if (url.pathname === '/.well-known/oauth-protected-resource/mcp')
         return asJson(response, 200, {
           resource: `${baseUrl}/mcp`,

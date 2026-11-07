@@ -5,6 +5,31 @@ import { fixture } from './fixture.mjs';
 const call = (f, input = { name: 'obras.listar', arguments: {} }, token = f.owner.token) =>
   f.app.request('/strata/mcp/call', { method: 'POST', token, body: input });
 
+test('reuses initialization while checking current identity and permissions on every query', async (t) => {
+  const f = await fixture(t);
+  await f.link();
+  f.erp.seen.length = 0;
+  await Promise.all([call(f), call(f), call(f)]);
+  assert.equal(
+    f.erp.seen.filter((entry) => entry.path === '/mcp' && JSON.parse(entry.raw).method === 'initialize').length,
+    0
+  );
+  assert.equal(f.erp.seen.filter((entry) => entry.path === '/mcp/vinculo').length, 3);
+  f.erp.state.permissions = false;
+  assert.equal((await (await call(f)).json()).isError, true);
+});
+
+test('reports ERP throttling as throttling without retrying or returning old results', async (t) => {
+  const f = await fixture(t);
+  await f.link();
+  f.erp.state.rateLimited = true;
+  f.erp.seen.length = 0;
+  const response = await call(f);
+  assert.equal(response.status, 429);
+  assert.deepEqual(await response.json(), { error: { code: 'strata_rate_limited' } });
+  assert.equal(f.erp.seen.length, 1);
+});
+
 for (const select of [false, true])
   test(`group catalog spans all companies with stored selection ${select}`, async (t) => {
     const f = await fixture(t);

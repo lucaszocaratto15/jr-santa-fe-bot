@@ -383,7 +383,7 @@ test('company presentation policy stays Portuguese while preserving tool and fil
   assert.deepEqual(forwarded.messages[1], messages[1]);
 });
 
-test('AionRS compaction asks for disabled thinking, which MiniMax rejects, so the field is dropped', async (t) => {
+test('AionRS disabled thinking is replaced with supported low reasoning for MiniMax', async (t) => {
   let forwarded;
   const app = await startControl(t, {
     upstreamFetch: async (_url, options) => {
@@ -406,7 +406,7 @@ test('AionRS compaction asks for disabled thinking, which MiniMax rejects, so th
   await response.text();
   assert.equal(response.status, 200);
   assert.equal('thinking' in forwarded, false);
-  assert.equal('reasoning_effort' in forwarded, false);
+  assert.equal(forwarded.reasoning_effort, 'low');
   assert.equal(forwarded.max_tokens, 20000);
 });
 

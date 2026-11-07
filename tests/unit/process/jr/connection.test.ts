@@ -325,10 +325,33 @@ it('lets the read-only bot tools run without a prompt but keeps vault_fill askin
       '"mcp__jr-teach__brain_search"',
       '"Read"',
       '"ToolSearch"',
+      '"strata_consultas_executar"',
+      '"mcp__jr-teach__strata_consultas_executar"',
     ])
       expect(allow).toContain(tool);
     expect(allow).not.toContain('vault_fill');
+    expect(allow).not.toContain('strata_call_tool');
+    expect(allow).not.toContain('ExecCommand');
     expect(config).toContain('autocompact_threshold_pct = 55');
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it('upgrades the previous Strata allow list without allowing generic writes or shell commands', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'jr-workspace-read-upgrade-'));
+  try {
+    const workspace = await createJrWorkspace(root, teachScript);
+    const path = join(workspace, '.aionrs.toml');
+    const current = await readFile(path, 'utf8');
+    const legacy = current.replace(
+      /, "(?:mcp__jr-teach__)?strata_(?:identidade|consultas_buscar|consultas_descrever|consultas_executar)"/g,
+      ''
+    );
+    expect(legacy).not.toBe(current);
+    await writeFile(path, legacy);
+    await configureJrWorkspaceContext(root, workspace, teachScript);
+    expect(await readFile(path, 'utf8')).toBe(current);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

@@ -1,0 +1,120 @@
+const READ_TOOLS = new Set([
+  'erp.quem_sou',
+  'erp.consultas.buscar',
+  'erp.consultas.descrever',
+  'erp.consultas.executar',
+]);
+const DIRECT_TOOLS = {
+  strata_identidade: 'erp.quem_sou',
+  strata_consultas_buscar: 'erp.consultas.buscar',
+  strata_consultas_descrever: 'erp.consultas.descrever',
+  strata_consultas_executar: 'erp.consultas.executar',
+};
+const TERMINAL_ERRORS = new Set([
+  'strata_rate_limited',
+  'rate_limited',
+  'strata_reconnect_required',
+  'strata_forbidden',
+  'permission_denied',
+  'strata_link_required',
+]);
+
+function json(value) {
+  try {
+    return typeof value === 'string' ? JSON.parse(value) : value;
+  } catch {
+    return null;
+  }
+}
+
+function ordered(value) {
+  if (Array.isArray(value)) return value.map(ordered);
+  if (value && typeof value === 'object')
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, ordered(value[key])])
+    );
+  return value;
+}
+
+function resultOf(message) {
+  const body = json(
+    Array.isArray(message.content)
+      ? message.content
+          .filter((part) => part.type === 'text')
+          .map((part) => part.text)
+          .join('\n')
+      : message.content
+  );
+  if (Array.isArray(body?.content)) {
+    const inner = json(body.content.find((part) => part.type === 'text')?.text);
+    return inner && typeof inner === 'object'
+      ? { ...inner, ...(body.isError === true ? { isError: true } : {}) }
+      : body;
+  }
+  return body;
+}
+
+/** Bound a single ERP read turn without caching data or changing any ERP permission. */
+export function inspectStrataTurn(messages) {
+  const start = messages.findLastIndex((message) => message?.role === 'user');
+  if (start < 0) return null;
+  const calls = new Map();
+  const completed = new Set();
+  const repeats = new Map();
+  let count = 0;
+  let failures = 0;
+  let fuelSummary = null;
+  for (const message of messages.slice(start + 1)) {
+    for (const call of message?.tool_calls || []) {
+      if (typeof call.id !== 'string' || !call.id) continue;
+      const name = (call.function?.name || '').replace(/^mcp__jr-teach__/, '');
+      const args = json(call.function?.arguments);
+      const operation = name === 'strata_call_tool' ? args?.name : DIRECT_TOOLS[name];
+      if (!READ_TOOLS.has(operation) && name !== 'strata_list_tools') continue;
+      calls.set(
+        call.id,
+        `${operation || name}:${JSON.stringify(ordered(name === 'strata_call_tool' ? args.arguments : args))}`
+      );
+    }
+    if (message?.role !== 'tool' || !calls.has(message.tool_call_id) || completed.has(message.tool_call_id)) continue;
+    completed.add(message.tool_call_id);
+    count += 1;
+    const result = resultOf(message);
+    const code = typeof result?.error === 'string' ? result.error : result?.error?.code;
+    if (result?.operation === 'frota.consumo-combustivel' && result.summary?.complete === true)
+      fuelSummary = result.summary;
+    const key = calls.get(message.tool_call_id);
+    repeats.set(key, (repeats.get(key) || 0) + 1);
+    const failed = Boolean(code || result?.isError === true || result?.ok === false);
+    failures = failed ? failures + 1 : 0;
+    const reason = TERMINAL_ERRORS.has(code)
+      ? code
+      : failures >= 2
+        ? 'repeated_failure'
+        : repeats.get(key) >= 2
+          ? 'repeated_query'
+          : count >= 12
+            ? 'read_budget'
+            : null;
+    if (reason) return { reason, count, fuelSummary };
+  }
+  return null;
+}
+
+/** A deterministic stop cannot ask the executor to retry, sleep or switch to a browser. */
+export function strataStopMessage({ reason, fuelSummary }) {
+  const limited = reason === 'strata_rate_limited' || reason === 'rate_limited';
+  let message = limited
+    ? 'O ERP atingiu o limite de chamadas. Interrompi a consulta para evitar novas tentativas em sequência.'
+    : 'Interrompi as consultas porque houve repetição, falha persistente ou o limite de etapas desta resposta foi atingido.';
+  if (fuelSummary && Number.isFinite(fuelSummary.totalLiters) && Number.isInteger(fuelSummary.records)) {
+    const format = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 6 });
+    message += `\n\nO retorno completo já confirmado do MCP contém ${format.format(fuelSummary.totalLiters)} litros em ${fuelSummary.records} registros. Fonte: frota.consumo-combustivel. Consulte as unidades e os alertas de qualidade antes de calcular médias.`;
+  }
+  return (
+    message +
+    '\n\nNão concluí todas as etapas do relatório. Esta tentativa foi encerrada; nenhuma alteração de negócio foi executada por esta proteção.'
+  );
+}
