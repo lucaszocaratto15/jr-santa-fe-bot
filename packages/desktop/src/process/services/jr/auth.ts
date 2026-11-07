@@ -259,7 +259,7 @@ export class JrAccessController {
       ...(this.current.notice ? { notice: this.current.notice } : {}),
     };
   }
-  /** Native-only identity for the one employee assistant; callers cannot choose its owner or id. */
+  /** Native-only owner and legacy assistant id; new bot ids use this account-bound prefix. */
   employeeAssistantIdentity(): { ownerAccountId: string; assistantId: string; generation: number } {
     if (
       this.current.status !== 'authenticated' ||

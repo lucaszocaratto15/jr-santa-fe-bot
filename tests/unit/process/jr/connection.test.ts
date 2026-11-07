@@ -557,7 +557,7 @@ it('Strata native execution observes only successful known ERP query receipts af
   }
 });
 
-it('creates the canonical employee assistant once during concurrent requests and never reassigns legacy assistants', async () => {
+it('deduplicates in-flight submissions and creates distinct bots without replacing earlier bots', async () => {
   const { createEmployeeAssistantRegistry } = await import('@/process/services/jr/bootstrap');
   const rows = [
     { id: 'runtime', source: 'generated', agent_id: 'embedded', agent: { type: 'aionrs' } },
@@ -574,21 +574,22 @@ it('creates the canonical employee assistant once during concurrent requests and
     create,
     skills: async () => ['read', 'read'],
   });
-  expect(await Promise.all([register({ name: 'A' }), register({ name: 'A' })])).toEqual(
-    [identity, identity].map(({ generation: _generation, ...result }) => result)
-  );
-  await register({ name: 'Renamed' });
-  expect(create).toHaveBeenCalledTimes(1);
+  const results = await Promise.all([register({ name: 'A' }), register({ name: 'A' })]);
+  expect(results[0]).toEqual(results[1]);
+  const second = await register({ name: 'B' });
+  expect(second.assistantId).not.toBe(results[0].assistantId);
+  expect(rows.map(({ id }) => id)).toEqual(['runtime', results[0].assistantId, second.assistantId]);
+  expect(create).toHaveBeenCalledTimes(2);
   expect(create).toHaveBeenCalledWith(
     expect.objectContaining({
-      id: 'employee-a',
+      id: expect.stringMatching(/^employee-a-/),
       avatar: '🤖',
       defaults: { skills: { mode: 'fixed', value: ['read'] } },
     })
   );
 });
 
-it('keeps canonical assistant identities separate for different authenticated accounts', async () => {
+it('keeps new bot identities separate for different authenticated accounts', async () => {
   const { createEmployeeAssistantRegistry } = await import('@/process/services/jr/bootstrap');
   const runtime = {
     id: 'runtime',
@@ -610,7 +611,10 @@ it('keeps canonical assistant identities separate for different authenticated ac
   await register({ name: 'Same name' });
   identity = { ownerAccountId: 'account-b', assistantId: 'employee-b', generation: 2 };
   await register({ name: 'Same name' });
-  expect(create.mock.calls.map(([input]) => input.id)).toEqual(['employee-a', 'employee-b']);
+  expect(create.mock.calls.map(([input]) => input.id)).toEqual([
+    expect.stringMatching(/^employee-a-/),
+    expect.stringMatching(/^employee-b-/),
+  ]);
 });
 
 it('rejects assistant creation if logout or relogin changes the session while the catalog loads', async () => {
@@ -630,18 +634,18 @@ it('rejects assistant creation if logout or relogin changes the session while th
   expect(create).not.toHaveBeenCalled();
 });
 
-it('refuses to take over an existing non-user assistant at the canonical id', async () => {
+it('refuses creation without a supported runtime', async () => {
   const { createEmployeeAssistantRegistry } = await import('@/process/services/jr/bootstrap');
   const create = vi.fn();
   const register = createEmployeeAssistantRegistry({
     identity: () => ({ ownerAccountId: 'account-a', assistantId: 'employee-a', generation: 1 }),
     list: async () =>
       [
-        { id: 'employee-a', source: 'builtin', agent: { type: 'aionrs' } },
+        { id: 'employee-a', source: 'builtin', agent: { type: 'gemini' } },
       ] as unknown as import('@/common/types/agent/assistantTypes').Assistant[],
     create,
     skills: async () => [],
   });
-  await expect(register({ name: 'A' })).rejects.toThrow('JR_ASSISTANT_ID_CONFLICT');
+  await expect(register({ name: 'A' })).rejects.toThrow('JR_ASSISTANT_RUNTIME_UNAVAILABLE');
   expect(create).not.toHaveBeenCalled();
 });

@@ -61,7 +61,7 @@ export function createEmployeeAssistantMigration(deps: {
   };
 }
 
-/** Serialize the canonical JR creation path; existing assistants and legacy data are never deleted. */
+/** Coalesce duplicate submissions; each completed creation gets a new account-bound id. */
 export function createEmployeeAssistantRegistry(deps: {
   identity: () => EmployeeAssistantIdentity;
   list: () => Promise<Assistant[]>;
@@ -78,34 +78,31 @@ export function createEmployeeAssistantRegistry(deps: {
       if (next.ownerAccountId !== identity.ownerAccountId || next.generation !== identity.generation)
         throw new Error('JR_ACCESS_REQUIRED');
     };
-    let run = pending.get(identity.assistantId);
+    const key = `${identity.ownerAccountId}:${identity.generation}:${input.name.trim()}`;
+    let run = pending.get(key);
     if (!run) {
       run = (async () => {
         const assistants = await deps.list();
         current();
-        const existing = assistants.find((assistant) => assistant.id === identity.assistantId);
-        if (existing && (existing.source !== 'user' || !isAionrsAssistant(existing)))
-          throw new Error('JR_ASSISTANT_ID_CONFLICT');
-        if (!existing) {
-          const runtime = assistants.find(isAionrsAssistant);
-          if (!runtime) throw new Error('JR_ASSISTANT_RUNTIME_UNAVAILABLE');
-          const skillIds = await deps.skills();
-          current();
-          const created = await deps.create({
-            id: identity.assistantId,
-            name: input.name.trim(),
-            agent_id: runtime.agent_id,
-            avatar: '🤖',
-            defaults: { skills: { mode: 'fixed', value: [...new Set(skillIds)].toSorted() } },
-          });
-          if (created.id !== identity.assistantId) throw new Error('JR_ASSISTANT_INVALID_RESPONSE');
-        }
+        const assistantId = `${identity.assistantId}-${randomUUID()}`;
+        const runtime = assistants.find(isAionrsAssistant);
+        if (!runtime) throw new Error('JR_ASSISTANT_RUNTIME_UNAVAILABLE');
+        const skillIds = await deps.skills();
         current();
-        return { ownerAccountId: identity.ownerAccountId, assistantId: identity.assistantId };
+        const created = await deps.create({
+          id: assistantId,
+          name: input.name.trim(),
+          agent_id: runtime.agent_id,
+          avatar: '🤖',
+          defaults: { skills: { mode: 'fixed', value: [...new Set(skillIds)].toSorted() } },
+        });
+        if (created.id !== assistantId) throw new Error('JR_ASSISTANT_INVALID_RESPONSE');
+        current();
+        return { ownerAccountId: identity.ownerAccountId, assistantId };
       })().finally(() => {
-        if (pending.get(identity.assistantId) === run) pending.delete(identity.assistantId);
+        if (pending.get(key) === run) pending.delete(key);
       });
-      pending.set(identity.assistantId, run);
+      pending.set(key, run);
     }
     const result = await run;
     current();
