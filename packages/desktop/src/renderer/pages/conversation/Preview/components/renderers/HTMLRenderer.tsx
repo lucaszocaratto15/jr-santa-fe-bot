@@ -5,6 +5,7 @@
  */
 
 import { ipcBridge } from '@/common';
+import { PREVIEW_SESSION_PARTITION } from '@/common/config/constants';
 import { useTypingAnimation } from '@/renderer/hooks/chat/useTypingAnimation';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useScrollSyncTarget } from '../../hooks/useScrollSyncHelpers';
@@ -742,7 +743,8 @@ const HTMLRenderer: React.FC<HTMLRendererProps> = ({
               bottom: 0,
               height: '100%',
             }}
-            webpreferences='allowRunningInsecureContent, javascript=yes'
+            partition={PREVIEW_SESSION_PARTITION}
+            webpreferences='contextIsolation=yes, nodeIntegration=no, javascript=yes'
           />
         </>
       ) : (

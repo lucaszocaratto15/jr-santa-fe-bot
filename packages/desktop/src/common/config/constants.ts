@@ -31,6 +31,12 @@
 export const BROWSER_SESSION_PARTITION = 'persist:aionui-browser';
 
 /**
+ * In-memory session used only by the HTML preview webview. It never shares
+ * cookies, storage or permissions with the app renderer.
+ */
+export const PREVIEW_SESSION_PARTITION = 'aionui-preview';
+
+/**
  * 内置浏览器 MCP 的注册名。
  *
  * 放在 common 的理由和上面一样，而且更强：主进程用它注册这个内置 MCP，渲染进程用它

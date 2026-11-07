@@ -17,6 +17,7 @@ initSentry();
 
 import './process/utils/configureConsoleLog';
 import { app, BrowserWindow, ipcMain, nativeImage, powerMonitor, session, safeStorage } from 'electron';
+import type { WebContents } from 'electron';
 import fixPath from 'fix-path';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -55,6 +56,9 @@ import { classifyBackendStartupFailure } from './process/startup/backendStartupF
 import { installQuitCleanup } from './process/startup/quitCleanup';
 import { shouldRegisterBackendStartup } from './process/startup/singleInstanceGating';
 import { ProcessConfig } from './process/utils/initStorage';
+import { permissionDecision } from './process/utils/permissions';
+import { sanitizeWebviewPreferences } from './process/utils/webviewSecurity';
+import { PREVIEW_SESSION_PARTITION } from './common/config/constants';
 import type { BackendStartupFailureInfo } from './common/types/platform/electron';
 import { registerWindowMaximizeListeners } from '@process/bridge';
 import { BackendLifecycleManager } from '@aionui/web-host';
@@ -774,15 +778,26 @@ const handleAppReady = async (): Promise<void> => {
 
   setSentryDeviceId();
 
-  // Allow the renderer's Local Font Access queries (window.queryLocalFonts),
-  // used by the appearance font picker to enumerate installed fonts. Electron 37
-  // surfaces the 'local-fonts' permission as 'unknown' and denies it when no
-  // request handler is installed. Grant it here; other permissions are granted
-  // too so installing this handler preserves Electron's default-grant behaviour
-  // and regresses no capability the app already relies on. Runs once, before any
-  // window is created.
-  session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
-    callback(true);
+  // Approve only the capabilities the app renderer actually uses, and only for
+  // the main window. Webviews (HTML preview, in-app browser) are guests and
+  // never inherit camera, microphone, geolocation or font access.
+  const isMainRenderer = (webContents: WebContents): boolean => webContents === mainWindow?.webContents;
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+    callback(permissionDecision(permission, webContents.getType(), isMainRenderer(webContents)));
+  });
+  session.defaultSession.setPermissionCheckHandler((webContents, permission) =>
+    permissionDecision(permission, webContents.getType(), isMainRenderer(webContents))
+  );
+  const previewSession = session.fromPartition(PREVIEW_SESSION_PARTITION);
+  previewSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
+  previewSession.setPermissionCheckHandler(() => false);
+
+  // A webview must never carry a preload or Node integration, regardless of who
+  // created it. Unknown schemes are rejected before attachment.
+  app.on('web-contents-created', (_event, contents) => {
+    contents.on('will-attach-webview', (event, webPreferences, params) => {
+      if (!sanitizeWebviewPreferences(webPreferences, params)) event.preventDefault();
+    });
   });
 
   try {
