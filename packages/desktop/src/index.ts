@@ -616,6 +616,18 @@ const createWindow = ({ showOnReady = true }: { showOnReady?: boolean } = {}): v
         autoUpdaterService.initialize(statusBroadcast);
         autoUpdaterService.setBeforeQuitAndInstall(async () => {
           await backendManager.stop();
+          // Keep a recoverable copy of bots, conversations, settings and JR data even if a
+          // future migration or installer goes wrong.
+          try {
+            const { backupUserData } = await import('./process/services/updateBackup');
+            const target = await backupUserData({
+              userData: app.getPath('userData'),
+              version: app.getVersion(),
+            });
+            if (target) console.log('[auto-update] profile backup written to', target);
+          } catch (error) {
+            console.error('[auto-update] profile backup failed', error);
+          }
         });
         // Check for updates after 3 seconds delay. Skipped in the discontinued
         // build: AionUi's final version guides users to the website instead of
