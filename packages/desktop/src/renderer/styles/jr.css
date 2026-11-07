@@ -110,6 +110,15 @@ body[arco-theme='dark'] {
   --jr-focus: var(--jr-accent);
 }
 
+/* Dark mode flips the Arco primary scale to a light brand, but Arco keeps white
+   text on primary buttons. Use the on-brand ink so Save/Connect/Enable stay readable. */
+body[arco-theme='dark'] .arco-btn-primary:not(.arco-btn-status-danger):not(.arco-btn-disabled),
+body[arco-theme='dark'] .arco-btn-primary:not(.arco-btn-status-danger):not(.arco-btn-disabled):hover,
+body[arco-theme='dark'] .arco-btn-primary:not(.arco-btn-status-danger):not(.arco-btn-disabled):focus,
+body[arco-theme='dark'] .arco-btn-primary:not(.arco-btn-status-danger):not(.arco-btn-disabled):active {
+  color: var(--jr-on-brand) !important;
+}
+
 .app-shell {
   position: relative;
   font-size: 14px;
