@@ -246,3 +246,6 @@ docs/pilot/strata-brain-policy.patch
 docs/pilot/strata-catalog/
 docs/pilot/jr-oauth-production.json
 docs/pilot/jr-production-preflight.md
+# Python gateway test artifacts
+__pycache__/
+*.pyc
