@@ -203,11 +203,6 @@ body[arco-theme='dark'] {
 .jr-brand-symbol {
   -webkit-app-region: no-drag;
 }
-.app-shell .chat-surface-fluid {
-  width: min(720px, calc(100% - 32px));
-  max-width: 720px;
-  margin-inline: auto;
-}
 .app-shell .chat-layout-header {
   padding-block: 10px;
   gap: 8px;
