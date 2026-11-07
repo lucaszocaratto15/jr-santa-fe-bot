@@ -1,4 +1,4 @@
-import { Alert, Button, Message, Select, Spin } from '@arco-design/web-react';
+import { Button, Message } from '@arco-design/web-react';
 import {
   Analysis,
   BookOpen,
@@ -12,11 +12,11 @@ import {
   Lock,
   SettingTwo,
 } from '@icon-park/react';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import useSWR, { mutate } from 'swr';
+import useSWR from 'swr';
 import type { LearnSuggestion } from '@/common/types/agent/learnTypes';
 import { JR_BOTS_KEY } from '@renderer/pages/Jr/index';
 import { listJrBots, startJrConversation } from '@renderer/pages/Jr/jrBots';
@@ -34,13 +34,11 @@ import TasksPanel from './Teach/TasksPanel';
 import { pickRunBot } from './Teach/taskActions';
 import UsagePanel from './Usage/UsagePanel';
 import VaultPanel from './Teach/VaultPanel';
-import JrBotDialog from '../JrBotDialog';
 import Connections from '../Connections';
 import styles from './JrSidebar.module.css';
 
 export const SETTINGS_TABS = [
   'general',
-  'bot',
   'computer',
   'connections',
   'usage',
@@ -56,7 +54,6 @@ export type SettingsTab = (typeof SETTINGS_TABS)[number];
 
 const TAB_LABEL = {
   general: 'common.jr.look.tabs.general',
-  bot: 'common.jr.look.tabs.bot',
   computer: 'common.jr.look.tabs.computer',
   connections: 'common.jr.mcp.title',
   usage: 'common.jr.look.tabs.usage',
@@ -90,7 +87,6 @@ const JrSettingsModal: React.FC<{
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const [selectedBot, setSelectedBot] = useState<string>();
   const contentRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   // Without the company access provider nobody is a manager: the tab stays hidden.
@@ -102,11 +98,9 @@ const JrSettingsModal: React.FC<{
     access = null;
   }
   const bots = useSWR(
-    (tab === 'learn' || tab === 'bot') && access?.state.user?.id ? [JR_BOTS_KEY, access.state.user.id] : null,
+    tab === 'learn' && access?.state.user?.id ? [JR_BOTS_KEY, access.state.user.id] : null,
     listJrBots
   );
-  const botList = Array.isArray(bots.data) ? bots.data : [];
-  const activeBot = botList.find((bot) => bot.id === (selectedBot ?? params.get('bot'))) ?? botList[0];
   const contextVersion = useBrainContextVersion();
   const ownerId = access?.state.user?.id;
   // ERP capabilities, not a JR administrator role, decide whether the management tab exists.
@@ -218,40 +212,6 @@ const JrSettingsModal: React.FC<{
         </nav>
         <div className={styles.content} ref={contentRef}>
           {current === 'general' && <GeneralPanel onNavigate={onClose} />}
-          {current === 'bot' && (
-            <div>
-              <h2 className={styles.pageTitle}>{t('common.jr.look.tabs.bot')}</h2>
-              {bots.error ? (
-                <Alert type='error' content={t('common.jr.loadError')} />
-              ) : bots.isLoading ? (
-                <Spin />
-              ) : activeBot ? (
-                <>
-                  <Select
-                    className={styles.botSelect}
-                    value={activeBot.id}
-                    onChange={setSelectedBot}
-                    aria-label={t('common.jr.botName')}
-                    options={botList.map((bot) => ({ value: bot.id, label: bot.name }))}
-                  />
-                  <JrBotDialog
-                    embedded
-                    visible
-                    bot={activeBot}
-                    onClose={() => onTab('general')}
-                    onSaved={async (saved) => {
-                      await bots.mutate();
-                      await mutate(['jr.bot', saved.id]);
-                      await mutate(['jr.bot', ownerId, saved.id]);
-                      Message.success(t('common.saveSuccess'));
-                    }}
-                  />
-                </>
-              ) : (
-                <p className={styles.muted}>{t('common.jr.noBots')}</p>
-              )}
-            </div>
-          )}
           {current === 'connections' && <Connections embedded onClose={() => onTab('general')} />}
           {current === 'computer' && <ComputerPanel />}
           {current === 'usage' && <UsagePanel />}
