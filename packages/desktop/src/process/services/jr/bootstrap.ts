@@ -152,6 +152,7 @@ allow_list = [${tools.map((tool) => `"${tool}"`).join(', ')}]
 const JR_AIONRS_CONFIG = allowListConfig(['Read', 'Grep', 'Glob', 'ToolSearch']);
 /** Configs earlier app versions wrote; only these are ever rewritten. */
 const JR_MANAGED_CONFIGS: ReadonlySet<string> = new Set([
+  JR_AIONRS_CONFIG,
   JR_AIONRS_COMPACT,
   allowListConfig(['Read', 'Grep', 'Glob']),
   ...[
@@ -165,6 +166,37 @@ const JR_MANAGED_CONFIGS: ReadonlySet<string> = new Set([
   ),
 ]);
 
+const JR_TEACH_CONFIG_MARKER = '# JR managed built-in MCP\n';
+
+function teachMcpConfig(scriptPath: string): string {
+  if (!isAbsolute(scriptPath)) throw new Error('Invalid built-in MCP script path');
+  return `${JR_TEACH_CONFIG_MARKER}[mcp.servers."${BUILTIN_TEACH_MCP_NAME}"]
+transport = "stdio"
+command = "node"
+args = [${JSON.stringify(scriptPath)}]
+deferred = false
+startup_timeout_ms = 10000
+`;
+}
+
+function isManagedConfig(content: string): boolean {
+  if (JR_MANAGED_CONFIGS.has(content)) return true;
+  const marker = content.indexOf(JR_TEACH_CONFIG_MARKER);
+  if (marker < 0 || !JR_MANAGED_CONFIGS.has(content.slice(0, marker))) return false;
+  const args = /^args = (\[.*\])$/m.exec(content.slice(marker));
+  try {
+    const paths: unknown = JSON.parse(args?.[1] ?? 'null');
+    return (
+      Array.isArray(paths) &&
+      paths.length === 1 &&
+      typeof paths[0] === 'string' &&
+      content.slice(marker) === teachMcpConfig(paths[0])
+    );
+  } catch {
+    return false;
+  }
+}
+
 function isWithin(parent: string, candidate: string): boolean {
   const path = relative(parent, candidate);
   return path.length > 0 && path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path);
@@ -175,15 +207,20 @@ function hasErrorCode(error: unknown, code: string): boolean {
 }
 
 /** Rewrite a config an older app version wrote; never touch any other. */
-async function upgradeManagedConfig(configPath: string): Promise<void> {
+async function upgradeManagedConfig(configPath: string, config: string): Promise<void> {
   const info = await lstat(configPath);
   if (!info.isFile()) return;
-  if (!JR_MANAGED_CONFIGS.has(await readFile(configPath, 'utf8'))) return;
-  await writeFile(configPath, JR_AIONRS_CONFIG, { encoding: 'utf8', mode: 0o600 });
+  const current = await readFile(configPath, 'utf8');
+  if (current === config || !isManagedConfig(current)) return;
+  await writeFile(configPath, config, { encoding: 'utf8', mode: 0o600 });
 }
 
 /** Add JR compaction defaults without overwriting a workspace-owned AionRS config. */
-export async function configureJrWorkspaceContext(userDataPath: string, workspace: string): Promise<void> {
+export async function configureJrWorkspaceContext(
+  userDataPath: string,
+  workspace: string,
+  teachScriptPath: string
+): Promise<void> {
   if (!isAbsolute(userDataPath) || !isAbsolute(workspace)) throw new Error('Invalid local workspace root');
   const userData = await realpath(userDataPath);
   const workspaceRoot = join(resolve(userDataPath), 'jr-workspaces');
@@ -197,24 +234,26 @@ export async function configureJrWorkspaceContext(userDataPath: string, workspac
     throw new Error('Invalid local workspace path');
 
   const configPath = join(realWorkspace, '.aionrs.toml');
+  // Frozen conversation snapshots predate jr-teach; project config also reaches those existing sessions.
+  const config = JR_AIONRS_CONFIG + teachMcpConfig(teachScriptPath);
   let file: Awaited<ReturnType<typeof open>> | undefined;
   try {
     file = await open(configPath, 'wx', 0o600);
-    await file.writeFile(JR_AIONRS_CONFIG, 'utf8');
+    await file.writeFile(config, 'utf8');
     await file.close();
   } catch (error) {
     await file?.close().catch((): void => undefined);
     if (file) await unlink(configPath).catch((): void => undefined);
-    if (hasErrorCode(error, 'EEXIST')) return upgradeManagedConfig(configPath);
+    if (hasErrorCode(error, 'EEXIST')) return upgradeManagedConfig(configPath, config);
     throw error;
   }
 }
 
-export async function createJrWorkspace(userDataPath: string): Promise<string> {
+export async function createJrWorkspace(userDataPath: string, teachScriptPath: string): Promise<string> {
   if (!isAbsolute(userDataPath)) throw new Error('Invalid local workspace root');
   const directory = join(userDataPath, 'jr-workspaces', randomUUID());
   await mkdir(directory, { recursive: true, mode: 0o700 });
-  await configureJrWorkspaceContext(userDataPath, directory);
+  await configureJrWorkspaceContext(userDataPath, directory, teachScriptPath);
   return directory;
 }
 

@@ -1117,6 +1117,41 @@ test('a hung Gemini summary falls back to an excerpt and the user request succee
   assertCompactShape(forwarded.messages);
 });
 
+test('an unavailable summarizer is tried once, skipped across tool rounds, and retried after cooldown', async (t) => {
+  let clock = Date.parse('2026-11-06T20:00:00.000Z');
+  let summaries = 0;
+  const app = await startControl(t, {
+    now: () => clock,
+    geminiKey: GEMINI_KEY,
+    log: () => {},
+    upstreamFetch: async (url, options) => {
+      if (url === GEMINI_URL) {
+        summaries += 1;
+        return new Response('temporarily unavailable', { status: 503 });
+      }
+      const messages = JSON.parse(options.body).messages;
+      assert.match(JSON.stringify(messages), /ULTIMA-MENSAGEM/);
+      assertCompactShape(messages);
+      return Response.json({ choices: [{ message: { content: 'resultado' } }] });
+    },
+  });
+  const owner = await app.login();
+  const request = { method: 'POST', token: owner.token, body: { messages: longContext() } };
+  const first = await app.request('/v1/chat/completions', request);
+  assert.equal(first.status, 200);
+  await first.text();
+  assert.equal(summaries, 1);
+  const next = await app.request('/v1/chat/completions', request);
+  assert.equal(next.status, 200);
+  await next.text();
+  assert.equal(summaries, 1);
+  clock += 3 * 60 * 1000 + 1;
+  const retry = await app.request('/v1/chat/completions', request);
+  assert.equal(retry.status, 200);
+  await retry.text();
+  assert.equal(summaries, 2);
+});
+
 test('a system prompt over the ceiling is truncated and the latest user turn is kept', async (t) => {
   let forwarded;
   const app = await startControl(t, {

@@ -22,6 +22,7 @@ const env = {
   JR_RELAY_TOKEN: 'a'.repeat(64),
   JR_MINIMAX_MODEL: 'MiniMax-M3.1-Flash',
 };
+const teachScript = join(tmpdir(), 'JR Bot', 'builtin-mcp-teach.js');
 const employeeIdentity = { ownerAccountId: 'account-a', assistantId: 'jr-employee-account-a', generation: 1 };
 const legacyAssistant = { id: 'custom-legacy', source: 'user', agent: { type: 'aionrs' } } as Assistant;
 beforeEach(() => vi.restoreAllMocks());
@@ -244,15 +245,15 @@ it('rejects fabricated or malformed usage values instead of showing zero', async
 it('creates separate private workspaces inside the application profile', async () => {
   const root = await mkdtemp(join(tmpdir(), 'jr-workspace-'));
   try {
-    const first = await createJrWorkspace(root),
-      second = await createJrWorkspace(root);
+    const first = await createJrWorkspace(root, teachScript),
+      second = await createJrWorkspace(root, teachScript);
     expect(first).not.toBe(second);
     expect(first.startsWith(join(root, 'jr-workspaces') + sep)).toBe(true);
     expect((await stat(first)).isDirectory()).toBe(true);
     expect(await readFile(join(first, '.aionrs.toml'), 'utf8')).toContain('autocompact_threshold_pct = 55');
     if (process.platform !== 'win32') expect((await stat(join(first, '.aionrs.toml'))).mode & 0o777).toBe(0o600);
     if (process.platform !== 'win32') expect((await stat(first)).mode & 0o777).toBe(0o700);
-    await expect(createJrWorkspace('relative')).rejects.toThrow();
+    await expect(createJrWorkspace('relative', teachScript)).rejects.toThrow();
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -265,9 +266,49 @@ it('preserves a workspace-owned AionRS config and rejects workspaces outside the
   try {
     await mkdir(workspace, { recursive: true });
     await writeFile(join(workspace, '.aionrs.toml'), original);
-    await configureJrWorkspaceContext(root, workspace);
+    await configureJrWorkspaceContext(root, workspace, teachScript);
     expect(await readFile(join(workspace, '.aionrs.toml'), 'utf8')).toBe(original);
-    await expect(configureJrWorkspaceContext(root, root)).rejects.toThrow('Invalid local workspace path');
+    await expect(configureJrWorkspaceContext(root, root, teachScript)).rejects.toThrow('Invalid local workspace path');
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it('loads the native Strata connector for legacy workspaces and refreshes only its managed launch path', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'jr-workspace-mcp-'));
+  try {
+    const workspace = await createJrWorkspace(root, teachScript);
+    const configPath = join(workspace, '.aionrs.toml');
+    const initial = await readFile(configPath, 'utf8');
+    const legacy = initial.split('# JR managed built-in MCP\n')[0];
+    await writeFile(configPath, legacy);
+    await configureJrWorkspaceContext(root, workspace, teachScript);
+    expect(await readFile(configPath, 'utf8')).toBe(initial);
+
+    const movedScript = join(root, 'Moved "JR Bot"', 'builtin-mcp-teach.js');
+    await configureJrWorkspaceContext(root, workspace, movedScript);
+    const updated = await readFile(configPath, 'utf8');
+    expect(updated).toContain(`args = [${JSON.stringify(movedScript)}]\ndeferred = false`);
+    await configureJrWorkspaceContext(root, workspace, movedScript);
+    expect(await readFile(configPath, 'utf8')).toBe(updated);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it('preserves user edits to the MCP configuration and rejects relative native launch paths', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'jr-workspace-mcp-edited-'));
+  try {
+    const workspace = await createJrWorkspace(root, teachScript);
+    const configPath = join(workspace, '.aionrs.toml');
+    const edited = (await readFile(configPath, 'utf8')).replace('deferred = false', 'deferred = true');
+    await writeFile(configPath, edited);
+    await configureJrWorkspaceContext(root, workspace, join(root, 'new.js'));
+    expect(await readFile(configPath, 'utf8')).toBe(edited);
+    await expect(configureJrWorkspaceContext(root, workspace, 'relative.js')).rejects.toThrow(
+      'Invalid built-in MCP script path'
+    );
+    expect(await readFile(configPath, 'utf8')).toBe(edited);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -276,7 +317,7 @@ it('preserves a workspace-owned AionRS config and rejects workspaces outside the
 it('lets the read-only bot tools run without a prompt but keeps vault_fill asking', async () => {
   const root = await mkdtemp(join(tmpdir(), 'jr-workspace-tools-'));
   try {
-    const config = await readFile(join(await createJrWorkspace(root), '.aionrs.toml'), 'utf8');
+    const config = await readFile(join(await createJrWorkspace(root, teachScript), '.aionrs.toml'), 'utf8');
     const allow = config.match(/^allow_list = \[(.*)\]$/m)?.[1] ?? '';
     for (const tool of [
       '"brain_search"',
@@ -310,12 +351,12 @@ it('upgrades only the exact config an older app version wrote', async () => {
     await mkdir(edited, { recursive: true });
     await writeFile(join(old, '.aionrs.toml'), legacy);
     await writeFile(join(edited, '.aionrs.toml'), `${legacy}# mine\n`);
-    await configureJrWorkspaceContext(root, old);
-    await configureJrWorkspaceContext(root, edited);
+    await configureJrWorkspaceContext(root, old, teachScript);
+    await configureJrWorkspaceContext(root, edited, teachScript);
     expect(await readFile(join(old, '.aionrs.toml'), 'utf8')).toContain('"brain_search"');
     const v1 = (await readFile(join(old, '.aionrs.toml'), 'utf8')).replace(', "ToolSearch"', '');
     await writeFile(join(old, '.aionrs.toml'), v1);
-    await configureJrWorkspaceContext(root, old);
+    await configureJrWorkspaceContext(root, old, teachScript);
     expect(await readFile(join(old, '.aionrs.toml'), 'utf8')).toContain('"ToolSearch"');
     expect(await readFile(join(edited, '.aionrs.toml'), 'utf8')).toBe(`${legacy}# mine\n`);
   } finally {

@@ -14,6 +14,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { BUILTIN_TEACH_MCP_NAME } from '@/common/config/constants';
+import { controlMcpResult } from './controlResult';
 
 const TOKEN_HEADER = 'x-jr-teach-token';
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -36,16 +37,7 @@ const callControl = async (tool: string, body: unknown, timeoutMs = DEFAULT_TIME
       signal: AbortSignal.timeout(timeoutMs),
     });
     const text = await res.text();
-    let strataError = false;
-    if (tool.startsWith('strata_')) {
-      try {
-        const result = JSON.parse(text);
-        strataError = result.isError === true || result.ok === false;
-      } catch {
-        strataError = true;
-      }
-    }
-    return { content: [{ type: 'text' as const, text }], isError: !res.ok || strataError };
+    return controlMcpResult(tool, text, res.ok);
   } catch (error) {
     const reason = error instanceof Error ? error.name : 'error';
     return {
@@ -71,7 +63,7 @@ async function main() {
   );
   server.tool(
     'strata_call_tool',
-    'Executa uma ferramenta MCP listada por strata_list_tools usando a conta ERP conectada e a empresa escolhida pelo funcionário. Nunca solicite tokens ou senhas. Se retornar consent_url, mostre o link para a pessoa concluir a confirmação no ERP; não tente confirmar pela API ou pelo chat. Preserve isError e não trate confirmação pendente como ação concluída.',
+    'Executa uma ferramenta MCP listada por strata_list_tools usando a conta ERP conectada. O catálogo erp.consultas consulta o grupo inteiro conforme permissões do ERP. Em erp.consultas.executar, envie os filtros dentro de parameters: {id, parameters: {de, ate}}. Nunca solicite tokens ou senhas. Se retornar consent_url, mostre o link para a pessoa concluir a confirmação no ERP; não tente confirmar pela API ou pelo chat. Preserve isError e não trate confirmação pendente como ação concluída.',
     {
       name: z
         .string()
@@ -79,7 +71,9 @@ async function main() {
         .describe('Nome exato da ferramenta MCP do ERP.'),
       arguments: z
         .record(z.string(), z.unknown())
-        .describe('Argumentos conforme o esquema retornado pelo ERP. A empresa deve ser a selecionada na conexão.'),
+        .describe(
+          'Argumentos conforme o esquema retornado pelo ERP. Nas consultas do catálogo, não envie organization_id.'
+        ),
     },
     async (args) => callControl('strata_call_tool', args, 75_000)
   );

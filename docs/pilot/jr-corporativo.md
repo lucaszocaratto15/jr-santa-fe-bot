@@ -32,7 +32,7 @@ Clique no bot na barra lateral para retomar o mesmo histórico e contexto, inclu
 
 Em **Conectar aplicativos**, adicionar o Chrome só mostra **Conectado** após uma conexão real e a leitura das ferramentas. O primeiro uso exige Chrome e um ambiente Node.js disponível; em computadores limpos isso ainda precisa ser validado antes da distribuição Windows. O administrador também pode configurar MCP personalizado. Configure somente serviços apropriados aos dados da empresa.
 
-Conecte os serviços antes de criar os bots que irão usá-los. O AionCore fixa a seleção de ferramentas na criação da conversa e recusa mudanças posteriores. Uma conexão adicionada depois fica disponível para novos bots; esta versão preserva o histórico existente e não recria a conversa para trocar ferramentas.
+O conector nativo do JR (Strata, Brain e aprendizado) também é carregado pela configuração local gerenciada do bot. Assim, conversas antigas recebem essas ferramentas sem recriação nem alteração do histórico. Configurações locais editadas manualmente são preservadas e exigem ajuste manual. Para outros conectores, o AionCore ainda fixa a seleção na criação da conversa; conecte esses serviços antes de criar as conversas que irão usá-los.
 
 As regras atuais incluem confirmações de ferramentas e o bloqueio central de identidade/modelo. Um editor administrativo completo de políticas por ferramenta não faz parte desta entrega. A medição não aplica teto inicial de tokens. Valores ausentes do provedor aparecem como desconhecidos, sem estimar saldo da assinatura.
 

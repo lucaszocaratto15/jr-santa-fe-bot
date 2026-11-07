@@ -55,23 +55,23 @@ Validação local: `node --test tests/unit/jr/control/strata/*.test.mjs`. Os tes
 
 ## Configuração
 
-| Variável                     | Uso                                                                                                                                |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `JR_ADMIN_CODE`              | Código exclusivo do administrador, entre 32 e 256 caracteres, sem espaços. Gere um valor aleatório seguro; não use senha comum.    |
-| `JR_UPSTREAM_KEY`            | Chave real do provedor, disponível somente neste serviço.                                                                          |
-| `JR_UPSTREAM_URL`            | Endereço HTTPS do provedor terminando em `/v1`. Para JR: `https://jrsantafe.stratacerta.com.br/mmx/v1`.                            |
-| `JR_MODEL`                   | Modelo permitido. Padrão da entrada executável: `MiniMax-M3.1-Flash`.                                                              |
-| `JR_CONTROL_DATA_DIR`        | Diretório persistente privado. Padrão local: `./data`. No contêiner: `/data`.                                                      |
-| `JR_CONTROL_HOST`            | Padrão local: `127.0.0.1`. No contêiner: `0.0.0.0`, com publicação somente em `127.0.0.1`.                                         |
-| `JR_CONTROL_PORT`            | Porta do serviço. Padrão: `8787`.                                                                                                  |
-| `OPENROUTER_API_KEY`         | Chave do OpenRouter. Sem ela, esse provedor não é chamado.                                                                         |
-| `OPENROUTER_FALLBACK_MODELS` | Modelos gratuitos separados por vírgula, cada um terminando em `:free`. O roteador `openrouter/free` vem sempre primeiro.          |
-| `GEMINI_API_KEY`             | Chave do AI Studio. Sem ela, o Gemini não entra no fallback nem resume histórico.                                                  |
-| `GEMINI_MODEL`               | Opcional. Padrão: `gemini-3.8-flash`. Vale para o fallback e para o resumo.                                                        |
-| `FALLBACK_ENABLED`           | `true` ou `false`. Se omitida, o fallback fica ligado somente quando existe uma das chaves acima.                                  |
-| `ATTEMPT_MS`                 | Tempo máximo até os headers de cada provedor, em milissegundos. Padrão: `90000`. Não corta um stream já iniciado.                  |
-| `COMPACTION_BUDGET_MS`       | Teto somado das tentativas de resumo. Padrão: `60000`. Cada bloco usa no máximo `ATTEMPT_MS`. Estourou, o resto não vai ao Gemini. |
-| `COMPACTION_ENABLED`         | `true` ou `false`. Se omitida, a compactação fica ligada. `false` desliga só o resumo; 400/413 e o fallback continuam.             |
+| Variável                     | Uso                                                                                                                               |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `JR_ADMIN_CODE`              | Código exclusivo do administrador, entre 32 e 256 caracteres, sem espaços. Gere um valor aleatório seguro; não use senha comum.   |
+| `JR_UPSTREAM_KEY`            | Chave real do provedor, disponível somente neste serviço.                                                                         |
+| `JR_UPSTREAM_URL`            | Endereço HTTPS do provedor terminando em `/v1`. Para JR: `https://jrsantafe.stratacerta.com.br/mmx/v1`.                           |
+| `JR_MODEL`                   | Modelo permitido. Padrão da entrada executável: `MiniMax-M3.1-Flash`.                                                             |
+| `JR_CONTROL_DATA_DIR`        | Diretório persistente privado. Padrão local: `./data`. No contêiner: `/data`.                                                     |
+| `JR_CONTROL_HOST`            | Padrão local: `127.0.0.1`. No contêiner: `0.0.0.0`, com publicação somente em `127.0.0.1`.                                        |
+| `JR_CONTROL_PORT`            | Porta do serviço. Padrão: `8787`.                                                                                                 |
+| `OPENROUTER_API_KEY`         | Chave do OpenRouter. Sem ela, esse provedor não é chamado.                                                                        |
+| `OPENROUTER_FALLBACK_MODELS` | Modelos gratuitos separados por vírgula, cada um terminando em `:free`. O roteador `openrouter/free` vem sempre primeiro.         |
+| `GEMINI_API_KEY`             | Chave do AI Studio. Sem ela, o Gemini não entra no fallback nem resume histórico.                                                 |
+| `GEMINI_MODEL`               | Opcional. Padrão: `gemini-3.8-flash`. Vale para o fallback e para o resumo.                                                       |
+| `FALLBACK_ENABLED`           | `true` ou `false`. Se omitida, o fallback fica ligado somente quando existe uma das chaves acima.                                 |
+| `ATTEMPT_MS`                 | Tempo máximo até os headers de cada provedor, em milissegundos. Padrão: `90000`. Não corta um stream já iniciado.                 |
+| `COMPACTION_BUDGET_MS`       | Teto somado das tentativas de resumo. Padrão: `5000`. Cada bloco usa no máximo `ATTEMPT_MS`. Estourou, o resto não vai ao Gemini. |
+| `COMPACTION_ENABLED`         | `true` ou `false`. Se omitida, a compactação fica ligada. `false` desliga só o resumo; 400/413 e o fallback continuam.            |
 
 O processo encerra se faltarem credenciais válidas. Não existe código de administrador padrão. Não grave credenciais no código, no histórico de comandos ou em arquivo versionado. O serviço não lê configurações do OpenCode.
 
@@ -109,7 +109,7 @@ docker compose -p jr-bot-control --env-file ../.env -f compose.yml -f traefik.ym
 
 Se um build posterior precisar dos arquivos antigos, restaure o pacote com `tar -C /srv/z0c -xzf /srv/z0c/jr-bot-control-STAMP.tgz`. O volume `control_data` não entra nesse pacote e não é apagado pelo rollback da imagem.
 
-No `../.env` da VPS, as variáveis novas são `ATTEMPT_MS` (padrão `90000`), `COMPACTION_BUDGET_MS` (padrão `60000`), `COMPACTION_ENABLED` (omitida ou vazia liga a compactação; `false` desliga) e `GEMINI_MODEL=gemini-3.8-flash`. Sem `GEMINI_MODEL`, o padrão também é `gemini-3.8-flash`.
+No `../.env` da VPS, as variáveis novas são `ATTEMPT_MS` (padrão `90000`), `COMPACTION_BUDGET_MS` (padrão `5000`), `COMPACTION_ENABLED` (omitida ou vazia liga a compactação; `false` desliga) e `GEMINI_MODEL=gemini-3.8-flash`. Sem `GEMINI_MODEL`, o padrão também é `gemini-3.8-flash`.
 
 O volume `control_data` preserva usuários, hashes de sessões e medições. O contêiner roda como usuário `node`, com raiz somente para leitura. Mantenha uma única instância do serviço para que a revogação também encerre os fluxos em curso.
 
@@ -187,7 +187,7 @@ Para desligar mesmo com chave presente: `FALLBACK_ENABLED=false`.
 
 O MiniMax recusa contexto perto de 200 mil tokens. Antes de chamar o provedor, o serviço estima o JSON do pedido com 3 caracteres por token (mais seguro para português e código do que 4). Acima de 130 mil tokens, os trechos antigos viram blocos. O system prompt permanece. As últimas mensagens ficam inteiras, inclusive um par recente de `tool_call`/`tool_result`. Um par antigo entra no mesmo bloco, sem separar a chamada do resultado.
 
-Cada bloco antigo é resumido pelo Gemini (`GEMINI_MODEL`, padrão `gemini-3.8-flash`) se `GEMINI_API_KEY` existir. Sem essa chave, se o Gemini responder 400 ou 413, se a chamada falhar ou estourar `ATTEMPT_MS`, o bloco vira um excerto (início e fim do texto). O pedido original segue. Resumos e excertos entram no único system do começo, junto do prompt original. O resultado não leva um segundo system nem duas mensagens seguidas com o mesmo papel; um par `tool_call`/`tool_result` permanece junto. O teto `COMPACTION_BUDGET_MS` (padrão `60000`) soma os blocos em série; o que passar dele não chama mais o Gemini.
+Cada bloco antigo é resumido pelo Gemini (`GEMINI_MODEL`, padrão `gemini-3.8-flash`) se `GEMINI_API_KEY` existir. Sem essa chave, se o Gemini responder 400 ou 413, se a chamada falhar ou estourar `ATTEMPT_MS`, o bloco vira um excerto (início e fim do texto). O pedido original segue. Resumos e excertos entram no único system do começo, junto do prompt original. O resultado não leva um segundo system nem duas mensagens seguidas com o mesmo papel; um par `tool_call`/`tool_result` permanece junto. O teto `COMPACTION_BUDGET_MS` (padrão `5000`) soma os blocos em série; o que passar dele não chama mais o Gemini. Após a primeira falha, os demais blocos usam excertos. Falhas de serviço ou timeout suspendem novas tentativas de resumo por três minutos, inclusive nas próximas chamadas de ferramenta; erros 400/413 não abrem essa suspensão global.
 
 Se só o system prompt ainda estourar o teto, ele é truncado no meio, preservando começo e fim. Se nem isso couber, a resposta é 413 `{error:{code:"context_too_large"}}`, sem ficar em loop.
 
@@ -251,3 +251,7 @@ node --test tests/unit/jr/control/*.test.mjs
 ```
 
 Os testes usam HTTP real em porta local efêmera, SQLite temporário e provedor injetado sem rede externa. Cobrem códigos, sessões, isolamento por papel, expiração, revogação antes e durante SSE, reemissão, vínculo, medições reais do protocolo, limites e ausência de segredos persistidos. Não acessam a conta MiniMax de produção.
+
+### Execução sem Gemini
+
+O ponto de entrada do JR não carrega `GEMINI_API_KEY` nem `GEMINI_MODEL`, mesmo se ainda existirem no ambiente. Gemini não participa da compactação nem do fallback direto. O histórico enviado ao modelo é reduzido localmente por excertos, preservando o pedido recente e os pares de chamadas/resultados de ferramentas. O histórico completo continua no aplicativo. MiniMax permanece como modelo principal, com o fallback OpenRouter já configurado. As opções Gemini descritas anteriormente são apenas compatibilidade da biblioteca; não são habilitadas pelo serviço instalado.

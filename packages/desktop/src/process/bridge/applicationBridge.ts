@@ -10,7 +10,7 @@ import { ipcBridge } from '@/common';
 import { httpRequest } from '@/common/adapter/httpBridge';
 import type { ClientBusinessSettingMap } from '@/common/config/clientSettings';
 import { BROWSER_SESSION_PARTITION } from '@/common/config/constants';
-import { ProcessConfig } from '@process/utils/initStorage';
+import { ProcessConfig, getBuiltinMcpScriptPath } from '@process/utils/initStorage';
 import { getZoomFactor, setZoomFactor } from '@process/utils/zoom';
 import { getCdpStatus, updateCdpConfig } from '@process/utils/configureChromium';
 import { getCdpBridgeHandle } from '@process/utils/cdpBridgeRegistry';
@@ -122,12 +122,16 @@ export function initApplicationBridge(): void {
   ipcBridge.jr.createWorkspace.provider(() => {
     if (!['authenticated', 'pilot'].includes(getJrAccessController().state.status))
       throw new Error('JR_ACCESS_REQUIRED');
-    return createJrWorkspace(app.getPath('userData'));
+    return createJrWorkspace(app.getPath('userData'), getBuiltinMcpScriptPath('builtin-mcp-teach'));
   });
   ipcBridge.jr.configureWorkspace.provider(({ workspace }) => {
     if (!['authenticated', 'pilot'].includes(getJrAccessController().state.status))
       throw new Error('JR_ACCESS_REQUIRED');
-    return configureJrWorkspaceContext(app.getPath('userData'), workspace);
+    return configureJrWorkspaceContext(
+      app.getPath('userData'),
+      workspace,
+      getBuiltinMcpScriptPath('builtin-mcp-teach')
+    );
   });
   ipcBridge.jr.accessStatus.provider(() => getJrAccessController().accessStatus());
   const employeeAssistantReady = createEmployeeAssistantMigration({

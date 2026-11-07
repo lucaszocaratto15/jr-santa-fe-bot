@@ -103,7 +103,7 @@ const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 export const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
 export const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash';
 export const DEFAULT_ATTEMPT_MS = 90_000;
-export const DEFAULT_COMPACTION_BUDGET_MS = 60_000;
+export const DEFAULT_COMPACTION_BUDGET_MS = 5_000;
 
 function optionalSecret(value) {
   if (value == null || value === '') return null;

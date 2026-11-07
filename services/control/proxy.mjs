@@ -114,6 +114,7 @@ export function createModelProxy({
     (secret) => typeof secret === 'string' && secret.length > 0
   );
   const circuit = { failures: 0, openUntil: 0 };
+  let summaryRetryAt = 0;
   let awayFromPrimary = false;
   const safeLog = (line) => {
     try {
@@ -217,7 +218,10 @@ export function createModelProxy({
           disarmHeaderDeadline();
           try {
             body.messages = await compactMessages(body.messages, {
-              gemini: summarizer,
+              gemini: now() < summaryRetryAt ? null : summarizer,
+              onUnavailable: () => {
+                summaryRetryAt = now() + CIRCUIT_OPEN_MS;
+              },
               secrets: secretValues,
               attemptMs: headerTimeoutMs,
               budgetMs: compactionBudgetMs,
