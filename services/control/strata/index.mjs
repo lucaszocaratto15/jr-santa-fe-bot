@@ -27,6 +27,9 @@ export function createStrataService({ databasePath, strata: input, now = Date.no
   const pending = new Map();
   const refreshes = new Map();
   const clients = new Map();
+  const TOOLS_TTL = 5 * 60_000;
+  const toolLists = new Map();
+  const toolListPending = new Map();
   let metadataPromise = null;
   const configured = () => {
     if (!config) throw httpError(503, 'strata_unconfigured');
@@ -250,6 +253,38 @@ export function createStrataService({ databasePath, strata: input, now = Date.no
       },
     };
   };
+  const toolsFor = async (value) => {
+    const key = digest(value.grant.accessToken);
+    const cached = toolLists.get(key);
+    if (cached && cached.expiresAt > now()) return cached.tools;
+    let running = toolListPending.get(key);
+    if (!running) {
+      running = value.client
+        .rpc('tools/list', {})
+        .then((result) => {
+          if (
+            !Array.isArray(result.tools) ||
+            result.tools.length > 200 ||
+            result.tools.some(
+              (tool) =>
+                !record(tool) ||
+                typeof tool.name !== 'string' ||
+                !/^[A-Za-z0-9_.-]{1,128}$/u.test(tool.name) ||
+                !record(tool.inputSchema)
+            )
+          )
+            throw httpError(503, 'strata_invalid_response');
+          if (toolLists.size >= 1000) toolLists.delete(toolLists.keys().next().value);
+          toolLists.set(key, { tools: result.tools, expiresAt: now() + TOOLS_TTL });
+          return result.tools;
+        })
+        .finally(() => {
+          if (toolListPending.get(key) === running) toolListPending.delete(key);
+        });
+      toolListPending.set(key, running);
+    }
+    return running;
+  };
   const status = (value) =>
     sanitize(
       {
@@ -394,21 +429,9 @@ export function createStrataService({ databasePath, strata: input, now = Date.no
     },
     async tools(session, assertCurrent) {
       const value = await verified(session, assertCurrent, false);
-      const result = await value.client.rpc('tools/list', {});
+      const tools = await toolsFor(value);
       assertLink(session, value.link.revision, assertCurrent, value.link.context_revision);
-      if (
-        !Array.isArray(result.tools) ||
-        result.tools.length > 200 ||
-        result.tools.some(
-          (tool) =>
-            !record(tool) ||
-            typeof tool.name !== 'string' ||
-            !/^[A-Za-z0-9_.-]{1,128}$/u.test(tool.name) ||
-            !record(tool.inputSchema)
-        )
-      )
-        throw httpError(503, 'strata_invalid_response');
-      return sanitize({ tools: result.tools }, value.grant);
+      return sanitize({ tools }, value.grant);
     },
     async call(session, name, args, assertCurrent) {
       if (
@@ -425,9 +448,8 @@ export function createStrataService({ databasePath, strata: input, now = Date.no
         'erp.consultas.executar',
       ].includes(name);
       const value = await verified(session, assertCurrent, !groupQuery);
-      const listed = await value.client.rpc('tools/list', {});
-      if (!Array.isArray(listed.tools) || !listed.tools.some((tool) => tool.name === name))
-        throw httpError(403, 'strata_forbidden');
+      const listed = await toolsFor(value);
+      if (!listed.some((tool) => tool.name === name)) throw httpError(403, 'strata_forbidden');
       const organizationId = args.organization_id === undefined ? value.principal.organizationId : args.organization_id;
       if (groupQuery && Object.hasOwn(args, 'organization_id')) throw httpError(400, 'strata_invalid_request');
       if (!groupQuery && !value.memberships.some((membership) => membership.organization_id === organizationId))
