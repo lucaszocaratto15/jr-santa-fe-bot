@@ -31,7 +31,14 @@ describe('sanitizeWebviewPreferences', () => {
   });
 
   it('rejects unknown, javascript and missing schemes', () => {
-    for (const src of ['javascript:alert(1)', 'vbscript:msgbox(1)', 'ftp://example.com', 'filex://tmp', '', undefined]) {
+    for (const src of [
+      'javascript:alert(1)',
+      'vbscript:msgbox(1)',
+      'ftp://example.com',
+      'filex://tmp',
+      '',
+      undefined,
+    ]) {
       expect(sanitizeWebviewPreferences({}, { src })).toBe(false);
     }
   });
