@@ -9,12 +9,21 @@ services:
       JR_MODEL: MiniMax-M3.1-Flash
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_FALLBACK_MODELS: ${OPENROUTER_FALLBACK_MODELS:-}
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      GEMINI_MODEL: ${GEMINI_MODEL:-}
       FALLBACK_ENABLED: ${FALLBACK_ENABLED:-}
       ATTEMPT_MS: ${ATTEMPT_MS:-}
       COMPACTION_BUDGET_MS: ${COMPACTION_BUDGET_MS:-}
       COMPACTION_ENABLED: ${COMPACTION_ENABLED:-}
+      BRAIN_URL: http://brain:8790
+      BRAIN_SECRET: ${BRAIN_SECRET:?Defina o segredo interno do cérebro}
+      STRATA_MCP_RESOURCE_URL: ${STRATA_MCP_RESOURCE_URL:-}
+      STRATA_OAUTH_ISSUER: ${STRATA_OAUTH_ISSUER:-}
+      STRATA_OAUTH_CLIENT_ID: ${STRATA_OAUTH_CLIENT_ID:-}
+      STRATA_OAUTH_CLIENT_SECRET: ${STRATA_OAUTH_CLIENT_SECRET:-}
+      STRATA_OAUTH_REDIRECT_URI: ${STRATA_OAUTH_REDIRECT_URI:-}
+      STRATA_TOKEN_ENCRYPTION_KEY: ${STRATA_TOKEN_ENCRYPTION_KEY:-}
+      STRATA_OAUTH_SCOPES: ${STRATA_OAUTH_SCOPES:-mcp:identidade}
+    networks:
+      - jr-internal
     ports:
       - '127.0.0.1:8787:8787'
     volumes:
@@ -40,6 +49,46 @@ services:
       timeout: 5s
       start_period: 5s
       retries: 3
+  brain:
+    build: ../../brain
+    restart: unless-stopped
+    environment:
+      BRAIN_SECRET: ${BRAIN_SECRET:?Defina o segredo interno do cérebro}
+      BRAIN_PORT: 8790
+      BRAIN_DB_PATH: /data/brain.sqlite
+      BRAIN_MODEL_URL: ${BRAIN_MODEL_URL:-https://api.minimax.io/v1}
+      BRAIN_MODEL_KEY: ${BRAIN_MODEL_KEY:-}
+      BRAIN_MODEL: ${BRAIN_MODEL:-MiniMax-M3.1-Flash}
+      BRAIN_DAILY_CURATOR_CALLS: ${BRAIN_DAILY_CURATOR_CALLS:-500}
+    networks:
+      - jr-internal
+    volumes:
+      - brain_data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 512m
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:8790/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 5s
+      retries: 3
+
+networks:
+  jr-internal:
 
 volumes:
   control_data:
+  brain_data:

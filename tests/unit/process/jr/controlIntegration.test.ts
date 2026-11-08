@@ -6,7 +6,7 @@ import { startJrAuthProxy } from '@/process/services/jr/authProxy';
 
 const cleanup: Array<() => Promise<void>> = [];
 afterEach(async () => {
-  for (const close of cleanup.splice(0).reverse()) await close();
+  for (const close of cleanup.splice(0).toReversed()) await close();
 });
 
 async function fixture() {

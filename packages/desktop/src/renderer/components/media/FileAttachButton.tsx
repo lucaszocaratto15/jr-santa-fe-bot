@@ -20,6 +20,7 @@ import { useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
 
 interface FileAttachButtonProps {
+  label?: string;
   openFileSelector: () => void;
   onLocalFilesAdded?: (files: FileMetadata[]) => void;
   loadedSkills?: string[];
@@ -73,6 +74,7 @@ const buildLoadedMcpStatuses = (
 };
 
 const FileAttachButton: React.FC<FileAttachButtonProps> = ({
+  label,
   openFileSelector,
   onLocalFilesAdded,
   loadedSkills,
@@ -130,17 +132,24 @@ const FileAttachButton: React.FC<FileAttachButtonProps> = ({
   const isDesktop = isElectronDesktop();
   const hasSkills = skillNames.length > 0;
   const hasMcpServers = mcpStatuses.length > 0;
-  const plusIcon = <Plus theme='outline' size='14' strokeWidth={2} fill={iconColors.primary} />;
+  const plusIcon = label ? (
+    <Paperclip theme='outline' size={16} />
+  ) : (
+    <Plus theme='outline' size='14' strokeWidth={2} fill={iconColors.primary} />
+  );
 
   if (isDesktop && !hasSkills && !hasMcpServers) {
     return (
       <Button
-        type='secondary'
-        shape='circle'
+        type={label ? 'text' : 'secondary'}
+        shape={label ? undefined : 'circle'}
+        className={label ? 'jr-attach-btn' : undefined}
         icon={plusIcon}
         onClick={openFileSelector}
         data-testid='aionrs-attach-folder-btn'
-      />
+      >
+        {label}
+      </Button>
     );
   }
 
@@ -312,13 +321,16 @@ const FileAttachButton: React.FC<FileAttachButtonProps> = ({
         popupAlign={{ bottom: 8 }}
       >
         <Button
-          type='secondary'
-          shape='circle'
+          type={label ? 'text' : 'secondary'}
+          shape={label ? undefined : 'circle'}
+          className={label ? 'jr-attach-btn' : undefined}
           icon={plusIcon}
           loading={uploading}
           disabled={uploading}
           data-testid='aionrs-attach-folder-btn'
-        />
+        >
+          {label}
+        </Button>
       </Trigger>
       <input
         ref={fileInputRef}

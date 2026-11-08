@@ -47,6 +47,7 @@ const { readContent } = vi.hoisted(() => ({ readContent: vi.fn(async () => 'disk
 vi.mock('@/common', () => ({
   ipcBridge: {
     fileStream: { contentUpdate: { on: () => () => {} } },
+    teach: { openTab: { on: vi.fn(() => vi.fn()) } },
     preview: { open: { on: () => () => {} } },
     shell: { openFile: { invoke: async () => undefined } },
     fs: {

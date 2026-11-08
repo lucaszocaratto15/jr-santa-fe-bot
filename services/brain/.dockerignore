@@ -1,0 +1,10 @@
+*
+!Dockerfile
+!index.mjs
+!server.mjs
+!store.mjs
+!access.mjs
+!curator.mjs
+!text.mjs
+
+!notes.mjs

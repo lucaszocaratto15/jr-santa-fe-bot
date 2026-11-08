@@ -127,6 +127,10 @@ win:
 
 nsis:
   oneClick: false
+  # Per-user install: updates keep the same %APPDATA% profile (bots, conversations, settings).
+  perMachine: false
+  # Never remove the profile on uninstall/upgrade; it holds the employee data.
+  deleteAppDataOnUninstall: false
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
@@ -223,6 +227,7 @@ asarUnpack:
   # Builtin MCP server scripts must be unpacked so external node processes can execute them
   - 'out/main/builtin-mcp-image-gen.js'
   - 'out/main/builtin-mcp-browser.js'
+  - 'out/main/builtin-mcp-teach.js'
   - 'out/main/team-mcp-stdio.js'
 
 # Compression level: normal for faster builds, maximum for smallest size

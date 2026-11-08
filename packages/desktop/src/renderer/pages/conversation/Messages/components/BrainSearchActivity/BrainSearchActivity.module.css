@@ -1,0 +1,52 @@
+/* Own row, left-aligned: an inline box would share the line with the steps header and drift right. */
+.root {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  margin: 4px 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.svg {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+}
+
+.dot {
+  fill: var(--primary);
+  opacity: 0.55;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.label {
+  min-width: 0;
+}
+
+/* Looping animation only while the lookup is pending (class set by the component). */
+.animated .dot {
+  animation: pulse 1.2s ease-in-out infinite;
+  animation-delay: calc(var(--step) * 0.15s);
+}
+
+@keyframes pulse {
+  0%,
+  60%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.75);
+  }
+  25% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animated .dot {
+    animation: none;
+  }
+}

@@ -25,16 +25,18 @@ vi.mock('react-router-dom', () => ({
   useLocation: () => ({ pathname: '/guid', search: mocks.search }),
 }));
 vi.mock('swr', () => ({
-  default: (key: string | string[]) => ({
-    data: Array.isArray(key) ? [] : key === 'jr.bots' ? mocks.bots : undefined,
+  default: (key: string | string[] | null) => ({
+    data: Array.isArray(key) && key[0] === 'jr.bots' ? mocks.bots : Array.isArray(key) ? [] : undefined,
     mutate: mocks.refreshBots,
   }),
 }));
 vi.mock('@/common', () => ({
   ipcBridge: {
-    conversation: { listChanged: { on: () => () => {} } },
+    conversation: { listChanged: { on: () => () => {} }, artifactStream: { on: () => () => {} } },
     team: { list: { invoke: vi.fn() } },
     database: { getConversationMessages: { invoke: mocks.messages } },
+    learn: { state: { invoke: async () => null }, stateChanged: { on: () => () => {} } },
+    teach: { lessonsChanged: { on: () => () => {} } },
   },
 }));
 vi.mock('@/renderer/pages/Jr/jrBots', () => ({
@@ -99,7 +101,7 @@ describe('JrSidebar rows', () => {
     render(<JrSidebar />);
     expect(await screen.findByText('Sent 1 archive')).toBeInTheDocument();
     const compras = screen.getByRole('button', { name: 'Compras' });
-    expect(compras.querySelector('img')).toHaveAttribute('width', '48');
+    expect(compras.querySelector('img')).toHaveAttribute('width', '40');
     expect(screen.getByRole('button', { name: 'Vendas' })).toBeInTheDocument();
     expect(within(screen.getByLabelText('common.jr.look.pinnedBots')).queryByRole('button')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'jr-workspaces 1' })).not.toBeInTheDocument();
@@ -148,18 +150,27 @@ describe('JrSidebar rows', () => {
     expect(screen.queryByText('Sent 1 archive')).not.toBeInTheDocument();
   });
 
-  it('moves search and new chat into the header slot beside the logo', () => {
+  it('keeps search in the header and bot creation in the sidebar', () => {
     const slot = document.createElement('div');
     slot.id = 'jr-sider-actions-slot';
     document.body.appendChild(slot);
     try {
       render(<JrSidebar />);
       expect(slot.querySelector('[aria-label="common.jr.search"]')).not.toBeNull();
-      expect(slot.querySelector('[aria-label="common.jr.newBot"]')).not.toBeNull();
+      expect(
+        within(screen.getByRole('navigation')).getByRole('button', { name: 'common.jr.newBot' })
+      ).toBeInTheDocument();
       expect(screen.getByRole('navigation').querySelector('[aria-label="common.jr.search"]')).toBeNull();
     } finally {
       slot.remove();
     }
+  });
+
+  it('hides between-bot navigation without deleting any bots', () => {
+    render(<JrSidebar />);
+    expect(screen.queryByText('common.jr.teamChats')).not.toBeInTheDocument();
+    expect(screen.queryByText('common.jr.teamChat')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Compras' })).toBeInTheDocument();
   });
 
   it('keeps search in the sidebar when the header slot is missing', () => {
@@ -183,7 +194,7 @@ describe('JrSidebar rows', () => {
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /Funcionário JR/ }));
     });
-    expect(await screen.findByText('common.settings')).toBeInTheDocument();
+    expect(await screen.findByRole('menuitem', { name: 'common.settings' })).toBeInTheDocument();
     expect(screen.queryByText('common.jr.access.adminTitle')).not.toBeInTheDocument();
   });
 
@@ -193,7 +204,7 @@ describe('JrSidebar rows', () => {
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /Lucas/ }));
     });
-    fireEvent.click(await screen.findByText('common.jr.access.adminTitle'));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'common.jr.access.adminTitle' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/admin');
   });
 

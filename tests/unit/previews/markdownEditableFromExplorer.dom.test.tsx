@@ -27,6 +27,7 @@ const writeContent = vi.hoisted(() => vi.fn(async () => true));
 vi.mock('@/common', () => ({
   ipcBridge: {
     fileStream: { contentUpdate: { on: () => () => {} } },
+    teach: { openTab: { on: vi.fn(() => vi.fn()) } },
     preview: { open: { on: () => () => {} } },
     fs: {
       writeContent: { invoke: writeContent },

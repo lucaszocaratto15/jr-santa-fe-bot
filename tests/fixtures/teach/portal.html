@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <title>Portal de Teste</title>
+  </head>
+  <body>
+    <h1>Portal de Teste</h1>
+    <form id="login" method="POST" action="#logged">
+      <label for="usuario">Usuário</label>
+      <input id="usuario" name="usuario" type="text" autocomplete="username" />
+      <label for="senha">Senha</label>
+      <input id="senha" name="senha" type="password" autocomplete="current-password" />
+      <button type="submit">Entrar</button>
+    </form>
+    <p><a href="#relatorio" target="_blank">Relatórios</a></p>
+    <p><button type="button" onclick="window.open('#popup')">Abrir popup</button></p>
+    <p>
+      <a
+        download="relatorio.pdf"
+        href="data:application/pdf;base64,JVBERi0xLjEKMSAwIG9iajw8L1R5cGUvQ2F0YWxvZy9QYWdlcyAyIDAgUj4+ZW5kb2JqCjIgMCBvYmo8PC9UeXBlL1BhZ2VzL0tpZHNbMyAwIFJdL0NvdW50IDE+PmVuZG9iagozIDAgb2JqPDwvVHlwZS9QYWdlL1BhcmVudCAyIDAgUi9NZWRpYUJveFswIDAgMjAwIDIwMF0+PmVuZG9iagp0cmFpbGVyPDwvUm9vdCAxIDAgUj4+CiUlRU9GCg=="
+        >Baixar</a
+      >
+    </p>
+    <form id="busca" method="GET" action="#busca">
+      <label for="pw">Busca (campo pw)</label>
+      <input id="pw" name="pw" type="text" />
+      <button type="submit">Buscar</button>
+    </form>
+  </body>
+</html>

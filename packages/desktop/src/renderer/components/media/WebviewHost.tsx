@@ -8,6 +8,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Left, Right, Refresh, Loading } from '@icon-park/react';
 import { ipcBridge } from '@/common';
+import { BROWSER_SESSION_PARTITION } from '@/common/config/constants';
 import { InternalNavTracker, shouldResetHistoryForUrlProp } from './webviewHistory';
 
 export interface WebviewHostProps {
@@ -19,6 +20,10 @@ export interface WebviewHostProps {
   showNavBar?: boolean;
   /** Webview partition for cache/session isolation, e.g. "persist:ext-settings-feishu" */
   partition?: string;
+  /** Inactive parked browser guests must not take over the agent's CDP target. */
+  agentBrowserActive?: boolean;
+  /** Reports the guest's native identity without exposing page data. */
+  onWebContentsReady?: (webContentsId: number) => void;
   /** Extra class names for root container */
   className?: string;
   /** Extra styles for root container */
@@ -42,6 +47,8 @@ export interface WebviewHostProps {
    * which keeps existing embedded consumers behaving exactly as before.
    */
   resolveUrlInput?: (raw: string) => string | null;
+  /** Extra controls rendered at the end of the navigation bar */
+  navBarExtra?: React.ReactNode;
 }
 
 const MIN_ZOOM_FACTOR = 0.75;
@@ -62,6 +69,8 @@ const WebviewHost: React.FC<WebviewHostProps> = ({
   id: _id,
   showNavBar = false,
   partition,
+  agentBrowserActive = false,
+  onWebContentsReady,
   className,
   style,
   onDidFinishLoad,
@@ -70,11 +79,16 @@ const WebviewHost: React.FC<WebviewHostProps> = ({
   onTitleChange,
   onFaviconChange,
   resolveUrlInput,
+  navBarExtra,
 }) => {
   const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const webviewRef = useRef<Electron.WebviewTag | null>(null);
+  const agentBrowserActiveRef = useRef(agentBrowserActive);
+  agentBrowserActiveRef.current = agentBrowserActive;
+  const onWebContentsReadyRef = useRef(onWebContentsReady);
+  onWebContentsReadyRef.current = onWebContentsReady;
   const autoFitPendingRef = useRef(false);
 
   // Callbacks are mirrored into refs so the listener effect does not re-subscribe
@@ -92,6 +106,12 @@ const WebviewHost: React.FC<WebviewHostProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [zoomFactor, setZoomFactor] = useState(1);
   const [webviewReady, setWebviewReady] = useState(false);
+  useEffect(() => {
+    if (!agentBrowserActive || !webviewReady) return;
+    const webContentsId = webviewRef.current?.getWebContentsId?.();
+    if (typeof webContentsId === 'number')
+      void ipcBridge.application.reportBrowserWebContentsId.invoke({ webContentsId }).catch(() => {});
+  }, [agentBrowserActive, webviewReady]);
 
   // 最近由本组件内部触发的导航地址集合。
   //
@@ -316,7 +336,8 @@ const WebviewHost: React.FC<WebviewHostProps> = ({
        */
       try {
         const webContentsId = webviewEl.getWebContentsId?.();
-        if (typeof webContentsId === 'number') {
+        if (typeof webContentsId === 'number') onWebContentsReadyRef.current?.(webContentsId);
+        if (agentBrowserActiveRef.current && typeof webContentsId === 'number') {
           void ipcBridge.application.reportBrowserWebContentsId.invoke({ webContentsId }).then((res) => {
             if (!res.success && res.msg) console.warn('[browser] agent control unavailable:', res.msg);
           });
@@ -609,7 +630,8 @@ const WebviewHost: React.FC<WebviewHostProps> = ({
    * directly reachable by untrusted pages.
    */
   const webviewAttrs: Record<string, string> = {
-    allowpopups: 'false',
+    // Popups are routed to new tabs by the main process (setWindowOpenHandler) for the in-app browser only.
+    allowpopups: partition === BROWSER_SESSION_PARTITION ? 'true' : 'false',
     webpreferences: 'contextIsolation=yes, nodeIntegration=no, nativeWindowOpen=no',
   };
   if (partition) {
@@ -765,6 +787,7 @@ const WebviewHost: React.FC<WebviewHostProps> = ({
               placeholder={t('preview.browser.addressPlaceholder')}
             />
           </form>
+          {navBarExtra}
         </div>
       )}
 

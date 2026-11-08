@@ -19,11 +19,42 @@ import React from 'react';
 import { act, render } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const protection = vi.hoisted(() => ({
+  phase: 'idle',
+  takenOver: false,
+  requests: [] as Array<{ origin: string }>,
+  activity: undefined as
+    | undefined
+    | ((message: { type: string; data: unknown; conversation_id?: string; turn_id?: string }) => void),
+}));
+
+vi.mock('@/renderer/pages/conversation/Preview/browser/TeachCards/teachStore', () => ({
+  useTeachUi: () => protection,
+}));
+vi.mock('@/renderer/pages/conversation/Preview/browser/TeachCards/useSecureRequests', () => ({
+  useSecureRequests: () => protection.requests,
+}));
+vi.mock('@/renderer/pages/conversation/Preview/browser/BrowserViewer', () => ({ default: () => null }));
+vi.mock('@/renderer/pages/conversation/Preview/browser/TeachControls', () => ({
+  default: () => null,
+  TeachRecordingBar: () => null,
+}));
+
 vi.mock('@/common', () => ({
   ipcBridge: {
     fileStream: { contentUpdate: { on: () => () => {} } },
+    teach: { openTab: { on: vi.fn(() => vi.fn()) } },
     preview: { open: { on: () => () => {} } },
-    conversation: { responseStream: { on: () => () => {} } },
+    conversation: {
+      responseStream: {
+        on: (handler: typeof protection.activity) => {
+          protection.activity = handler;
+          return () => {
+            protection.activity = undefined;
+          };
+        },
+      },
+    },
     fs: { getFileContent: { invoke: vi.fn() }, writeFile: { invoke: vi.fn() } },
   },
 }));
@@ -38,6 +69,7 @@ import {
   type PreviewContextValue,
 } from '@/renderer/pages/conversation/Preview/context/PreviewContext';
 import { MAX_BROWSER_TABS } from '@/renderer/pages/conversation/Preview/browser/constants';
+import { BUILTIN_BROWSER_MCP_NAME } from '@/common/config/constants';
 
 let ctx: PreviewContextValue;
 
@@ -57,6 +89,9 @@ const browserTabs = () => ctx.tabs.filter((tab) => tab.content_type === 'browser
 
 beforeEach(() => {
   localStorage.clear();
+  protection.phase = 'idle';
+  protection.takenOver = false;
+  protection.requests = [];
 });
 
 describe('PreviewContext browser tabs', () => {
@@ -133,6 +168,173 @@ describe('PreviewContext browser tabs', () => {
     }
     expect(ctx.browserTabLimitHitAt).toBeNull();
   });
+
+  it('reuses the oldest idle tab instead of replacing a tab used by the agent', () => {
+    renderProvider();
+    for (let i = 0; i < MAX_BROWSER_TABS; i += 1) act(() => ctx.openBrowserTab(`https://example.com/${i}`));
+    const protectedTab = browserTabs()[0];
+    const idleId = browserTabs()[1].id;
+    act(() => ctx.updateTab(protectedTab.id, { metadata: { agentActive: true } }));
+    act(() => ctx.openBrowserTab('https://overflow.example.com'));
+    expect(browserTabs()[0]).toEqual({ ...protectedTab, metadata: { agentActive: true } });
+    expect(ctx.activeTabId).toBe(idleId);
+    expect(browserTabs()[1].content).toBe('https://overflow.example.com');
+  });
+
+  it('refuses a new browser tab when every existing tab is protected', () => {
+    renderProvider();
+    for (let i = 0; i < MAX_BROWSER_TABS; i += 1) {
+      act(() => ctx.openBrowserTab(`https://example.com/${i}`));
+      act(() => ctx.updateTab(browserTabs()[i].id, { metadata: { agentActive: true } }));
+    }
+    const before = ctx.tabs;
+    const activeId = ctx.activeTabId;
+    act(() => ctx.openBrowserTab('https://overflow.example.com'));
+    expect(ctx.tabs).toBe(before);
+    expect(ctx.activeTabId).toBe(activeId);
+    expect(ctx.browserTabProtectedAt).toBeTypeOf('number');
+    expect(ctx.browserTabLimitHitAt).toBeNull();
+  });
+
+  it('refuses closing an active browser and releases it after the operation ends', () => {
+    renderProvider();
+    act(() => ctx.openBrowserTab('https://example.com'));
+    const id = browserTabs()[0].id;
+    act(() => ctx.updateTab(id, { metadata: { agentActive: true } }));
+    act(() => ctx.closeTab(id));
+    expect(browserTabs()).toHaveLength(1);
+    act(() => ctx.updateTab(id, { metadata: { agentActive: false } }));
+    act(() => ctx.closeTab(id));
+    expect(browserTabs()).toHaveLength(0);
+    expect(ctx.isOpen).toBe(false);
+  });
+
+  it('collapses the panel while retaining the active browser tab', () => {
+    renderProvider();
+    act(() => ctx.openBrowserTab('https://example.com'));
+    const id = browserTabs()[0].id;
+    act(() => ctx.updateTab(id, { metadata: { agentActive: true } }));
+    act(() => ctx.closePreview());
+    expect(ctx.isOpen).toBe(false);
+    expect(browserTabs()[0].metadata?.agentActive).toBe(true);
+    act(() => ctx.updateTab(id, { metadata: { agentActive: false } }));
+    act(() => ctx.closePreview());
+    expect(ctx.isOpen).toBe(false);
+    expect(browserTabs()[0].id).toBe(id);
+  });
+
+  it('keeps the collapse callback stable when the recording ends so route effects do not close the browser', () => {
+    protection.phase = 'recording';
+    const view = renderProvider();
+    act(() => ctx.openBrowserTab('https://example.com'));
+    const close = ctx.closePreview;
+    protection.phase = 'idle';
+    view.rerender(
+      <PreviewProvider>
+        <Probe />
+      </PreviewProvider>
+    );
+    expect(ctx.closePreview).toBe(close);
+    expect(ctx.isOpen).toBe(true);
+  });
+
+  it('does not replace a protected browser when another preview requests browse mode', () => {
+    renderProvider();
+    act(() => ctx.openBrowserTab('https://example.com'));
+    const id = browserTabs()[0].id;
+    act(() => ctx.updateTab(id, { metadata: { agentActive: true } }));
+    act(() => ctx.openPreview('notes', 'markdown', { file_path: '/notes.md' }, { replace: true }));
+    expect(browserTabs()[0].id).toBe(id);
+    expect(browserTabs()[0].content).toBe('https://example.com');
+    expect(ctx.tabs).toHaveLength(2);
+  });
+
+  it.each(['recording', 'paused', 'stopping', 'discarding'])(
+    'keeps browser tabs alive while teaching is %s',
+    (phase) => {
+      protection.phase = phase;
+      renderProvider();
+      act(() => ctx.openBrowserTab('https://example.com'));
+      act(() => ctx.closeTab(browserTabs()[0].id));
+      expect(browserTabs()).toHaveLength(1);
+      expect(ctx.browserTabProtectedAt).toBeTypeOf('number');
+    }
+  );
+
+  it('keeps a human takeover alive until control is returned', () => {
+    protection.takenOver = true;
+    const view = renderProvider();
+    act(() => ctx.openBrowserTab('https://example.com'));
+    const id = browserTabs()[0].id;
+    act(() => ctx.closeTab(id));
+    expect(browserTabs()).toHaveLength(1);
+    protection.takenOver = false;
+    view.rerender(
+      <PreviewProvider>
+        <Probe />
+      </PreviewProvider>
+    );
+    act(() => ctx.closeTab(id));
+    expect(browserTabs()).toHaveLength(0);
+  });
+
+  it('protects only the secure login origin and releases the tab when the request finishes', () => {
+    protection.requests = [{ origin: 'https://login.example.com' }];
+    const view = renderProvider();
+    act(() => ctx.openBrowserTab('https://login.example.com/session'));
+    const loginId = browserTabs()[0].id;
+    act(() => ctx.openBrowserTab('https://other.example.com'));
+    act(() => ctx.closeTab(browserTabs()[1].id));
+    act(() => ctx.closeTab(loginId));
+    expect(browserTabs().map((tab) => tab.id)).toEqual([loginId]);
+    protection.requests = [];
+    view.rerender(
+      <PreviewProvider>
+        <Probe />
+      </PreviewProvider>
+    );
+    act(() => ctx.closeTab(loginId));
+    expect(browserTabs()).toHaveLength(0);
+  });
+
+  it('protects tabs opened during an in-flight browser tool until that tool settles', () => {
+    renderProvider();
+    const entry = { name: `${BUILTIN_BROWSER_MCP_NAME}__navigate_page`, status: 'Executing' };
+    act(() => protection.activity?.({ type: 'tool_group', data: [entry] }));
+    act(() => ctx.openBrowserTab('https://example.com'));
+    const id = browserTabs()[0].id;
+    act(() => ctx.closeTab(id));
+    expect(browserTabs()).toHaveLength(1);
+    act(() => protection.activity?.({ type: 'tool_group', data: [{ ...entry, status: 'Success' }] }));
+    act(() => ctx.closeTab(id));
+    expect(browserTabs()).toHaveLength(0);
+  });
+
+  it('keeps research alive between tool calls until its own turn finishes', () => {
+    renderProvider();
+    act(() => ctx.openBrowserTab('https://example.com'));
+    const id = browserTabs()[0].id;
+    const message = {
+      type: 'tool_group',
+      conversation_id: 'conversation-a',
+      turn_id: 'turn-a',
+      data: [{ name: `${BUILTIN_BROWSER_MCP_NAME}__navigate_page`, status: 'Executing' }],
+    };
+    act(() => protection.activity?.(message));
+    act(() => protection.activity?.({ ...message, data: [{ ...message.data[0], status: 'Success' }] }));
+    act(() => ctx.closeTab(id));
+    expect(browserTabs()).toHaveLength(1);
+    act(() =>
+      protection.activity?.({ type: 'finish', data: null, conversation_id: 'conversation-b', turn_id: 'turn-a' })
+    );
+    act(() => ctx.closeTab(id));
+    expect(browserTabs()).toHaveLength(1);
+    act(() =>
+      protection.activity?.({ type: 'finish', data: null, conversation_id: 'conversation-a', turn_id: 'turn-a' })
+    );
+    act(() => ctx.closeTab(id));
+    expect(browserTabs()).toHaveLength(0);
+  });
 });
 
 describe('PreviewContext browser tab persistence', () => {
@@ -163,13 +365,13 @@ describe('PreviewContext browser tab persistence', () => {
     expect(browserTabs()[0].content).toBe('https://example.com');
   });
 
-  it('never restores the agent activity badge as active', () => {
+  it('keeps live activity across scopes but never restores the badge from disk', () => {
     // 关键行为：角标是"此刻 Agent 正在操作"的实时信号。若被持久化成 true，
     // 重启后会永久亮着，用户会以为 Agent 在偷偷操作浏览器。
     // Key behavior: the badge means "the agent is acting right now". Persisted as
     // true it would stay lit forever after a restart, making the user think the
     // agent is secretly driving the browser.
-    renderProvider();
+    const view = renderProvider();
     act(() => ctx.closePreviewIfScopeChanged('project-a'));
     act(() => ctx.openBrowserTab('https://example.com'));
     const tabId = browserTabs()[0].id;
@@ -181,6 +383,10 @@ describe('PreviewContext browser tab persistence', () => {
     const stored = readScope('project-a');
     expect(stored.tabs[0].metadata.agentActive).toBe(false);
 
+    act(() => ctx.closePreviewIfScopeChanged('project-a'));
+    expect(browserTabs()[0].metadata?.agentActive).toBe(true);
+    view.unmount();
+    renderProvider();
     act(() => ctx.closePreviewIfScopeChanged('project-a'));
     expect(browserTabs()[0].metadata?.agentActive).toBe(false);
   });

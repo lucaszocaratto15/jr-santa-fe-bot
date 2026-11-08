@@ -442,3 +442,16 @@
   color: var(--color-text-1);
   background: var(--color-fill-2);
 }
+
+.embedded h1 {
+  margin: 0 0 20px;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--color-text-1);
+}
+.embedded .content {
+  padding: 0;
+}
+.embedded .catalogBody {
+  padding: 0;
+}

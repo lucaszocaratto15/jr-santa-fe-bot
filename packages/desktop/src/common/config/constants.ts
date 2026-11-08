@@ -31,6 +31,12 @@
 export const BROWSER_SESSION_PARTITION = 'persist:aionui-browser';
 
 /**
+ * In-memory session used only by the HTML preview webview. It never shares
+ * cookies, storage or permissions with the app renderer.
+ */
+export const PREVIEW_SESSION_PARTITION = 'aionui-preview';
+
+/**
  * 内置浏览器 MCP 的注册名。
  *
  * 放在 common 的理由和上面一样，而且更强：主进程用它注册这个内置 MCP，渲染进程用它
@@ -46,6 +52,15 @@ export const BROWSER_SESSION_PARTITION = 'persist:aionui-browser';
  * eventually drift, and the symptom of drift is a badge that silently never lights.
  */
 export const BUILTIN_BROWSER_MCP_NAME = 'aionui-browser';
+
+/** Name of the built-in MCP server that lets the agent use the vault and submit taught-task drafts. */
+export const BUILTIN_TEACH_MCP_NAME = 'jr-teach';
+export const JR_STRATA_READ_TOOLS = [
+  'strata_identidade',
+  'strata_consultas_buscar',
+  'strata_consultas_descrever',
+  'strata_consultas_executar',
+] as const;
 
 // ===== 文件处理相关常量 =====
 

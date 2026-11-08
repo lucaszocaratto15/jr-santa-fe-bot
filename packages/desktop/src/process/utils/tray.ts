@@ -289,7 +289,7 @@ export const createOrUpdateTray = (): void => {
 /**
  * Rebuild tray menu with current cached state (synchronous wrapper).
  */
-const rebuildTrayMenu = (): void => {
+export const rebuildTrayMenu = (): void => {
   if (!tray) return;
   void buildTrayContextMenu().then((menu) => tray?.setContextMenu(menu));
 };

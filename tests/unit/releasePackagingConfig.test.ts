@@ -5,7 +5,9 @@ import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 
 const projectRoot = resolve(__dirname, '../..');
-const itWithBash = spawnSync('bash', ['--version'], { encoding: 'utf8' }).status === 0 ? it : it.skip;
+// The release shell scripts only run on Linux/macOS runners; Windows bash cannot resolve its temp paths.
+const itWithBash =
+  process.platform !== 'win32' && spawnSync('bash', ['--version'], { encoding: 'utf8' }).status === 0 ? it : it.skip;
 
 function readProjectFile(path: string): string {
   return readFileSync(resolve(projectRoot, path), 'utf8');

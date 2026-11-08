@@ -10,10 +10,12 @@ const mocks = vi.hoisted(() => ({
   revoke: vi.fn(),
   updatePolicy: vi.fn(),
   setBlocked: vi.fn(),
+  brainMe: vi.fn(),
 }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'pt-BR' } }) }));
 vi.mock('@/common', () => ({
   ipcBridge: {
+    brain: { me: { invoke: mocks.brainMe } },
     jr: {
       admin: {
         list: { invoke: mocks.list },
@@ -44,6 +46,10 @@ const show = (role: 'admin' | 'employee', id = 'staff-1') =>
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.list.mockResolvedValue([]);
+  mocks.brainMe.mockResolvedValue({
+    permissionsSource: 'erp',
+    capabilities: { revise: false, withdraw: false, approveOfficial: false },
+  });
 });
 it('does not request administrative records for an employee', async () => {
   show('employee');
@@ -182,4 +188,47 @@ it('reports a block failure and keeps the employee on the list', async () => {
   expect(await screen.findByText('common.jr.access.actionError')).toBeInTheDocument();
   expect(mocks.setBlocked).toHaveBeenCalledWith({ employeeId: 'person-1', blocked: true });
   expect(screen.getByRole('heading', { name: 'Ana' })).toBeInTheDocument();
+});
+
+it('filters people without changing accounts and restores the full list when cleared', async () => {
+  mocks.list.mockResolvedValue([
+    { id: 'a', name: 'Ana', title: 'Compras', role: 'employee', revoked: false, blocked: false },
+    { id: 'b', name: 'Beto', title: 'Obras', role: 'employee', revoked: false, blocked: true },
+  ]);
+  show('admin', 'owner');
+  await screen.findByRole('heading', { name: 'Ana' });
+  fireEvent.change(screen.getByRole('textbox', { name: 'common.jr.look.searchPeople' }), {
+    target: { value: 'Obras' },
+  });
+  expect(screen.queryByRole('heading', { name: 'Ana' })).not.toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Beto' })).toBeInTheDocument();
+  fireEvent.change(screen.getByRole('textbox', { name: 'common.jr.look.searchPeople' }), { target: { value: '' } });
+  expect(screen.getByRole('heading', { name: 'Ana' })).toBeInTheDocument();
+});
+it('does not expose Brain management merely because the account is a JR administrator', async () => {
+  show('admin', 'owner');
+  await waitFor(() => expect(mocks.brainMe).toHaveBeenCalled());
+  expect(screen.queryByRole('button', { name: 'common.jr.look.tabs.brain' })).not.toBeInTheDocument();
+});
+it('offers Brain management when the existing ERP account grants that capability', async () => {
+  mocks.brainMe.mockResolvedValue({ permissionsSource: 'erp', capabilities: { revise: true } });
+  show('admin');
+  expect(await screen.findByRole('button', { name: 'common.jr.look.tabs.brain' })).toBeInTheDocument();
+});
+
+it('preserves block and unblock actions with the same employee id', async () => {
+  const person = { id: 'person-1', name: 'Ana', role: 'employee', revoked: false, blocked: false };
+  mocks.list.mockImplementation(async () => [{ ...person }]);
+  mocks.setBlocked.mockImplementation(async (input: { blocked: boolean }) => {
+    person.blocked = input.blocked;
+  });
+  show('admin');
+  fireEvent.click(await screen.findByRole('button', { name: 'common.jr.access.blockAction' }));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'common.jr.access.unblockAction' })).toBeEnabled());
+  fireEvent.click(screen.getByRole('button', { name: 'common.jr.access.unblockAction' }));
+  await screen.findByRole('button', { name: 'common.jr.access.blockAction' });
+  expect(mocks.setBlocked.mock.calls.map(([input]) => input)).toEqual([
+    { employeeId: 'person-1', blocked: true },
+    { employeeId: 'person-1', blocked: false },
+  ]);
 });

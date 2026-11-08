@@ -1,0 +1,82 @@
+.slot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.bar {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 10px;
+  flex-shrink: 0;
+  background: var(--color-bg-2);
+  border-bottom: 1px solid var(--color-border-1);
+  color: var(--color-text-1);
+  font-size: 12px;
+}
+
+.barChat {
+  height: 44px;
+  margin-bottom: 12px;
+  padding: 0 8px 0 14px;
+  border: 1px solid var(--jr-hairline);
+  border-radius: 16px;
+  background: var(--jr-surface);
+  box-shadow: var(--jr-composer-shadow);
+  font-size: 13px;
+}
+
+.timerLabel {
+  font-weight: 500;
+  color: var(--color-text-1);
+}
+
+.progress {
+  position: absolute;
+  inset-inline-start: 0;
+  bottom: 0;
+  height: 2px;
+  background: rgb(var(--danger-6));
+  transition: width 1s linear;
+}
+
+.dotPaused ~ .progress {
+  background: var(--color-text-3);
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgb(var(--danger-6));
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+.dotPaused {
+  background: var(--color-text-3);
+  animation: none;
+}
+
+.timer {
+  color: var(--color-text-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.barActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-inline-start: auto;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}

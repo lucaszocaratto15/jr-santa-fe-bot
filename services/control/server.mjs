@@ -1,6 +1,9 @@
 import { createServer } from 'node:http';
+import { handleBrain } from './brain.mjs';
+import { handleHandbook } from './handbook.mjs';
 import { createModelProxy } from './proxy.mjs';
 import { createStore } from './store.mjs';
+import { createStrataService } from './strata/index.mjs';
 import { httpError, isHttpError, textField, validateConfiguration } from './validation.mjs';
 
 const json = (response, status, body) => {
@@ -38,6 +41,7 @@ export function createControlServer(options = {}) {
   const config = validateConfiguration(options);
   const now = config.now ?? Date.now;
   const store = createStore({ ...config, now });
+  const strata = createStrataService({ ...config, now });
   const proxy = createModelProxy({ ...config, store, now });
   const loginAttempts = new Map();
   const rateLimitLogin = (address) => {
@@ -67,6 +71,10 @@ export function createControlServer(options = {}) {
         if (closing) throw httpError(503, 'service_unavailable');
         const path = request.url?.split('?')[0];
         if (request.method === 'GET' && path === '/health') return json(response, 200, { status: 'ok' });
+        if (request.method === 'GET' && path === '/strata/callback') {
+          const callback = new URL(request.url, 'http://control.invalid');
+          return json(response, 200, await strata.callback(callback.searchParams));
+        }
         if (request.method === 'POST' && path === '/auth/login') {
           rateLimitLogin(request.socket.remoteAddress ?? 'unknown');
           const body = await readJson(request, 16_384);
@@ -79,12 +87,69 @@ export function createControlServer(options = {}) {
           return json(response, 200, store.login(login));
         }
         const session = authenticate(request);
+        if (path?.startsWith('/strata/')) {
+          const current = () => authenticate(request);
+          if (request.method === 'GET' && path === '/strata/status')
+            return json(response, 200, await strata.status(session, current));
+          if (request.method === 'POST' && path === '/strata/connect') {
+            await readJson(request, 1024);
+            current();
+            return json(response, 200, await strata.connect(session, current));
+          }
+          if (request.method === 'POST' && path === '/strata/disconnect') {
+            await readJson(request, 1024);
+            current();
+            return json(response, 200, strata.disconnect(session, current));
+          }
+          if (request.method === 'POST' && path === '/strata/organization') {
+            const body = await readJson(request, 1024);
+            current();
+            return json(response, 200, await strata.organization(session, body.organizationId, current));
+          }
+          if (request.method === 'GET' && path === '/strata/mcp/tools')
+            return json(response, 200, await strata.tools(session, current));
+          if (request.method === 'POST' && path === '/strata/mcp/call') {
+            const body = await readJson(request, 70 * 1024);
+            current();
+            return json(response, 200, await strata.call(session, body.name, body.arguments, current));
+          }
+          throw httpError(404, 'not_found');
+        }
         if (request.method === 'GET' && path === '/auth/session') return json(response, 200, { user: session.user });
         if (request.method === 'POST' && path === '/auth/logout') {
           store.logout(session.sessionHash);
           proxy.revokeSession(session.sessionHash);
           return json(response, 200, { loggedOut: true });
         }
+        if (
+          await handleHandbook({
+            request,
+            response,
+            path,
+            session,
+            store: store.handbook,
+            readJson,
+            json,
+            httpError,
+            reauth: authenticate,
+          })
+        )
+          return;
+        if (
+          await handleBrain({
+            request,
+            response,
+            session,
+            config,
+            readJson,
+            json,
+            reauth: authenticate,
+            brainFetch: config.brainFetch,
+            resolvePrincipal: (currentSession, groupSearch) =>
+              strata.resolveKnowledgePrincipal(currentSession, () => authenticate(request), groupSearch),
+          })
+        )
+          return;
         if (path?.startsWith('/admin/')) {
           if (session.user.role !== 'admin') throw httpError(403, 'forbidden');
           if (request.method === 'GET' && path === '/admin/employees')
@@ -94,7 +159,7 @@ export function createControlServer(options = {}) {
             authenticate(request);
             return json(response, 201, store.invite(textField(body.name, 1, 120), body));
           }
-          const employee = /^\/admin\/employees\/([a-zA-Z0-9-]{1,64})\/(revoke|invite|block|policy)$/u.exec(path);
+          const employee = /^\/admin\/employees\/([a-zA-Z0-9-]{1,64})\/(revoke|invite|block|policy|title)$/u.exec(path);
           if (request.method === 'POST' && employee) {
             if (employee[2] === 'invite') return json(response, 201, store.renewInvite(employee[1]));
             if (employee[2] === 'revoke') {
@@ -104,6 +169,7 @@ export function createControlServer(options = {}) {
             }
             const body = await readJson(request, 16_384);
             authenticate(request);
+            if (employee[2] === 'title') return json(response, 200, store.setTitle(employee[1], body.title));
             if (employee[2] === 'block') {
               const result = store.setBlocked(employee[1], body.blocked);
               if (result.blocked) proxy.revokeUser(employee[1]);
@@ -141,6 +207,7 @@ export function createControlServer(options = {}) {
   server.keepAliveTimeout = 5_000;
   return {
     server,
+    strata,
     close() {
       closing ??= (async () => {
         const stopping = proxy.close();
@@ -151,6 +218,7 @@ export function createControlServer(options = {}) {
           });
         }
         await stopping;
+        strata.close();
         store.close();
       })();
       return closing;

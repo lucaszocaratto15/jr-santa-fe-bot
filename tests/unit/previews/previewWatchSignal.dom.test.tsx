@@ -27,6 +27,7 @@ vi.mock('react-i18next', () => ({
 vi.mock('@/common', () => ({
   ipcBridge: {
     fileStream: { contentUpdate: { on: () => () => {} } },
+    teach: { openTab: { on: vi.fn(() => vi.fn()) } },
     preview: { open: { on: () => () => {} } },
     fs: {
       writeContent: { invoke: async () => true },

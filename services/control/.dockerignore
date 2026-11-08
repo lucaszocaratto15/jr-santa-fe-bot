@@ -6,3 +6,7 @@
 !proxy.mjs
 !validation.mjs
 !compact.mjs
+!handbook.mjs
+!brain.mjs
+!strata/
+!strata/*.mjs

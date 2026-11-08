@@ -12,6 +12,11 @@ import { initWindowControlsBridge } from './windowControlsBridge';
 import { initNotificationBridge } from './notificationBridge';
 import { initWebuiBridge } from './webuiBridge';
 import { initThemeBridge } from './themeBridge';
+import { initSecureInputBridge, initTeachBridge, initVaultBridge } from '@process/services/teach/control/teachIpc';
+import { initLearnBridge } from '@process/services/teach/learn/learnIpc';
+import { initLessonsBridge } from '@process/services/teach/lessons/lessonsIpc';
+import { initBrainBridge } from '@process/services/brain/brainIpc';
+import { initHandbookBridge } from '@process/services/teach/handbook/handbookIpc';
 
 export type BridgeDependencies = Record<string, never>;
 
@@ -24,15 +29,26 @@ export function initAllBridges(_deps: BridgeDependencies = {}): void {
   initNotificationBridge();
   initWebuiBridge();
   initThemeBridge();
+  initVaultBridge();
+  initSecureInputBridge();
+  initTeachBridge();
+  initLearnBridge();
+  initLessonsBridge();
+  initHandbookBridge();
+  initBrainBridge();
 }
 
 export {
   initApplicationBridge,
   initDialogBridge,
+  initLearnBridge,
   initNotificationBridge,
   initSystemSettingsBridge,
   initThemeBridge,
   initUpdateBridge,
+  initSecureInputBridge,
+  initTeachBridge,
+  initVaultBridge,
   initWindowControlsBridge,
   initWebuiBridge,
 };

@@ -362,7 +362,7 @@ export async function compactMessages(messages, options = {}) {
   const budgetMs = options.budgetMs ?? DEFAULT_COMPACTION_BUDGET_MS;
   const attemptMs = options.attemptMs ?? 90_000;
   const signal = options.signal;
-  const gemini = options.gemini?.key && typeof options.gemini.fetch === 'function' ? options.gemini : null;
+  let gemini = options.gemini?.key && typeof options.gemini.fetch === 'function' ? options.gemini : null;
   let geminiBlocks = 0;
   let excerptBlocks = 0;
 
@@ -392,6 +392,9 @@ export async function compactMessages(messages, options = {}) {
         `Compactação: resumo indisponível status=${status} modelo=${gemini.model ?? '-'}; pedido segue com excerto`
       );
       notes.push(noteText(EXCERPT_MARK, excerptSummary(flat)));
+      // Do not spend the same optional-summary timeout again on every old block or tool round trip.
+      if (status !== 400 && status !== 413) options.onUnavailable?.();
+      gemini = null;
     }
   }
 

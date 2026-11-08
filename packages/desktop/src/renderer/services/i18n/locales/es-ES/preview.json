@@ -153,7 +153,10 @@
     "tabLimitReached": "Se alcanzó el límite de pestañas ({{count}}). Se reutilizó la pestaña más antigua.",
     "agentFirstUseTitle": "El agente está usando el navegador integrado",
     "agentFirstUseContent": "Puede abrir páginas, hacer clic y leer contenido en este panel. Tu sesión se conserva.",
-    "agentFirstUseAction": "Abrir ajustes"
+    "agentFirstUseAction": "Abrir ajustes",
+    "tabProtected": "Este navegador está en uso. Finalice la tarea, la grabación o el inicio de sesión seguro, o devuelva el control al bot antes de cerrar o sustituir la pestaña.",
+    "sessionLimitReached": "El navegador ya tiene {{count}} sesiones abiertas. Cierre una pestaña sin uso antes de abrir otra; las sesiones de otros proyectos permanecen abiertas.",
+    "popupBlocked": "Se bloqueó una nueva pestaña porque su navegador de origen no está activo en este proyecto. Abra el enlace desde el navegador del proyecto actual."
   },
   "saveConflict": "No se pudo guardar: este archivo cambió en el disco después de que lo abrieras. Vuelve a cargarlo para ver los otros cambios; tus ediciones siguen aquí, sin guardar.",
   "persistQuotaExceeded": "El almacenamiento local está lleno, así que ya no se pueden recordar las pestañas abiertas de este proyecto. Cierra algunas pestañas o borra los datos del sitio.",

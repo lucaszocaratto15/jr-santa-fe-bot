@@ -602,7 +602,7 @@ describe('AutoUpdaterService', () => {
     await autoUpdaterService.quitAndInstall();
 
     expect(cleanup).toHaveBeenCalledTimes(1);
-    expect(autoUpdaterMock.autoInstallOnAppQuit).toBe(true);
+    expect(autoUpdaterMock.autoInstallOnAppQuit).toBe(false);
     expect(autoUpdaterMock.quitAndInstall).toHaveBeenCalledWith(false, true);
   });
 

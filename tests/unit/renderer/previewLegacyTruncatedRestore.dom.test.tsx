@@ -20,6 +20,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('@/common', () => ({
   ipcBridge: {
     fileStream: { contentUpdate: { on: () => () => {} } },
+    teach: { openTab: { on: vi.fn(() => vi.fn()) } },
     preview: { open: { on: () => () => {} } },
     fs: {
       writeFile: { invoke: async () => true },

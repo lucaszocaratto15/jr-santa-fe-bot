@@ -32,6 +32,7 @@ import {
   tokensMatch,
   type CdpRequest,
 } from './cdpTargetProtocol';
+import { MIN_SECRET_LENGTH, isInternalBindingEvent, redactValue, stripPostData } from './secretRedact';
 
 const HOST = '127.0.0.1';
 const WS_PATH = '/aionui-cdp';
@@ -44,6 +45,33 @@ export type CdpBridgeHandle = {
   attach: (webContentsId: number) => { ok: true } | { ok: false; reason: string };
   detach: () => void;
   close: () => Promise<void>;
+  /**
+   * Main-process-only API. None of these are reachable over the WebSocket protocol.
+   * 仅主进程内部使用，不经 WebSocket 暴露给客户端。
+   */
+  /** Send a CDP command to the attached webContents (rejects when nothing is attached). */
+  sendCommand: (method: string, params?: Record<string, unknown>) => Promise<unknown>;
+  /** Subscribe to every (unredacted) debugger event of the attached webContents. */
+  onEvent: (listener: (method: string, params: unknown) => void) => () => void;
+  /** Called after a webContents is newly attached. */
+  onAttach: (listener: (webContentsId: number) => void) => () => void;
+  /**
+   * Register a live secret to be redacted from all client-bound traffic until the webContents
+   * is destroyed. With `probe` (default true), client page JS is also refused while the value
+   * sits in a field (R13); usernames pass `probe: false` and are redaction-only (R16). Once a
+   * value is probed it stays probed.
+   */
+  addSecret: (webContentsId: number, value: string, opts?: { probe: boolean }) => void;
+  /** True while a vault or secure-card secret is registered for this webContents (no screenshots then). */
+  hasLiveSecret: (webContentsId: number) => boolean;
+  /**
+   * While locked, every client command is rejected with a CDP error and request bodies are
+   * stripped from relayed events (events still flow). Bodies of requests seen while locked
+   * stay hidden from `Network.getRequestPostData` after unlock.
+   */
+  setClientsLocked: (locked: boolean, reason?: string) => void;
+  /** True while client commands are refused (recording or employee take-over). */
+  isClientsLocked: () => boolean;
 };
 
 type AttachedState = {
@@ -55,6 +83,134 @@ type AttachedState = {
 
 let attached: AttachedState | null = null;
 let sockets = new Set<WebSocket>();
+const eventListeners = new Set<(method: string, params: unknown) => void>();
+const attachListeners = new Set<(webContentsId: number) => void>();
+/** Live secrets per webContents id (value -> probed), redacted from everything sent to clients. */
+const secretsByContents = new Map<number, Map<string, boolean>>();
+let clientsLocked: { reason?: string } | null = null;
+/** requestIds of Network/Fetch events relayed while locked (insertion order, capped). */
+const lockedRequestIds = new Set<string>();
+const MAX_LOCKED_REQUEST_IDS = 10_000;
+
+const rememberLockedRequest = (method: string, params: unknown) => {
+  if (!method.startsWith('Network.') && !method.startsWith('Fetch.')) return;
+  const requestId = (params as { requestId?: unknown } | undefined)?.requestId;
+  if (typeof requestId !== 'string') return;
+  lockedRequestIds.delete(requestId);
+  lockedRequestIds.add(requestId);
+  if (lockedRequestIds.size > MAX_LOCKED_REQUEST_IDS) {
+    const oldest = lockedRequestIds.values().next().value;
+    if (oldest !== undefined) lockedRequestIds.delete(oldest);
+  }
+};
+
+/** All live secrets (any contents): fail closed across detach/re-attach. */
+const currentSecrets = (): string[] => [...secretsByContents.values()].flatMap((map) => [...map.keys()]);
+
+/** Secrets the field probe looks for: probed kinds only, same length floor as redaction (R16). */
+const probedSecrets = (): string[] => [
+  ...new Set(
+    [...secretsByContents.values()].flatMap((map) =>
+      [...map].filter(([value, probed]) => probed && value.length >= MIN_SECRET_LENGTH).map(([value]) => value)
+    )
+  ),
+];
+
+/**
+ * Serialize and redact; every client-bound frame goes through here. Redaction walks the
+ * parsed message (string values and keys only, R14) so numbers and arrays stay intact.
+ */
+const serializeForClient = (payload: unknown): string => {
+  const text = JSON.stringify(payload);
+  const secrets = currentSecrets();
+  if (secrets.length === 0) return text;
+  return JSON.stringify(redactValue(JSON.parse(text), secrets));
+};
+
+/** Client commands that run page JS; refused while a live secret sits in a field (R13). */
+const PAGE_JS_METHODS: ReadonlySet<string> = new Set([
+  'Runtime.evaluate',
+  'Runtime.callFunctionOn',
+  'Runtime.compileScript',
+  'Debugger.evaluateOnCallFrame',
+]);
+
+export const SECRET_IN_FIELD_ERROR = 'bloqueado: campo com segredo preenchido na página';
+
+/**
+ * Value-free probe: returns a boolean only (whether any input/textarea in the document, its
+ * open shadow roots or same-origin iframes holds one of the secrets). It is a function
+ * declaration that receives the secrets as a Runtime.callFunctionOn argument, so no secret is
+ * ever part of a script source the agent could search (R16).
+ */
+export const SECRET_FIELD_PROBE = `function (list) {
+  const secrets = new Set(list);
+  const check = (root) => {
+    for (const el of root.querySelectorAll('input, textarea')) {
+      if (secrets.has(el.value)) return true;
+    }
+    for (const el of root.querySelectorAll('*')) {
+      if (el.shadowRoot && check(el.shadowRoot)) return true;
+      if (el.tagName === 'IFRAME' || el.tagName === 'FRAME') {
+        try {
+          const doc = el.contentDocument;
+          if (doc && check(doc)) return true;
+        } catch (_) {}
+      }
+    }
+    return false;
+  };
+  return check(document);
+}`;
+
+/** Object group for the probe's remote objects, released after every probe. */
+const PROBE_OBJECT_GROUP = 'jrTeachSecretProbe';
+/** A probe that does not answer in time refuses the command (fail closed, R16). */
+export const PROBE_TIMEOUT_MS = 2_000;
+
+const runSecretProbe = async (dbg: Debugger, secrets: readonly string[]): Promise<boolean> => {
+  try {
+    const global = (await dbg.sendCommand('Runtime.evaluate', {
+      expression: 'globalThis',
+      objectGroup: PROBE_OBJECT_GROUP,
+      silent: true,
+    })) as { result?: { objectId?: unknown } } | undefined;
+    const objectId = global?.result?.objectId;
+    if (typeof objectId !== 'string') return true;
+    const response = (await dbg.sendCommand('Runtime.callFunctionOn', {
+      functionDeclaration: SECRET_FIELD_PROBE,
+      objectId,
+      arguments: [{ value: secrets }],
+      objectGroup: PROBE_OBJECT_GROUP,
+      returnByValue: true,
+      silent: true,
+    })) as { result?: { value?: unknown } } | undefined;
+    return response?.result?.value !== false;
+  } finally {
+    dbg.sendCommand('Runtime.releaseObjectGroup', { objectGroup: PROBE_OBJECT_GROUP }).catch(() => {});
+  }
+};
+
+/**
+ * True when the page currently holds a probed secret in a field, or when the probe cannot
+ * tell: it errors, answers anything but `false`, or does not answer within PROBE_TIMEOUT_MS
+ * (fail closed). Nothing is cached across commands.
+ */
+const secretSitsInField = async (dbg: Debugger, secrets: readonly string[]): Promise<boolean> => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<boolean>((resolve) => {
+    timer = setTimeout(() => resolve(true), PROBE_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([runSecretProbe(dbg, secrets).catch(() => true), timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+const sendToClient = (ws: WebSocket, payload: unknown) => {
+  ws.send(serializeForClient(payload));
+};
 
 const currentTargetInfo = () => {
   if (!attached || attached.contents.isDestroyed()) return buildTargetInfo('', 'about:blank');
@@ -62,7 +218,7 @@ const currentTargetInfo = () => {
 };
 
 const broadcast = (payload: Record<string, unknown>) => {
-  const text = JSON.stringify(payload);
+  const text = serializeForClient(payload);
   for (const ws of sockets) {
     if (ws.readyState === ws.OPEN) ws.send(text);
   }
@@ -132,10 +288,23 @@ const attachInternal = (webContentsId: number): { ok: true } | { ok: false; reas
      * routes events to the page session by sessionId; without it these would look
      * browser-level and Page/Runtime events would be dropped.
      */
-    broadcast({ method, params: params ?? {}, sessionId: SINGLE_SESSION_ID });
+    for (const listener of [...eventListeners]) {
+      try {
+        listener(method, params);
+      } catch {
+        // A faulty internal listener must never break relaying.
+      }
+    }
+    if (!isInternalBindingEvent(method, params)) {
+      // While recording or while a secret is live, request bodies (login POST) never reach clients.
+      if (clientsLocked) rememberLockedRequest(method, params);
+      const safe = clientsLocked || currentSecrets().length > 0 ? stripPostData(params) : params;
+      broadcast({ method, params: safe ?? {}, sessionId: SINGLE_SESSION_ID });
+    }
   };
 
   const onDestroyed = () => {
+    secretsByContents.delete(contents.id);
     detachInternal();
     broadcast({ method: 'Target.targetDestroyed', params: { targetId: currentTargetInfo().targetId } });
   };
@@ -143,6 +312,13 @@ const attachInternal = (webContentsId: number): { ok: true } | { ok: false; reas
   dbg.on('message', onMessage);
   contents.once('destroyed', onDestroyed);
   attached = { contents, dbg, onMessage, onDestroyed };
+  for (const listener of [...attachListeners]) {
+    try {
+      listener(webContentsId);
+    } catch {
+      // ignore faulty internal listener
+    }
+  }
   return { ok: true };
 };
 
@@ -171,7 +347,7 @@ const attachInternal = (webContentsId: number): { ok: true } | { ok: false; reas
  * real cause (e.g. the browser panel was never opened).
  */
 const sendError = (ws: WebSocket, id: number | undefined, message: string, sessionId?: string) => {
-  ws.send(JSON.stringify({ id: id ?? 0, error: { code: -32601, message }, sessionId }));
+  sendToClient(ws, { id: id ?? 0, error: { code: -32601, message }, sessionId });
 };
 
 /**
@@ -195,6 +371,38 @@ const handleSocketMessage = async (ws: WebSocket, raw: string, announcedSessions
   const { id, method, params, sessionId } = req;
   if (!method) return;
 
+  if (clientsLocked) {
+    sendToClient(ws, {
+      id: id ?? 0,
+      error: { code: -32000, message: `browser locked: ${clientsLocked.reason ?? 'recording in progress'}` },
+      sessionId,
+    });
+    return;
+  }
+
+  if (method === 'Network.getRequestPostData' && currentSecrets().length > 0) {
+    sendToClient(ws, {
+      id: id ?? 0,
+      error: { code: -32000, message: 'post data hidden: vault secret on this page' },
+      sessionId,
+    });
+    return;
+  }
+
+  const postDataRequestId = (params as { requestId?: unknown } | undefined)?.requestId;
+  if (
+    method === 'Network.getRequestPostData' &&
+    typeof postDataRequestId === 'string' &&
+    lockedRequestIds.has(postDataRequestId)
+  ) {
+    sendToClient(ws, {
+      id: id ?? 0,
+      error: { code: -32000, message: 'post data hidden: request made while recording' },
+      sessionId,
+    });
+    return;
+  }
+
   if (!isAcceptableSessionId(sessionId)) {
     sendError(ws, id, `Unknown sessionId: ${sessionId}`, sessionId);
     return;
@@ -208,7 +416,7 @@ const handleSocketMessage = async (ws: WebSocket, raw: string, announcedSessions
   }
 
   if (decision.kind === 'reply' || decision.kind === 'reply-and-emit') {
-    ws.send(JSON.stringify({ id, result: decision.payload, sessionId }));
+    sendToClient(ws, { id, result: decision.payload, sessionId });
     if (decision.kind === 'reply-and-emit') {
       for (const evt of decision.emit) {
         /**
@@ -252,7 +460,7 @@ const handleSocketMessage = async (ws: WebSocket, raw: string, announcedSessions
             announcedSessions.add(announcedId);
           }
         }
-        ws.send(JSON.stringify({ method: evt.method, params: evt.params }));
+        sendToClient(ws, { method: evt.method, params: evt.params });
       }
     }
     return;
@@ -279,12 +487,32 @@ const handleSocketMessage = async (ws: WebSocket, raw: string, announcedSessions
     return;
   }
 
+  const secrets = probedSecrets();
+  if (PAGE_JS_METHODS.has(method) && secrets.length > 0 && (await secretSitsInField(attached.dbg, secrets))) {
+    sendToClient(ws, { id: id ?? 0, error: { code: -32000, message: SECRET_IN_FIELD_ERROR }, sessionId });
+    return;
+  }
+
+  // The probe awaited: the page may have been detached or locked meanwhile.
+  if (clientsLocked) {
+    sendToClient(ws, {
+      id: id ?? 0,
+      error: { code: -32000, message: `browser locked: ${clientsLocked.reason ?? 'recording in progress'}` },
+      sessionId,
+    });
+    return;
+  }
+  if (!attached || attached.contents.isDestroyed()) {
+    sendError(ws, id, 'The in-app browser is not currently attached.', sessionId);
+    return;
+  }
+
   try {
     const result = await attached.dbg.sendCommand(method, params ?? {});
-    ws.send(JSON.stringify({ id, result: result ?? {}, sessionId }));
+    sendToClient(ws, { id, result: result ?? {}, sessionId });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    ws.send(JSON.stringify({ id, error: { code: -32000, message }, sessionId }));
+    sendToClient(ws, { id, error: { code: -32000, message }, sessionId });
   }
 };
 
@@ -391,8 +619,42 @@ export const startCdpBridge = async (): Promise<CdpBridgeHandle> => {
     attachedWebContentsId: () => (attached && !attached.contents.isDestroyed() ? attached.contents.id : null),
     attach: attachInternal,
     detach: detachInternal,
+    sendCommand: async (method, params) => {
+      if (!attached || attached.contents.isDestroyed())
+        throw new Error('The in-app browser is not currently attached.');
+      return attached.dbg.sendCommand(method, params ?? {});
+    },
+    onEvent: (listener) => {
+      eventListeners.add(listener);
+      return () => void eventListeners.delete(listener);
+    },
+    onAttach: (listener) => {
+      attachListeners.add(listener);
+      return () => void attachListeners.delete(listener);
+    },
+    addSecret: (webContentsId, value, opts) => {
+      if (!value) return;
+      const probe = opts?.probe ?? true;
+      if (!secretsByContents.has(webContentsId)) {
+        // Secrets live until the webContents is destroyed (survive navigation, detach, re-attach).
+        webContents.fromId(webContentsId)?.once('destroyed', () => secretsByContents.delete(webContentsId));
+      }
+      const map = secretsByContents.get(webContentsId) ?? new Map<string, boolean>();
+      map.set(value, probe || map.get(value) === true);
+      secretsByContents.set(webContentsId, map);
+    },
+    hasLiveSecret: (webContentsId) => (secretsByContents.get(webContentsId)?.size ?? 0) > 0,
+    setClientsLocked: (locked, reason) => {
+      clientsLocked = locked ? { reason } : null;
+    },
+    isClientsLocked: () => clientsLocked !== null,
     close: async () => {
       detachInternal();
+      eventListeners.clear();
+      attachListeners.clear();
+      secretsByContents.clear();
+      clientsLocked = null;
+      lockedRequestIds.clear();
       for (const ws of sockets) ws.close();
       sockets = new Set();
       await new Promise<void>((resolve) => {

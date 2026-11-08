@@ -53,7 +53,7 @@ test('owner authenticates with an opaque session and cannot impersonate an emplo
   const app = await startControl(t);
   const owner = await app.login();
   assert.equal(owner.response.status, 200);
-  assert.deepEqual(owner.user, { id: 'owner', name: 'Lucas Zocaratto', role: 'admin' });
+  assert.deepEqual(owner.user, { id: 'owner', name: 'Lucas Zocaratto', role: 'admin', title: null });
   assert.match(owner.token, /^[a-zA-Z0-9_-]{43}$/);
   const session = await app.request('/auth/session', { token: owner.token });
   assert.deepEqual(await session.json(), { user: owner.user });

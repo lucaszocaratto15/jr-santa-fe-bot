@@ -48,8 +48,8 @@ test('ATTEMPT_MS defaults to 90000 and GEMINI_MODEL defaults to gemini-3.8-flash
   const config = validateConfiguration(baseConfig);
   assert.equal(config.attemptMs, 90_000);
   assert.equal(config.attemptMs, DEFAULT_ATTEMPT_MS);
-  assert.equal(DEFAULT_COMPACTION_BUDGET_MS, 60_000);
-  assert.equal(config.compactionBudgetMs, 60_000);
+  assert.equal(DEFAULT_COMPACTION_BUDGET_MS, 5_000);
+  assert.equal(config.compactionBudgetMs, 5_000);
   assert.equal(config.compactionBudgetMs, DEFAULT_COMPACTION_BUDGET_MS);
   assert.equal(config.compactionEnabled, true);
   const gemini = validateConfiguration({ ...baseConfig, geminiKey: 'gemini-test-key-not-real-xx' });

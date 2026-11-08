@@ -9,7 +9,7 @@ import { migrateConfigStorage, migrateLegacyMcpConfigToDb, migrateProviders } fr
 import { httpRequest } from '@/common/adapter/httpBridge';
 import { mcpService } from '@/common/adapter/ipcBridge';
 import type { ImageGenerationModelSetting } from '@/common/config/clientSettings';
-import { BUILTIN_BROWSER_MCP_NAME } from '@/common/config/constants';
+import { BUILTIN_BROWSER_MCP_NAME, BUILTIN_TEACH_MCP_NAME } from '@/common/config/constants';
 import {
   removeImageGenerationEnvKeys,
   resolveImageGenerationMcpEnv,
@@ -38,6 +38,9 @@ const BUILTIN_CHROME_DEVTOOLS_NAME = 'chrome-devtools';
  * happens in the side preview panel where the user can watch it.
  */
 const BUILTIN_BROWSER_SCRIPT = 'builtin-mcp-browser';
+
+/** Built-in `jr-teach` MCP server script (vault fill, secure input, taught-task drafts). */
+const BUILTIN_TEACH_SCRIPT = 'builtin-mcp-teach';
 
 const LEGACY_BACKEND_CLIENT_PREFERENCE_KEYS = [
   'assistants',
@@ -200,6 +203,27 @@ function buildBuiltinBrowserServer(): McpImportServer {
   };
 }
 
+function buildBuiltinTeachServer(): McpImportServer {
+  const serverConfig = {
+    command: 'node',
+    args: [getBuiltinMcpScriptPath(BUILTIN_TEACH_SCRIPT)],
+  };
+
+  return {
+    name: BUILTIN_TEACH_MCP_NAME,
+    description:
+      'Teach-a-task tools: fill saved credentials from the vault, request sensitive input securely and submit taught-task drafts. Secret values are never returned.',
+    enabled: true,
+    builtin: true,
+    transport: {
+      type: 'stdio',
+      command: serverConfig.command,
+      args: serverConfig.args,
+    },
+    original_json: JSON.stringify({ mcpServers: { [BUILTIN_TEACH_MCP_NAME]: serverConfig } }, null, 2),
+  };
+}
+
 function buildDefaultMcpServers(): McpImportServer[] {
   const chromeConfig = {
     command: 'npx',
@@ -220,6 +244,7 @@ function buildDefaultMcpServers(): McpImportServer[] {
       original_json: JSON.stringify({ mcpServers: { [BUILTIN_CHROME_DEVTOOLS_NAME]: chromeConfig } }, null, 2),
     },
     buildBuiltinBrowserServer(),
+    buildBuiltinTeachServer(),
   ];
 }
 
@@ -406,39 +431,37 @@ async function ensureBootstrapMcpServersInDb(configFile: ConfigFile): Promise<vo
    * a developer switching worktrees) it goes stale — and because "already registered"
    * is decided by name, it is never re-inserted, leaving the browser tools broken with
    * no self-heal. Reconcile against the real path on every startup instead.
+   * The teach MCP (jr-teach) bakes its script path the same way, so it gets the same repair.
    */
-  const existingBrowserServer = existing.find((server) => server.name === BUILTIN_BROWSER_MCP_NAME);
-  let browserServerUpdated = false;
-  if (existingBrowserServer) {
-    const desiredBrowserServer = buildBuiltinBrowserServer();
-    const browserTransportChanged = !isSameStdioTransport(
-      existingBrowserServer.transport,
-      desiredBrowserServer.transport
+  const repairedServers: string[] = [];
+  for (const desired of [buildBuiltinBrowserServer(), buildBuiltinTeachServer()]) {
+    const current = existing.find((server) => server.name === desired.name);
+    if (!current) continue;
+    const transportChanged = !isSameStdioTransport(current.transport, desired.transport);
+    const jsonChanged = current.original_json !== desired.original_json;
+    if (!transportChanged && !jsonChanged) continue;
+    console.info(
+      '[Migration] %s MCP path drifted, server id: %s, transport changed: %s, json changed: %s',
+      desired.name,
+      current.id,
+      transportChanged ? 'yes' : 'no',
+      jsonChanged ? 'yes' : 'no'
     );
-    const browserJsonChanged = existingBrowserServer.original_json !== desiredBrowserServer.original_json;
-    if (browserTransportChanged || browserJsonChanged) {
-      console.info(
-        '[Migration] browser MCP path drifted, server id: %s, transport changed: %s, json changed: %s',
-        existingBrowserServer.id,
-        browserTransportChanged ? 'yes' : 'no',
-        browserJsonChanged ? 'yes' : 'no'
-      );
-      await mcpService.updateServer.invoke({
-        id: existingBrowserServer.id,
-        data: {
-          transport: desiredBrowserServer.transport,
-          original_json: desiredBrowserServer.original_json,
-        },
-      });
-      browserServerUpdated = true;
-    }
+    await mcpService.updateServer.invoke({
+      id: current.id,
+      data: {
+        transport: desired.transport,
+        original_json: desired.original_json,
+      },
+    });
+    repairedServers.push(desired.name);
   }
 
   console.info(
-    '[Migration] MCP bootstrap completed, imported %d missing defaults, updated image server: %s, updated browser server: %s, image config source: %s, image enabled: %s',
+    '[Migration] MCP bootstrap completed, imported %d missing defaults, updated image server: %s, repaired builtin paths: %s, image config source: %s, image enabled: %s',
     missing.length,
     imageServerUpdated ? 'yes' : 'no',
-    browserServerUpdated ? 'yes' : 'no',
+    repairedServers.length > 0 ? repairedServers.join(',') : 'none',
     imageConfigSource,
     imageConfig?.switch === true ? 'yes' : 'no'
   );

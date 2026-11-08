@@ -1,12 +1,39 @@
 import { ipcBridge } from '@/common';
 import type { JrAdminEmployee, JrInvite } from '@/common/config/clientSettings';
-import { Alert, Button, Input, Modal, Spin } from '@arco-design/web-react';
+import { Alert, Button, Input, Modal, Select, Spin, Tooltip } from '@arco-design/web-react';
+import {
+  BookOpen,
+  Brain,
+  ChartHistogram,
+  Computer,
+  Copy,
+  Edit,
+  Key,
+  Lock,
+  Peoples,
+  PeopleMinus,
+  Plus,
+  Search,
+  Unlock,
+} from '@icon-park/react';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import useSWR from 'swr';
+import BrainManager from '../Brain/BrainManager';
 import { isJrAdmin, useJrAccess } from './context';
 import styles from './Access.module.css';
+import HandbookAdmin from './HandbookAdmin';
 import TeamUsage from './TeamUsage';
+import { useBrainContextVersion } from '../Brain/brainShared';
+
+const initialsOf = (name: string): string =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase();
 
 const statusKey = (person: JrAdminEmployee) => {
   if (person.revoked) return 'common.jr.access.revokedStatus';
@@ -26,6 +53,31 @@ const AdminContent: React.FC = () => {
     shouldRetryOnError: false,
   });
   const { state } = useJrAccess();
+  const contextVersion = useBrainContextVersion();
+  const brain = useSWR(
+    state.user?.id ? ['jr.brain.me', state.user.id, contextVersion] : null,
+    () => ipcBridge.brain.me.invoke(),
+    { shouldRetryOnError: false, revalidateOnFocus: false }
+  );
+  const managesBrain =
+    brain.data?.permissionsSource === 'erp'
+      ? Boolean(
+          brain.data.capabilities?.revise ||
+          brain.data.capabilities?.withdraw ||
+          brain.data.capabilities?.approveOfficial
+        )
+      : state.user?.id === 'owner' && Boolean(brain.data);
+  const [tab, setTab] = useState<'people' | 'usage' | 'handbook' | 'brain'>('people');
+  const currentTab = tab === 'brain' && !managesBrain ? 'people' : tab;
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const filteredPeople = people.filter((person) => {
+    const status = person.revoked ? 'revoked' : person.blocked ? 'blocked' : 'active';
+    return (
+      (statusFilter === 'all' || status === statusFilter) &&
+      `${person.name} ${person.title ?? ''}`.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())
+    );
+  });
   const { data: own } = useSWR(['jr.admin.self', state.user?.id], () => ipcBridge.jr.personalUsage.invoke(), {
     refreshInterval: 15000,
     shouldRetryOnError: false,
@@ -36,6 +88,7 @@ const AdminContent: React.FC = () => {
           id: state.user.id,
           name: state.user.name,
           role: state.user.role,
+          title: state.user.title ?? null,
           revoked: false,
           createdAt: own.usage.startedAt,
           revokedAt: null,
@@ -56,6 +109,8 @@ const AdminContent: React.FC = () => {
   const [failed, setFailed] = useState(false);
   const [copied, setCopied] = useState(false);
   const [toRevoke, setToRevoke] = useState<JrAdminEmployee>();
+  const [toRetitle, setToRetitle] = useState<JrAdminEmployee>();
+  const [newTitle, setNewTitle] = useState('');
   const openCreate = () => {
     if (pending) return;
     setFailed(false);
@@ -124,6 +179,25 @@ const AdminContent: React.FC = () => {
       setPending('');
     }
   };
+  const openRetitle = (person: JrAdminEmployee) => {
+    setFailed(false);
+    setNewTitle(person.title ?? '');
+    setToRetitle(person);
+  };
+  const saveTitle = async () => {
+    if (!toRetitle || pending) return;
+    setPending(toRetitle.id);
+    setFailed(false);
+    try {
+      await ipcBridge.jr.admin.setTitle.invoke({ employeeId: toRetitle.id, title: newTitle.trim() || null });
+      setToRetitle(undefined);
+      await mutate();
+    } catch {
+      setFailed(true);
+    } finally {
+      setPending('');
+    }
+  };
   const copy = async () => {
     if (!invite) return;
     try {
@@ -136,79 +210,213 @@ const AdminContent: React.FC = () => {
   };
   return (
     <main className={styles.admin}>
-      <div className={styles.heading}>
-        <h1 className={styles.pageTitle}>{t('common.jr.access.adminTitle')}</h1>
+      <header className={styles.heading}>
+        <div className={styles.headingCopy}>
+          <h1 className={styles.pageTitle}>{t('common.jr.access.adminTitle')}</h1>
+          <p className={styles.subtitle}>{t('common.jr.access.adminSubtitle')}</p>
+        </div>
         <Button
           type='primary'
           shape='round'
           className={styles.primary}
+          icon={<Plus theme='outline' size={14} fill='currentColor' />}
           disabled={Boolean(pending)}
           onClick={openCreate}
         >
           {t('common.jr.access.newEmployee')}
         </Button>
-      </div>
-      {failed && !creating && !invite && <Alert type='error' content={t('common.jr.access.actionError')} />}
-      {isLoading ? (
-        <Spin />
-      ) : error ? (
-        <Alert type='error' content={t('common.jr.access.loadError')} />
-      ) : !people.length ? (
-        <p className={styles.hint}>{t('common.jr.access.noPeople')}</p>
-      ) : (
-        <>
-          <TeamUsage people={people} self={self} />
-          <div className={styles.list}>
-            {people.map((person) => (
-              <article key={person.id} className={styles.row}>
-                <div className={styles.rowMain}>
-                  <h2 className={styles.rowName}>{person.name}</h2>
-                  {person.title ? <p className={styles.rowMeta}>{person.title}</p> : null}
-                </div>
-                <span
-                  className={styles.status}
-                  data-state={person.revoked ? 'revoked' : person.blocked ? 'blocked' : 'active'}
-                >
-                  {t(statusKey(person))}
-                </span>
-                {person.role === 'employee' && !person.revoked && (
-                  <div className={styles.rowActions}>
-                    <Button
-                      type='text'
-                      className={styles.quiet}
-                      disabled={Boolean(pending)}
-                      loading={pending === person.id}
-                      onClick={() => void setBlocked(person)}
-                    >
-                      {t(person.blocked ? 'common.jr.access.unblockAction' : 'common.jr.access.blockAction')}
-                    </Button>
-                    <Button
-                      type='text'
-                      className={styles.quiet}
-                      disabled={Boolean(pending)}
-                      loading={pending === person.id}
-                      onClick={() => void generate(person.id)}
-                    >
-                      {t('common.jr.access.newCode')}
-                    </Button>
-                    <Button
-                      type='text'
-                      className={styles.dangerQuiet}
-                      disabled={Boolean(pending)}
-                      onClick={() => {
-                        setFailed(false);
-                        setToRevoke(person);
-                      }}
-                    >
-                      {t('common.jr.access.revokeAction')}
-                    </Button>
+      </header>
+      <div className={styles.adminLayout}>
+        <nav className={styles.adminNav} aria-label={t('common.jr.access.adminTitle')}>
+          <Button
+            type='text'
+            aria-current={currentTab === 'people' ? 'page' : undefined}
+            icon={<Peoples size={18} />}
+            onClick={() => setTab('people')}
+          >
+            {t('common.jr.access.peopleTitle')}
+          </Button>
+          <Button
+            type='text'
+            aria-current={currentTab === 'usage' ? 'page' : undefined}
+            icon={<ChartHistogram size={18} />}
+            onClick={() => setTab('usage')}
+          >
+            {t('common.jr.look.tabs.usage')}
+          </Button>
+          <Button
+            type='text'
+            aria-current={currentTab === 'handbook' ? 'page' : undefined}
+            icon={<BookOpen size={18} />}
+            onClick={() => setTab('handbook')}
+          >
+            {t('common.jr.look.roleManuals')}
+          </Button>
+          {managesBrain && (
+            <Button
+              type='text'
+              aria-current={currentTab === 'brain' ? 'page' : undefined}
+              icon={<Brain size={18} />}
+              onClick={() => setTab('brain')}
+            >
+              {t('common.jr.look.tabs.brain')}
+            </Button>
+          )}
+        </nav>
+        <div className={styles.adminContent}>
+          <section hidden={currentTab !== 'people'}>
+            <div className={styles.peopleToolbar}>
+              <Input
+                prefix={<Search size={16} />}
+                value={search}
+                onChange={setSearch}
+                allowClear
+                placeholder={t('common.jr.look.searchPeople')}
+                aria-label={t('common.jr.look.searchPeople')}
+              />
+              <Select
+                value={statusFilter}
+                onChange={setStatusFilter}
+                aria-label={t('common.jr.look.filterStatus')}
+                options={[
+                  { value: 'all', label: t('common.jr.look.allStatuses') },
+                  { value: 'active', label: t('common.jr.access.activeStatus') },
+                  { value: 'blocked', label: t('common.jr.access.blockedStatus') },
+                  { value: 'revoked', label: t('common.jr.access.revokedStatus') },
+                ]}
+              />
+            </div>
+            {failed && !creating && !invite && <Alert type='error' content={t('common.jr.access.actionError')} />}
+            {isLoading ? (
+              <Spin />
+            ) : error ? (
+              <Alert type='error' content={t('common.jr.access.loadError')} />
+            ) : !people.length ? (
+              <p className={styles.hint}>{t('common.jr.access.noPeople')}</p>
+            ) : (
+              <>
+                <section aria-labelledby='jr-admin-people'>
+                  <h2 id='jr-admin-people' className={styles.sectionLabel}>
+                    {t('common.jr.access.peopleTitle')}
+                  </h2>
+                  <div className={styles.list}>
+                    {filteredPeople.map((person) => {
+                      const personState = person.revoked ? 'revoked' : person.blocked ? 'blocked' : 'active';
+                      const devices = (person.devices ?? [])
+                        .filter((device) => !device.revokedAt)
+                        .map((device) => device.name);
+                      return (
+                        <article key={person.id} className={styles.row}>
+                          <span className={styles.avatar} data-state={personState} aria-hidden='true'>
+                            {initialsOf(person.name)}
+                          </span>
+                          <div className={styles.rowMain}>
+                            <div className={styles.rowTitle}>
+                              <h2 className={styles.rowName}>{person.name}</h2>
+                              <span className={styles.status} data-state={personState}>
+                                {t(statusKey(person))}
+                              </span>
+                            </div>
+                            <p className={styles.rowMeta}>
+                              <span>{person.title || t('common.jr.access.noTitle')}</span>
+                              {devices.length > 0 && (
+                                <span className={styles.devices}>
+                                  <Computer theme='outline' size={12} />
+                                  {devices.join(', ')}
+                                </span>
+                              )}
+                            </p>
+                          </div>
+                          {person.role === 'employee' && !person.revoked && (
+                            <div className={styles.rowActions}>
+                              <Button
+                                className={styles.soft}
+                                shape='round'
+                                size='small'
+                                icon={<Key theme='outline' size={13} />}
+                                disabled={Boolean(pending)}
+                                loading={pending === person.id}
+                                onClick={() => void generate(person.id)}
+                              >
+                                {t('common.jr.access.newCode')}
+                              </Button>
+                              <Tooltip content={t('common.jr.access.editTitle')}>
+                                <Button
+                                  type='text'
+                                  shape='circle'
+                                  size='small'
+                                  className={styles.quiet}
+                                  aria-label={t('common.jr.access.editTitle')}
+                                  icon={<Edit theme='outline' size={15} />}
+                                  disabled={Boolean(pending)}
+                                  onClick={() => openRetitle(person)}
+                                />
+                              </Tooltip>
+                              <Tooltip
+                                content={t(
+                                  person.blocked ? 'common.jr.access.unblockAction' : 'common.jr.access.blockAction'
+                                )}
+                              >
+                                <Button
+                                  type='text'
+                                  shape='circle'
+                                  size='small'
+                                  className={styles.quiet}
+                                  aria-label={t(
+                                    person.blocked ? 'common.jr.access.unblockAction' : 'common.jr.access.blockAction'
+                                  )}
+                                  icon={
+                                    person.blocked ? (
+                                      <Unlock theme='outline' size={15} />
+                                    ) : (
+                                      <Lock theme='outline' size={15} />
+                                    )
+                                  }
+                                  disabled={Boolean(pending)}
+                                  loading={pending === person.id}
+                                  onClick={() => void setBlocked(person)}
+                                />
+                              </Tooltip>
+                              <Tooltip content={t('common.jr.access.revokeAction')}>
+                                <Button
+                                  type='text'
+                                  shape='circle'
+                                  size='small'
+                                  className={styles.dangerQuiet}
+                                  aria-label={t('common.jr.access.revokeAction')}
+                                  icon={<PeopleMinus theme='outline' size={15} />}
+                                  disabled={Boolean(pending)}
+                                  onClick={() => {
+                                    setFailed(false);
+                                    setToRevoke(person);
+                                  }}
+                                />
+                              </Tooltip>
+                            </div>
+                          )}
+                        </article>
+                      );
+                    })}
                   </div>
-                )}
-              </article>
+                  {filteredPeople.length === 0 && <p className={styles.hint}>{t('common.jr.look.noPeopleMatch')}</p>}
+                </section>
+              </>
+            )}
+          </section>
+          {currentTab === 'usage' &&
+            (error ? (
+              <Alert type='error' content={t('common.jr.access.loadError')} />
+            ) : (
+              <TeamUsage people={people} self={self} />
             ))}
+          <div hidden={currentTab !== 'handbook'}>
+            <HandbookAdmin />
           </div>
-        </>
-      )}
+          {currentTab === 'brain' && managesBrain && (
+            <BrainManager mode={state.user?.id === 'owner' ? 'owner' : 'manager'} />
+          )}
+        </div>
+      </div>
       <Modal
         visible={creating}
         title={t('common.jr.access.newEmployeeTitle')}
@@ -243,7 +451,7 @@ const AdminContent: React.FC = () => {
           </label>
           {failed && <Alert type='error' content={t('common.jr.access.actionError')} />}
           <div className={styles.sheetActions}>
-            <Button disabled={Boolean(pending)} onClick={closeCreate}>
+            <Button type='text' shape='round' disabled={Boolean(pending)} onClick={closeCreate}>
               {t('common.cancel')}
             </Button>
             <Button
@@ -268,12 +476,53 @@ const AdminContent: React.FC = () => {
         {invite && (
           <div className={styles.codeSheet}>
             <code className={styles.code}>{invite.code}</code>
-            <Button type='primary' shape='round' className={styles.primary} onClick={() => void copy()}>
+            <Button
+              type='primary'
+              shape='round'
+              className={styles.primary}
+              icon={<Copy theme='outline' size={14} fill='currentColor' />}
+              onClick={() => void copy()}
+            >
               {t(copied ? 'common.jr.access.copied' : 'common.jr.access.copyCode')}
             </Button>
             {failed && <Alert type='error' content={t('common.jr.access.actionError')} />}
           </div>
         )}
+      </Modal>
+      <Modal
+        visible={Boolean(toRetitle)}
+        title={t('common.jr.access.editTitleHeading', { name: toRetitle?.name })}
+        closable={!pending}
+        maskClosable={!pending}
+        onCancel={() => setToRetitle(undefined)}
+        footer={[
+          <Button
+            key='cancel'
+            type='text'
+            shape='round'
+            disabled={Boolean(pending)}
+            onClick={() => setToRetitle(undefined)}
+          >
+            {t('common.cancel')}
+          </Button>,
+          <Button key='save' type='primary' shape='round' loading={Boolean(pending)} onClick={() => void saveTitle()}>
+            {t('common.save')}
+          </Button>,
+        ]}
+      >
+        <label className={styles.adminField} htmlFor='jr-employee-retitle'>
+          <span>{t('common.jr.access.employeeTitle')}</span>
+          <Input
+            id='jr-employee-retitle'
+            value={newTitle}
+            onChange={setNewTitle}
+            maxLength={80}
+            disabled={Boolean(pending)}
+            onPressEnter={() => void saveTitle()}
+          />
+        </label>
+        <p className={styles.hint}>{t('common.jr.access.editTitleHint')}</p>
+        {failed && <Alert type='error' content={t('common.jr.access.actionError')} />}
       </Modal>
       <Modal
         visible={Boolean(toRevoke)}
@@ -282,10 +531,23 @@ const AdminContent: React.FC = () => {
         maskClosable={!pending}
         onCancel={() => setToRevoke(undefined)}
         footer={[
-          <Button key='cancel' disabled={Boolean(pending)} onClick={() => setToRevoke(undefined)}>
+          <Button
+            key='cancel'
+            type='text'
+            shape='round'
+            disabled={Boolean(pending)}
+            onClick={() => setToRevoke(undefined)}
+          >
             {t('common.cancel')}
           </Button>,
-          <Button key='revoke' type='primary' status='danger' loading={Boolean(pending)} onClick={() => void revoke()}>
+          <Button
+            key='revoke'
+            type='primary'
+            status='danger'
+            shape='round'
+            loading={Boolean(pending)}
+            onClick={() => void revoke()}
+          >
             {t('common.jr.access.revokeAction')}
           </Button>,
         ]}

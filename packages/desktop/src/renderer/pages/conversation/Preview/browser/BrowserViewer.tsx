@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useCallback } from 'react';
+import React, { useCallback, type ReactNode } from 'react';
 import WebviewHost from '@/renderer/components/media/WebviewHost';
 import {
   BROWSER_BLANK_URL,
@@ -18,12 +18,18 @@ export interface BrowserViewerProps {
   url: string;
   /** 所属 preview tab 的 id / Id of the owning preview tab */
   tabId: string;
+  /** Only the visible employee-selected tab may claim the single-target CDP bridge. */
+  agentBrowserActive?: boolean;
+  /** Native-ready identity is used only to route popups back to their original session. */
+  onWebContentsReady?: (tabId: string, webContentsId: number) => void;
   /** 地址变化时回写 tab（用于持久化）/ Persist the new address back onto the tab */
   onUrlChange: (tabId: string, url: string) => void;
   /** 页面标题变化时回写 tab / Persist the page title back onto the tab */
   onTitleChange: (tabId: string, title: string) => void;
   /** 站点图标变化时回写 tab / Persist the site favicon back onto the tab */
   onFaviconChange: (tabId: string, favicon: string) => void;
+  /** Extra controls at the end of the nav bar (teach controls) */
+  navBarExtra?: ReactNode;
 }
 
 /**
@@ -39,7 +45,16 @@ export interface BrowserViewerProps {
  * the address bar, and writing address/title/favicon back onto the owning tab so
  * the browser can be restored after a restart.
  */
-const BrowserViewer: React.FC<BrowserViewerProps> = ({ url, tabId, onUrlChange, onTitleChange, onFaviconChange }) => {
+const BrowserViewer: React.FC<BrowserViewerProps> = ({
+  url,
+  tabId,
+  agentBrowserActive,
+  onWebContentsReady,
+  onUrlChange,
+  onTitleChange,
+  onFaviconChange,
+  navBarExtra,
+}) => {
   const handleUrlChange = useCallback((next: string) => onUrlChange(tabId, next), [tabId, onUrlChange]);
 
   const handleTitleChange = useCallback(
@@ -69,7 +84,10 @@ const BrowserViewer: React.FC<BrowserViewerProps> = ({ url, tabId, onUrlChange, 
     <WebviewHost
       url={url || BROWSER_BLANK_URL}
       partition={BROWSER_SESSION_PARTITION}
+      agentBrowserActive={agentBrowserActive}
+      onWebContentsReady={(webContentsId) => onWebContentsReady?.(tabId, webContentsId)}
       showNavBar
+      navBarExtra={navBarExtra}
       className='bg-bg-1'
       resolveUrlInput={resolveAddressBarInput}
       onUrlChange={handleUrlChange}

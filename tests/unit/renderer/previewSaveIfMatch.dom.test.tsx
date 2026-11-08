@@ -29,6 +29,7 @@ const h = vi.hoisted(() => ({
 vi.mock('@/common', () => ({
   ipcBridge: {
     fileStream: { contentUpdate: { on: () => () => {} } },
+    teach: { openTab: { on: vi.fn(() => vi.fn()) } },
     preview: { open: { on: () => () => {} } },
     fs: {
       writeContent: { invoke: h.writeContent },

@@ -42,7 +42,7 @@ import { iconColors } from '@/renderer/styles/colors';
 import type { SessionRef } from '@/common/adapter/ipcBridge';
 import CrossSessionDisabledBanner from '@/renderer/components/chat/CrossSessionDisabledBanner';
 import { useCrossSessionMessageEnabled } from '@/renderer/hooks/chat/useCrossSessionMessageEnabled';
-import { emitter, useAddEventListener } from '@/renderer/utils/emitter';
+import { emitter, useAddEventListener, type SendBoxSendRequest } from '@/renderer/utils/emitter';
 import { localSelectionItems, mergeFileSelectionItems } from '@/renderer/utils/file/fileSelection';
 import { collectChatFileRefs, splitChatFileRefs } from '@/renderer/utils/file/messageFiles';
 import type { ChatFileRef } from '@/common/types/chatFile';
@@ -459,6 +459,25 @@ Please check your local CLI tool authentication status`,
     emitter.emit('acp.selected.file.clear');
     await executeCommand({ input: message, files: allFiles, sessions });
   };
+
+  // Programmatic sends (teach cards) take the same path as Enter; queued while busy.
+  // executeCommand already shows its own failure toast; the result goes back to the caller.
+  useAddEventListener(
+    'sendbox.send',
+    (request: SendBoxSendRequest) => {
+      if (request.conversationId !== conversation_id) return;
+      request.claimed = true;
+      if (isBusy) {
+        request.onResult(Boolean(enqueue({ input: request.text, files: [] })));
+        return;
+      }
+      executeCommand({ input: request.text, files: [] }).then(
+        () => request.onResult(true),
+        () => request.onResult(false)
+      );
+    },
+    [conversation_id, isBusy, enqueue, executeCommand]
+  );
 
   const [interrupting, setInterrupting] = useState(false);
   const handleInterruptSend = async () => {

@@ -123,9 +123,10 @@ class AutoUpdaterService extends EventEmitter {
     autoUpdater.logger = log;
     (autoUpdater.logger as typeof log).transports.file.level = 'debug';
 
-    // Disable auto-download for manual control
+    // Manual download/install so the employee sees the prompt and the profile backup runs
+    // inside quitAndInstall(). Installing on quit would bypass that backup.
     autoUpdater.autoDownload = false;
-    autoUpdater.autoInstallOnAppQuit = true;
+    autoUpdater.autoInstallOnAppQuit = false;
     this.configureDevAutoUpdateDebug();
     const cdnFeedOptions = buildCdnFeedOptions();
 
@@ -860,8 +861,9 @@ class AutoUpdaterService extends EventEmitter {
     try {
       this.moveCwdOutOfInstallDirForWindowsHandoff();
       // The first argument maps to electron-updater's silent installer flag.
-      // User-clicked "install now" should show NSIS progress/completion pages;
-      // autoInstallOnAppQuit remains true for background app-quit installs.
+      // User-clicked "install now" should show NSIS progress/completion pages. The
+      // explicit call installs even with autoInstallOnAppQuit=false, which keeps the
+      // profile backup in the pre-install callback on every update.
       autoUpdater.quitAndInstall(false, true);
       recordAutoUpdateQuitAndInstall(this.getAutoUpdateDiagnosticOptions());
     } catch (error) {

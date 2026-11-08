@@ -12,9 +12,10 @@ import styles from './JrWorkspace.module.css';
 const JrBotDialog: React.FC<{
   visible: boolean;
   bot?: JrBot;
+  embedded?: boolean;
   onClose: () => void;
   onSaved: (bot: JrBot) => void | Promise<void>;
-}> = ({ visible, bot, onClose, onSaved }) => {
+}> = ({ visible, bot, embedded = false, onClose, onSaved }) => {
   const { t } = useTranslation();
   const [name, setName] = useState('');
   const [appearance, setAppearance] = useState<JrAppearance>({ shape: 'cloud', color: 'red' });
@@ -60,6 +61,89 @@ const JrBotDialog: React.FC<{
       setSaving(false);
     }
   };
+  const form = (
+    <div className={styles.characterEditor}>
+      {error && <Alert type='error' content={error} />}
+      <div className={styles.characterPreview}>
+        <JrCharacter appearance={appearance} size={84} />
+      </div>
+      <label htmlFor='jr-bot-name' className={styles.srOnly}>
+        {t('common.jr.botName')}
+      </label>
+      <Input
+        id='jr-bot-name'
+        value={name}
+        onChange={setName}
+        maxLength={80}
+        disabled={saving}
+        className={styles.characterName}
+        placeholder={t('common.jr.namePlaceholder')}
+        autoFocus
+        onPressEnter={() => void save()}
+      />
+      <p className={styles.pickerLabel}>{t('common.jr.characterShape')}</p>
+      <div className={styles.shapePicker} role='group' aria-label={t('common.jr.characterShape')}>
+        {CHARACTER_SHAPES.map((shape) => (
+          <Button
+            key={shape}
+            type='text'
+            className={styles.shapeChoice}
+            aria-label={t(`common.jr.shapes.${shape}`)}
+            aria-pressed={shape === appearance.shape}
+            disabled={saving}
+            onClick={() => setAppearance({ ...appearance, shape })}
+          >
+            <span className={`${styles.shapeMark} ${shape === appearance.shape ? styles.shapeMarkOn : ''}`}>
+              <JrCharacter appearance={{ ...appearance, shape }} size={36} still />
+            </span>
+          </Button>
+        ))}
+      </div>
+      <p className={styles.pickerLabel}>{t('common.jr.characterColor')}</p>
+      <div className={styles.colorPicker} role='group' aria-label={t('common.jr.characterColor')}>
+        {CHARACTER_COLORS.map((color) => (
+          <Button
+            key={color}
+            shape='circle'
+            className={`${styles.colorChoice} ${color === appearance.color ? styles.colorSelected : ''}`}
+            aria-label={t(`common.jr.colors.${color}`)}
+            aria-pressed={color === appearance.color}
+            disabled={saving}
+            onClick={() => setAppearance({ ...appearance, color })}
+          >
+            <span className={styles.colorSwatch} style={{ backgroundColor: CHARACTER_PALETTE[color] }} />
+          </Button>
+        ))}
+      </div>
+      <div className={styles.botSettings}>
+        <label htmlFor='jr-bot-learning'>{t('common.jr.learningTitle')}</label>
+        <Input.TextArea
+          id='jr-bot-learning'
+          value={learning}
+          onChange={setLearning}
+          maxLength={12000}
+          autoSize={{ minRows: 3, maxRows: 7 }}
+          disabled={saving}
+          placeholder={t('common.jr.learningPlaceholder')}
+        />
+        <p className={styles.botHint}>{t('common.jr.learningHint')}</p>
+      </div>
+    </div>
+  );
+  if (embedded)
+    return (
+      <section className={styles.inlineEditor}>
+        {form}
+        <div className={styles.inlineActions}>
+          <Button disabled={saving} onClick={onClose}>
+            {t('common.cancel')}
+          </Button>
+          <Button type='primary' loading={saving} disabled={!name.trim()} onClick={() => void save()}>
+            {t('common.jr.saveBot')}
+          </Button>
+        </div>
+      </section>
+    );
   return (
     <Modal
       visible={visible}
@@ -101,71 +185,7 @@ const JrBotDialog: React.FC<{
         </Button>,
       ]}
     >
-      <div className={styles.characterEditor}>
-        {error && <Alert type='error' content={error} />}
-        <div className={styles.characterPreview}>
-          <JrCharacter appearance={appearance} size={96} />
-        </div>
-        <label htmlFor='jr-bot-name' className={styles.srOnly}>
-          {t('common.jr.botName')}
-        </label>
-        <Input
-          id='jr-bot-name'
-          value={name}
-          onChange={setName}
-          maxLength={80}
-          disabled={saving}
-          className={styles.characterName}
-          placeholder={t('common.jr.namePlaceholder')}
-          autoFocus
-          onPressEnter={() => void save()}
-        />
-        <div className={styles.botSettings}>
-          <label htmlFor='jr-bot-learning'>{t('common.jr.learningTitle')}</label>
-          <Input.TextArea
-            id='jr-bot-learning'
-            value={learning}
-            onChange={setLearning}
-            maxLength={12000}
-            autoSize={{ minRows: 3, maxRows: 7 }}
-            disabled={saving}
-            placeholder={t('common.jr.learningPlaceholder')}
-          />
-          <p className={styles.botHint}>{t('common.jr.learningHint')}</p>
-        </div>
-        <div className={styles.shapePicker} role='group' aria-label={t('common.jr.characterShape')}>
-          {CHARACTER_SHAPES.map((shape) => (
-            <Button
-              key={shape}
-              type='text'
-              className={styles.shapeChoice}
-              aria-label={t(`common.jr.shapes.${shape}`)}
-              aria-pressed={shape === appearance.shape}
-              disabled={saving}
-              onClick={() => setAppearance({ ...appearance, shape })}
-            >
-              <span className={`${styles.shapeMark} ${shape === appearance.shape ? styles.shapeMarkOn : ''}`}>
-                <JrCharacter appearance={{ ...appearance, shape }} size={36} still />
-              </span>
-            </Button>
-          ))}
-        </div>
-        <div className={styles.colorPicker} role='group' aria-label={t('common.jr.characterColor')}>
-          {CHARACTER_COLORS.map((color) => (
-            <Button
-              key={color}
-              shape='circle'
-              className={`${styles.colorChoice} ${color === appearance.color ? styles.colorSelected : ''}`}
-              aria-label={t(`common.jr.colors.${color}`)}
-              aria-pressed={color === appearance.color}
-              disabled={saving}
-              onClick={() => setAppearance({ ...appearance, color })}
-            >
-              <span className={styles.colorSwatch} style={{ backgroundColor: CHARACTER_PALETTE[color] }} />
-            </Button>
-          ))}
-        </div>
-      </div>
+      {form}
     </Modal>
   );
 };

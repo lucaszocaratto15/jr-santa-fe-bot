@@ -1,6 +1,17 @@
 import type { SpeechToTextConfig } from '@/common/types/provider/speech';
 import type { IMcpServer, TProviderWithModel } from '@/common/config/storage';
 
+export type JrStrataStatus = {
+  configured: boolean;
+  linked: boolean;
+  erpUser: { id: string; name: string } | null;
+  organizations: Array<{ id: string; name: string }>;
+  organizationId: string | null;
+  linkedAt: string | null;
+};
+export type JrStrataTool = { name: string; description?: string; inputSchema: Record<string, unknown> };
+export type JrStrataToolCall = { name: string; arguments: Record<string, unknown> };
+
 export type GoogleClientSetting = {
   proxy?: string;
 };
@@ -15,6 +26,8 @@ export type ClientBusinessSettingMap = {
         string,
         {
           workspace: string;
+          /** Proven, issuer-qualified JR account. Legacy ownership is migrated by the native device-bound session. */
+          ownerAccountId?: string;
           appearance?: JrAppearance;
           conversationId?: string;
           instructions?: string;
@@ -105,7 +118,13 @@ export type JrUsageSnapshot = {
 export type JrUsageDay = { date: string; tokens: number; requests: number };
 export type JrUsagePeak = { days: number; tokens: number; startedAt: string | null };
 
-export type JrAccessUser = { id: string; name: string; role: 'admin' | 'employee' };
+export type JrAccessUser = {
+  id: string;
+  name: string;
+  role: 'admin' | 'employee';
+  /** Job title ("cargo"). Null when unset; absent when an older control server omits it. */
+  title?: string | null;
+};
 
 /** The seeded owner is the administrator even if a stored role label drifted. */
 export function isJrAdmin(user: { id?: string; role?: string } | null | undefined): boolean {

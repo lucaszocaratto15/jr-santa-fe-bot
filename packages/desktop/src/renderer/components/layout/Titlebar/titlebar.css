@@ -285,3 +285,8 @@
   background-color: #c10f1f;
   color: #fff;
 }
+
+.app-titlebar__theme {
+  -webkit-app-region: no-drag;
+  color: var(--color-text-2);
+}

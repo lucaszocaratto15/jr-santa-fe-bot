@@ -188,7 +188,7 @@ const AionrsConversationPanel: React.FC<{ conversation: AionrsConversation; slid
     title: jrBot ? <span className='jr-chat-bot-title'>{jrBot.name}</span> : conversation.name,
     headerLeading: jrBot ? (
       <span className='jr-chat-bot-mark'>
-        <JrCharacter appearance={jrBot.appearance} size={32} still />
+        <JrCharacter appearance={jrBot.appearance} size={32} />
       </span>
     ) : undefined,
     siderTitle: sliderTitle,
@@ -252,8 +252,9 @@ const AionrsConversationPanel: React.FC<{ conversation: AionrsConversation; slid
   const emptySlot = (
     <SingleChatEmptyState
       conversation_id={conversation.id}
-      assistant_name={presetAssistantInfo?.name}
+      assistant_name={jrBot?.name ?? presetAssistantInfo?.name}
       assistant_backend={presetAssistantInfo?.backend}
+      avatar={jrBot ? <JrCharacter appearance={jrBot.appearance} size={72} /> : undefined}
     />
   );
 

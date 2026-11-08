@@ -17,11 +17,13 @@ initSentry();
 
 import './process/utils/configureConsoleLog';
 import { app, BrowserWindow, ipcMain, nativeImage, powerMonitor, session, safeStorage } from 'electron';
+import type { WebContents } from 'electron';
 import fixPath from 'fix-path';
 import * as fs from 'fs';
 import * as path from 'path';
 import { initMainAdapterWithWindow } from './common/adapter/main';
 import { ipcBridge } from './common';
+import { registerBrowserWindowHandlers } from './process/services/teach/recording/browserWindows';
 import { initializeProcess } from './process';
 import { startBackendOrExit } from './process/startup/backendStartup';
 import { bootstrapJrConnection, configureJrProvider } from './process/services/jr/bootstrap';
@@ -32,13 +34,31 @@ import {
   JrAccessController,
   setJrAccessController,
 } from './process/services/jr/auth';
+import { createVaultStore } from './process/services/teach/vault/vault';
+import {
+  getLearnService,
+  getTeachServices,
+  getTeachSession,
+  setTeachServices,
+} from './process/services/teach/registry';
+import { startLearnService } from './process/services/teach/learn/learnIpc';
+import { onBrainAccessChanged, startBrainService } from './process/services/brain/brainIpc';
+import { onHandbookAccessChanged, startHandbookService } from './process/services/teach/handbook/handbookIpc';
+import { createRecorder, sweepTaughtTasks } from './process/services/teach/recording/recorder';
+import { SHOT_MAX_WIDTH } from './process/services/teach/recording/stepShots';
+import { TAUGHT_TASKS_DIRNAME } from './process/services/teach/recording/teachSession';
+import { getCdpBridgeHandle } from './process/utils/cdpBridgeRegistry';
 import { startJrAuthProxy } from './process/services/jr/authProxy';
+import { setJrModelConnection } from './process/services/jr/modelConnection';
 import { appendJrOpenLog } from './process/services/jr/openLog';
 import { assertStartupArchitectureCompatible } from './process/startup/architectureCompatibility';
 import { classifyBackendStartupFailure } from './process/startup/backendStartupFailure';
 import { installQuitCleanup } from './process/startup/quitCleanup';
 import { shouldRegisterBackendStartup } from './process/startup/singleInstanceGating';
 import { ProcessConfig } from './process/utils/initStorage';
+import { permissionDecision } from './process/utils/permissions';
+import { sanitizeWebviewPreferences } from './process/utils/webviewSecurity';
+import { PREVIEW_SESSION_PARTITION } from './common/config/constants';
 import type { BackendStartupFailureInfo } from './common/types/platform/electron';
 import { registerWindowMaximizeListeners } from '@process/bridge';
 import { BackendLifecycleManager } from '@aionui/web-host';
@@ -90,6 +110,18 @@ import {
 import { readCloseToTraySetting } from './process/utils/closeToTraySetting';
 // @ts-expect-error - electron-squirrel-startup doesn't have types
 import electronSquirrelStartup from 'electron-squirrel-startup';
+
+/** Teach step screenshot: shrink to SHOT_MAX_WIDTH when wider, then JPEG at `quality`. */
+const encodeStepShot = (jpeg: Buffer, quality: number): Buffer | null => {
+  try {
+    const image = nativeImage.createFromBuffer(jpeg);
+    if (image.isEmpty()) return null;
+    const { width } = image.getSize();
+    return (width > SHOT_MAX_WIDTH ? image.resize({ width: SHOT_MAX_WIDTH }) : image).toJPEG(quality);
+  } catch {
+    return null;
+  }
+};
 
 // ============ Single Instance Lock ============
 // Acquire lock early so the second instance quits before doing unnecessary work.
@@ -584,6 +616,18 @@ const createWindow = ({ showOnReady = true }: { showOnReady?: boolean } = {}): v
         autoUpdaterService.initialize(statusBroadcast);
         autoUpdaterService.setBeforeQuitAndInstall(async () => {
           await backendManager.stop();
+          // Keep a recoverable copy of bots, conversations, settings and JR data even if a
+          // future migration or installer goes wrong.
+          try {
+            const { backupUserData } = await import('./process/services/updateBackup');
+            const target = await backupUserData({
+              userData: app.getPath('userData'),
+              version: app.getVersion(),
+            });
+            if (target) console.log('[auto-update] profile backup written to', target);
+          } catch (error) {
+            console.error('[auto-update] profile backup failed', error);
+          }
         });
         // Check for updates after 3 seconds delay. Skipped in the discontinued
         // build: AionUi's final version guides users to the website instead of
@@ -746,15 +790,26 @@ const handleAppReady = async (): Promise<void> => {
 
   setSentryDeviceId();
 
-  // Allow the renderer's Local Font Access queries (window.queryLocalFonts),
-  // used by the appearance font picker to enumerate installed fonts. Electron 37
-  // surfaces the 'local-fonts' permission as 'unknown' and denies it when no
-  // request handler is installed. Grant it here; other permissions are granted
-  // too so installing this handler preserves Electron's default-grant behaviour
-  // and regresses no capability the app already relies on. Runs once, before any
-  // window is created.
-  session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
-    callback(true);
+  // Approve only the capabilities the app renderer actually uses, and only for
+  // the main window. Webviews (HTML preview, in-app browser) are guests and
+  // never inherit camera, microphone, geolocation or font access.
+  const isMainRenderer = (webContents: WebContents): boolean => webContents === mainWindow?.webContents;
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+    callback(permissionDecision(permission, webContents.getType(), isMainRenderer(webContents)));
+  });
+  session.defaultSession.setPermissionCheckHandler((webContents, permission) =>
+    permissionDecision(permission, webContents.getType(), isMainRenderer(webContents))
+  );
+  const previewSession = session.fromPartition(PREVIEW_SESSION_PARTITION);
+  previewSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
+  previewSession.setPermissionCheckHandler(() => false);
+
+  // A webview must never carry a preload or Node integration, regardless of who
+  // created it. Unknown schemes are rejected before attachment.
+  app.on('web-contents-created', (_event, contents) => {
+    contents.on('will-attach-webview', (event, webPreferences, params) => {
+      if (!sanitizeWebviewPreferences(webPreferences, params)) event.preventDefault();
+    });
   });
 
   try {
@@ -836,6 +891,26 @@ const handleAppReady = async (): Promise<void> => {
     }
   }
 
+  /**
+   * Teach control channel for the `jr-teach` MCP server. Like the CDP vars above, the env
+   * must be set before the backend spawns MCP servers so they inherit it. On failure the
+   * env stays unset and the MCP server exits with a diagnostic.
+   */
+  try {
+    const { createTeachControlServer } = await import('./process/services/teach/control/controlServer');
+    const { buildTeachHandlers } = await import('./process/services/teach/control/controlHandlers');
+    const { createMainTeachDeps } = await import('./process/services/teach/control/mainDeps');
+    const teachControl = await createTeachControlServer(buildTeachHandlers(createMainTeachDeps()));
+    process.env.JR_TEACH_PORT = String(teachControl.port);
+    process.env.JR_TEACH_TOKEN = teachControl.token;
+    app.once('will-quit', () => {
+      void teachControl.close();
+    });
+    mark('teachControl');
+  } catch (error) {
+    console.error('[Teach] Failed to start control server; jr-teach tools stay off.', error);
+  }
+
   const localPilot = process.env.JR_LOCAL_PILOT === '1' && !app.isPackaged;
   const startJrCore = () =>
     startBackendOrExit({
@@ -905,6 +980,7 @@ const handleAppReady = async (): Promise<void> => {
   };
   stopJrRuntime = () =>
     serializeRuntime(async () => {
+      setJrModelConnection(null);
       await proxy?.close();
       proxy = null;
       await backendManager.stop();
@@ -921,6 +997,22 @@ const handleAppReady = async (): Promise<void> => {
   } catch {
     console.warn('[JR] Invalid company access configuration.');
   }
+  const teachBridge = getCdpBridgeHandle();
+  const taughtTasksDir = path.join(app.getPath('userData'), TAUGHT_TASKS_DIRNAME);
+  // No recording can be active yet: raw recordings left by a crashed/killed run are deleted.
+  void sweepTaughtTasks(taughtTasksDir);
+  setTeachServices({
+    vault: createVaultStore(app.getPath('userData'), safeStorage),
+    // Teach recording needs the CDP bridge; without it the Ensinar button stays hidden.
+    recorder: teachBridge
+      ? createRecorder({
+          bridge: teachBridge,
+          dir: taughtTasksDir,
+          onAutoStop: () => void getTeachSession()?.handleAutoStop(),
+          shots: { encode: encodeStepShot },
+        })
+      : null,
+  });
   const controller = new JrAccessController({
     url: controlUrl,
     pilot: localPilot,
@@ -935,7 +1027,14 @@ const handleAppReady = async (): Promise<void> => {
         throw new Error('JR_ACCESS_PROFILE_UNBOUND');
       }
     },
-    onChange: (state) => ipcBridge.jr.accessChanged.emit(state),
+    onChange: (state) => {
+      ipcBridge.jr.accessChanged.emit(state);
+      onHandbookAccessChanged(state.status);
+      onBrainAccessChanged(state.status, state.user?.id);
+      void getLearnService()
+        ?.refreshProfile()
+        .catch(() => {});
+    },
     onDiagnostic: (cause) => {
       console.warn(`[JR] ${cause}`);
       void appendJrOpenLog(app.getPath('userData'), { message: cause }).catch(() => {});
@@ -955,12 +1054,15 @@ const handleAppReady = async (): Promise<void> => {
           reloadRendererIfPortStale();
           return;
         }
+        setJrModelConnection(null);
         await proxy?.close();
         proxy = await startJrAuthProxy(connection, (notice) => {
           applyJrProxyDenial(controller, connection.token, notice, () =>
             console.warn('[JR] Access could not be cleared.')
           );
         });
+        // Main-process features (Aprender insights) reach the model through the same proxy.
+        setJrModelConnection(proxy.connection);
         try {
           const result = await startJrCore();
           if (!result.ok) throw new Error('JR_ACCESS_CORE_UNAVAILABLE');
@@ -971,6 +1073,7 @@ const handleAppReady = async (): Promise<void> => {
           // exists, so reload only when the renderer is still on another port.
           reloadRendererIfPortStale();
         } catch (error) {
+          setJrModelConnection(null);
           await proxy.close();
           proxy = null;
           await backendManager.stop();
@@ -980,6 +1083,11 @@ const handleAppReady = async (): Promise<void> => {
         }
       }),
   });
+  // "Manual da função": drafts, employee-approved publishing and the role handbook reads.
+  startHandbookService(app.getPath('userData'), (target, init, admin) => controller.call(target, init, admin));
+  // Company brain: explicit proposals and consented notes; live capture remains disabled.
+  // Brain calls never mark the app offline: a slow or missing brain fails only that call.
+  startBrainService(app.getPath('userData'), (target, init, admin) => controller.brainCall(target, init, admin));
   jrAccessController = controller;
   setJrAccessController(controller);
   const debugBackendStartupFailure = resolveDebugBackendStartupFailure();
@@ -1133,6 +1241,11 @@ const handleAppReady = async (): Promise<void> => {
     appReadyDone = true;
     mark('createWindow');
 
+    // "Aprender com seu trabalho": always on from launch (the Data Notice informs; no opt-in).
+    void startLearnService(app.getPath('userData')).catch((error) =>
+      console.warn('[JR] Learn service could not start:', error instanceof Error ? error.message : error)
+    );
+
     // Initialize desktop pet (delayed to not block main window)
     setTimeout(() => {
       void (async () => {
@@ -1194,6 +1307,18 @@ if (process.defaultApp) {
 } else {
   app.setAsDefaultProtocolClient(PROTOCOL_SCHEME);
 }
+
+// In-app browser webviews: route popups to tabs and downloads to <Downloads>/JR Bot.
+// Not gated by CDP/agent control: allowpopups=true needs a handler regardless.
+registerBrowserWindowHandlers({
+  emitOpenTab: (url, openerWebContentsId) => ipcBridge.teach.openTab.emit({ url, openerWebContentsId }),
+  downloadsDir: path.join(app.getPath('downloads'), 'JR Bot'),
+  beginLearningDownload: (origin) => getLearnService()?.beginWorkEvent('browser.download', { origin }) ?? null,
+  onDownload: (info) => {
+    ipcBridge.teach.downloaded.emit(info);
+    getTeachServices()?.recorder?.recordDownload({ fileName: info.fileName, origin: info.origin });
+  },
+});
 
 // macOS: handle aionui:// URLs via the open-url event
 app.on('open-url', (event, url) => {
@@ -1273,6 +1398,8 @@ installQuitCleanup({
   // Stop aioncore subprocess — backend shutdown kills all agent children
   // transitively (no separate frontend workerTaskManager remains).
   stopBackend: async () => {
+    // Stops the sampler child and the learn timers.
+    getLearnService()?.dispose();
     jrAccessController?.dispose();
     await stopJrRuntime();
   },

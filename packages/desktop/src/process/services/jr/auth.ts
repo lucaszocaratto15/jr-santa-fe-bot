@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import { chmod, lstat, mkdir, open, rename, unlink } from 'node:fs/promises';
 import { hostname } from 'node:os';
@@ -23,7 +23,7 @@ export type JrSessionStore = {
   read: () => Promise<JrStoredSession | null>;
   write: (session: JrStoredSession) => Promise<void>;
 };
-type OsEncryption = {
+export type OsEncryption = {
   isEncryptionAvailable: () => boolean;
   getSelectedStorageBackend?: () => string;
   encryptString: (text: string) => Buffer;
@@ -139,7 +139,8 @@ function parseUser(value: unknown): JrAccessUser {
   // a stored role label drifted away from the exact word "admin".
   const role = value.id === 'owner' ? 'admin' : accessRole(value.role);
   if (!role) return fail('JR_ACCESS_INVALID_RESPONSE');
-  return { id: value.id, name: value.name, role };
+  // Older control servers send no title; the field is left out then (treated as no cargo).
+  return { id: value.id, name: value.name, role, ...('title' in value ? { title: listedTitle(value.title) } : {}) };
 }
 
 /** Resolve the explicitly configured control service; insecure HTTP is test-only. */
@@ -258,6 +259,19 @@ export class JrAccessController {
       ...(this.current.notice ? { notice: this.current.notice } : {}),
     };
   }
+  /** Native-only owner and legacy assistant id; new bot ids use this account-bound prefix. */
+  employeeAssistantIdentity(): { ownerAccountId: string; assistantId: string; generation: number } {
+    if (
+      this.current.status !== 'authenticated' ||
+      !this.current.user ||
+      !this.saved?.token ||
+      this.saved.ownerId !== this.current.user.id ||
+      this.saved.issuer !== this.options.url
+    )
+      return fail('JR_ACCESS_REQUIRED');
+    const ownerAccountId = createHash('sha256').update(`${this.saved.issuer}\0${this.current.user.id}`).digest('hex');
+    return { ownerAccountId, assistantId: `jr-employee-${ownerAccountId}`, generation: this.generation };
+  }
   /** Retry connectivity on demand while preserving explicit logout and revocation notices. */
   accessStatus(): Promise<JrAccessState> {
     if (this.current.notice === 'storage' || this.current.status === 'unconfigured') return this.initialize();
@@ -289,7 +303,7 @@ export class JrAccessController {
       ...init,
       headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       redirect: 'error',
-      signal: AbortSignal.timeout(10000),
+      signal: init.signal ?? AbortSignal.timeout(10000),
     });
   }
   private async clearToken() {
@@ -563,7 +577,7 @@ export class JrAccessController {
           publicError === 'JR_ACCESS_STORAGE_UNAVAILABLE' ? 'storage' : null
         );
       }
-      if (publicError !== 'JR_ACCESS_UNAVAILABLE') throw new Error(publicError);
+      if (publicError !== 'JR_ACCESS_UNAVAILABLE') throw new Error(publicError, { cause: error });
       return fail('JR_ACCESS_UNAVAILABLE');
     } finally {
       this.authenticating = false;
@@ -607,7 +621,16 @@ export class JrAccessController {
       return this.state;
     });
   }
-  private async authorized(path: string, init: RequestInit = {}, admin = false): Promise<unknown> {
+  /**
+   * `offlineOnFailure: false` is for optional side services (the company brain): a network failure or
+   * timeout fails only that call and never marks the app offline or stops the core.
+   */
+  private async authorized(
+    path: string,
+    init: RequestInit = {},
+    admin = false,
+    offlineOnFailure = true
+  ): Promise<unknown> {
     if (this.current.status !== 'authenticated' || !this.saved?.token) return fail('JR_ACCESS_REQUIRED');
     if (admin && !isJrAdmin(this.current.user)) return fail('JR_ACCESS_FORBIDDEN');
     const epoch = this.generation,
@@ -617,6 +640,7 @@ export class JrAccessController {
       response = await this.remote(path, init, token);
     } catch {
       if (epoch !== this.generation) return fail('JR_ACCESS_REQUIRED');
+      if (!offlineOnFailure) return fail('JR_ACCESS_UNAVAILABLE');
       await this.blockTransitions(async () => {
         this.publish('offline');
         await this.stopCore();
@@ -624,6 +648,10 @@ export class JrAccessController {
       return fail('JR_ACCESS_UNAVAILABLE');
     }
     if (epoch !== this.generation || token !== this.saved?.token) return fail('JR_ACCESS_REQUIRED');
+    if ((path.startsWith('/strata/') || path.startsWith('/api/brain/')) && !response.ok && response.status !== 401) {
+      const code = await responseCode(response.clone());
+      if (code && /^strata_[a-z_]{1,80}$/.test(code)) throw Object.assign(new Error(code), { status: response.status });
+    }
     if (response.status === 401) {
       await this.rejectSession(token);
       return fail('JR_ACCESS_REVOKED');
@@ -636,8 +664,13 @@ export class JrAccessController {
       }
       return fail('JR_ACCESS_FORBIDDEN');
     }
-    if (response.status === 409) return fail('JR_ACCESS_EMPLOYEE_REVOKED');
-    if (!response.ok) return fail('JR_ACCESS_UNAVAILABLE');
+    if (response.status === 409) {
+      if ((await responseCode(response)) === 'no_role') return fail('JR_HANDBOOK_NO_ROLE');
+      return fail('JR_ACCESS_EMPLOYEE_REVOKED');
+    }
+    if (response.status === 413) return fail('JR_HANDBOOK_TOO_LARGE');
+    // The status rides on the error so queue clients can tell permanent from transient failures.
+    if (!response.ok) throw Object.assign(new Error('JR_ACCESS_UNAVAILABLE'), { status: response.status });
     let value: unknown;
     try {
       value = await response.json();
@@ -646,6 +679,53 @@ export class JrAccessController {
     }
     if (epoch !== this.generation || token !== this.saved?.token) return fail('JR_ACCESS_REQUIRED');
     return value;
+  }
+  /**
+   * Authenticated JSON call to the control service for main-process clients (handbook).
+   * Admin paths (`/admin/...`) always require an administrator, like `authorized`.
+   * Pilot mode and a missing service URL fail with JR_ACCESS_UNCONFIGURED.
+   */
+  async call(path: string, init: RequestInit = {}, admin = false): Promise<unknown> {
+    if (this.options.pilot || !this.options.url) return fail('JR_ACCESS_UNCONFIGURED');
+    if (!path.startsWith('/') || path.includes('..')) return fail('JR_ACCESS_INVALID_REQUEST');
+    return this.authorized(path, init, admin || path.startsWith('/admin/'));
+  }
+  /**
+   * Like `call`, for `/api/brain/*` only. The brain is optional: when the control service cannot be
+   * reached or times out, only this call fails (JR_ACCESS_UNAVAILABLE); access status stays as it is.
+   */
+  async brainCall(path: string, init: RequestInit = {}, admin = false): Promise<unknown> {
+    if (this.options.pilot || !this.options.url) return fail('JR_ACCESS_UNCONFIGURED');
+    if (!path.startsWith('/api/brain/') || path.includes('..')) return fail('JR_ACCESS_INVALID_REQUEST');
+    // Explicit draft generation can include a 60-second curator call plus the control hop.
+    const signal =
+      path === '/api/brain/proposals' && init.method === 'POST'
+        ? (init.signal ?? AbortSignal.timeout(70_000))
+        : init.signal;
+    return this.authorized(path, { ...init, ...(signal ? { signal } : {}) }, admin, false);
+  }
+  /** Strata is optional; authorization failures never invalidate the independent JR login. */
+  async strataCall(path: string, init: RequestInit = {}): Promise<unknown> {
+    if (this.options.pilot || !this.options.url) return fail('JR_ACCESS_UNCONFIGURED');
+    if (!/^\/strata\/(?:status|connect|organization|disconnect|mcp\/tools|mcp\/call)$/.test(path))
+      return fail('JR_ACCESS_INVALID_REQUEST');
+    const signal =
+      init.signal ??
+      AbortSignal.timeout(
+        path.startsWith('/strata/mcp/') || path === '/strata/connect' || path === '/strata/status' ? 70_000 : 10_000
+      );
+    return this.authorized(path, { ...init, signal }, false, false);
+  }
+  async setEmployeeTitle(input: { employeeId: string; title: string | null }): Promise<{ title: string | null }> {
+    if (!validId(input?.employeeId)) return fail('JR_ACCESS_INVALID_EMPLOYEE');
+    const title = inviteTitle(input.title);
+    const value = await this.authorized(
+      `/admin/employees/${encodeURIComponent(input.employeeId)}/title`,
+      { method: 'POST', body: JSON.stringify({ title }) },
+      true
+    );
+    if (!record(value) || listedTitle(value.title) !== title) return fail('JR_ACCESS_INVALID_RESPONSE');
+    return { title };
   }
   async personalUsage(): Promise<JrConnectionStatus> {
     return parseJrConnectionStatus(await this.authorized('/usage'));

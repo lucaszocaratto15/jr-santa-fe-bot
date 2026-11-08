@@ -165,11 +165,11 @@ describe('sidebar layout storage', () => {
 describe('sidebar row styles', () => {
   const css = readFileSync('packages/desktop/src/renderer/pages/Jr/JrSidebar/JrSidebar.module.css', 'utf8');
 
-  it('uses a 16px name, a muted one-line preview, and the JR accent ring', () => {
-    expect(css).toContain('font-size: 16px');
+  it('uses a 14px name, a muted one-line preview, and a soft active row', () => {
+    expect(css).toMatch(/\.botCopy \.botName\s*\{[^}]*font-size:\s*14px/);
     expect(css).toMatch(/\.preview\s*\{[\s\S]*?color:\s*var\(--color-text-3\)/);
     expect(css).toMatch(/\.preview\s*\{[\s\S]*?white-space:\s*nowrap/);
-    expect(css).toMatch(/\.botActive \.avatar\s*\{[\s\S]*?var\(--jr-accent\)/);
+    expect(css).toMatch(/\.botActive:global\(\.arco-btn\)\s*\{[^}]*var\(--jr-tab-active\)/);
     expect(css).toMatch(/\.pinned\s*\{[\s\S]*?flex-direction:\s*column/);
   });
 

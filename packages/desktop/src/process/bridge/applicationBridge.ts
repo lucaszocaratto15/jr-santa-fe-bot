@@ -7,8 +7,10 @@
 import type { BrowserWindow } from 'electron';
 import { app, session } from 'electron';
 import { ipcBridge } from '@/common';
+import { httpRequest } from '@/common/adapter/httpBridge';
+import type { ClientBusinessSettingMap } from '@/common/config/clientSettings';
 import { BROWSER_SESSION_PARTITION } from '@/common/config/constants';
-import { ProcessConfig } from '@process/utils/initStorage';
+import { ProcessConfig, getBuiltinMcpScriptPath } from '@process/utils/initStorage';
 import { getZoomFactor, setZoomFactor } from '@process/utils/zoom';
 import { getCdpStatus, updateCdpConfig } from '@process/utils/configureChromium';
 import { getCdpBridgeHandle } from '@process/utils/cdpBridgeRegistry';
@@ -17,9 +19,16 @@ import { initApplicationBridgeCore } from './applicationBridgeCore';
 import type { IStartOnBootStatus } from '@/common/adapter/ipcBridge';
 import { restartApplication } from './restartApplication';
 import { getJrConnectionStatus } from '@process/services/jr/usage';
-import { configureJrWorkspaceContext, createJrWorkspace, readLoopbackProviders } from '@process/services/jr/bootstrap';
+import {
+  configureJrWorkspaceContext,
+  createJrWorkspace,
+  readLoopbackProviders,
+  createEmployeeAssistantRegistry,
+  createEmployeeAssistantMigration,
+} from '@process/services/jr/bootstrap';
 import { getJrAccessController } from '@process/services/jr/auth';
 import { appendJrOpenLog } from '@process/services/jr/openLog';
+import { initStrataBridge } from '@process/services/jr/strataIpc';
 
 let mainWindowRef: BrowserWindow | null = null;
 
@@ -113,14 +122,43 @@ export function initApplicationBridge(): void {
   ipcBridge.jr.createWorkspace.provider(() => {
     if (!['authenticated', 'pilot'].includes(getJrAccessController().state.status))
       throw new Error('JR_ACCESS_REQUIRED');
-    return createJrWorkspace(app.getPath('userData'));
+    return createJrWorkspace(app.getPath('userData'), getBuiltinMcpScriptPath('builtin-mcp-teach'));
   });
   ipcBridge.jr.configureWorkspace.provider(({ workspace }) => {
     if (!['authenticated', 'pilot'].includes(getJrAccessController().state.status))
       throw new Error('JR_ACCESS_REQUIRED');
-    return configureJrWorkspaceContext(app.getPath('userData'), workspace);
+    return configureJrWorkspaceContext(
+      app.getPath('userData'),
+      workspace,
+      getBuiltinMcpScriptPath('builtin-mcp-teach')
+    );
   });
   ipcBridge.jr.accessStatus.provider(() => getJrAccessController().accessStatus());
+  const employeeAssistantReady = createEmployeeAssistantMigration({
+    identity: () => getJrAccessController().employeeAssistantIdentity(),
+    list: () => ipcBridge.assistants.list.invoke(),
+    read: async () =>
+      (
+        await httpRequest<Pick<ClientBusinessSettingMap, 'jr.botWorkspaces'>>(
+          'GET',
+          '/api/settings/client?keys=jr.botWorkspaces'
+        )
+      )?.['jr.botWorkspaces'],
+    write: (workspaces) => httpRequest<void>('PUT', '/api/settings/client', { 'jr.botWorkspaces': workspaces }),
+  });
+  ipcBridge.jr.assistant.identity.provider(employeeAssistantReady);
+  const createEmployeeAssistant = createEmployeeAssistantRegistry({
+    identity: () => getJrAccessController().employeeAssistantIdentity(),
+    list: () => ipcBridge.assistants.list.invoke(),
+    create: (input) => ipcBridge.assistants.create.invoke(input),
+    skills: async () =>
+      (await ipcBridge.fs.listAvailableSkills.invoke()).map((skill) => skill.name.trim()).filter(Boolean),
+  });
+  ipcBridge.jr.assistant.create.provider(async (input) => {
+    await employeeAssistantReady();
+    return createEmployeeAssistant(input);
+  });
+  initStrataBridge();
   ipcBridge.jr.login.provider((input) => getJrAccessController().login(input));
   ipcBridge.jr.logout.provider(() => getJrAccessController().logout());
   ipcBridge.jr.ensureGateway.provider(() => getJrAccessController().ensureGateway());
@@ -140,6 +178,7 @@ export function initApplicationBridge(): void {
   ipcBridge.jr.admin.revoke.provider((input) => getJrAccessController().revoke(input));
   ipcBridge.jr.admin.setBlocked.provider((input) => getJrAccessController().setBlocked(input));
   ipcBridge.jr.admin.updatePolicy.provider((input) => getJrAccessController().updatePolicy(input));
+  ipcBridge.jr.admin.setTitle.provider((input) => getJrAccessController().setEmployeeTitle(input));
 
   ipcBridge.application.restart.provider(async () => {
     // Backend subprocess shutdown is handled by backendManager.stop() in the

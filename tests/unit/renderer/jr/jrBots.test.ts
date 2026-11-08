@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackendHttpError } from '@/common/adapter/httpBridge';
 import type { Assistant } from '@/common/types/agent/assistantTypes';
 import type { IProvider } from '@/common/config/storage';
+import type { ClientBusinessSettingMap } from '@/common/config/clientSettings';
+import { createEmployeeAssistantMigration } from '@/process/services/jr/bootstrap';
 
 const mocks = vi.hoisted(() => ({
   list: vi.fn(),
@@ -27,6 +29,8 @@ const mocks = vi.hoisted(() => ({
   configureWorkspace: vi.fn(),
   readProviders: vi.fn(),
   report: vi.fn(),
+  identity: vi.fn(),
+  employeeCreate: vi.fn(),
 }));
 vi.mock('@/common', () => ({
   ipcBridge: {
@@ -43,6 +47,7 @@ vi.mock('@/common', () => ({
     },
     mode: { listProviders: { invoke: mocks.providers } },
     jr: {
+      assistant: { identity: { invoke: mocks.identity }, create: { invoke: mocks.employeeCreate } },
       ensureGateway: { invoke: mocks.ensure },
       configureWorkspace: { invoke: mocks.configureWorkspace },
       readProviders: { invoke: mocks.readProviders },
@@ -71,6 +76,7 @@ vi.mock('@/renderer/services/clientBusinessSettings', () => ({
 import {
   JR_DEFAULT_INSTRUCTIONS,
   listJrBots,
+  getJrBot,
   reportJrOpenError,
   deleteJrBot,
   saveJrBot,
@@ -98,6 +104,8 @@ const provider = {
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.list.mockResolvedValue([runtime]);
+  mocks.identity.mockResolvedValue({ ownerAccountId: 'account-fixture', assistantId: 'jr-bot' });
+  mocks.employeeCreate.mockResolvedValue({ ownerAccountId: 'account-fixture', assistantId: 'jr-bot' });
   mocks.create.mockResolvedValue({ id: 'jr-bot', name: input.name, source: 'user', agent: { type: 'aionrs' } });
   mocks.readSetting.mockResolvedValue({});
   mocks.writeSetting.mockResolvedValue(undefined);
@@ -150,15 +158,19 @@ describe('JR bot persistence', () => {
 
   it('persists the real assistant, rules and workspace mapping', async () => {
     const bot = await saveJrBot(input);
-    expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ name: 'Compras', agent_id: 'agent-aionrs' }));
+    expect(mocks.employeeCreate).toHaveBeenCalledWith({ name: 'Compras' });
     expect(mocks.writeRules).toHaveBeenCalledWith({
       assistant_id: 'jr-bot',
       locale: 'pt-BR',
       content: expect.stringContaining(input.instructions),
     });
     expect(mocks.writeRules.mock.calls[0][0].content).toContain('## Memória entre conversas deste bot');
+    expect(mocks.writeRules.mock.calls[0][0].content).toContain('## Cérebro da empresa');
+    expect(mocks.writeRules.mock.calls[0][0].content).toContain('brain_search');
+    expect(mocks.writeRules.mock.calls[0][0].content).toContain('brain_wrong');
     expect(mocks.writeSetting).toHaveBeenCalledWith('jr.botWorkspaces', {
       'jr-bot': {
+        ownerAccountId: 'account-fixture',
         workspace: input.workspace,
         instructions: input.instructions,
         learning: '',
@@ -176,16 +188,16 @@ describe('JR bot persistence', () => {
     expect(mocks.writeSetting).not.toHaveBeenCalled();
   });
 
-  it('removes a newly created assistant when rules or workspace cannot be saved', async () => {
+  it('retains the canonical assistant for retry when its workspace cannot be saved', async () => {
     mocks.writeSetting.mockRejectedValue(new Error('unavailable'));
     await expect(saveJrBot(input)).rejects.toThrow('unavailable');
-    expect(mocks.remove).toHaveBeenCalledWith({ id: 'jr-bot' });
+    expect(mocks.remove).not.toHaveBeenCalled();
   });
 
   it('rejects a false rule-write acknowledgement', async () => {
     mocks.writeRules.mockResolvedValue(false);
     await expect(saveJrBot(input)).rejects.toThrow();
-    expect(mocks.remove).toHaveBeenCalledWith({ id: 'jr-bot' });
+    expect(mocks.remove).not.toHaveBeenCalled();
     expect(mocks.writeSetting).not.toHaveBeenCalled();
   });
 
@@ -197,9 +209,9 @@ describe('JR bot persistence', () => {
       { id: 'cli', source: 'user', agent: { type: 'acp' } },
     ]);
     mocks.readSetting.mockResolvedValue({
-      ours: { workspace: '/tmp/ours' },
-      other: { workspace: '/tmp/other' },
-      cli: { workspace: '/tmp/cli' },
+      ours: { ownerAccountId: 'account-fixture', workspace: '/tmp/ours' },
+      other: { ownerAccountId: 'account-fixture', workspace: '/tmp/other' },
+      cli: { ownerAccountId: 'account-fixture', workspace: '/tmp/cli' },
     });
     expect((await listJrBots()).map((bot) => bot.id)).toEqual(['ours']);
   });
@@ -212,8 +224,8 @@ describe('JR bot persistence', () => {
       { id: 'ours', name: 'Nosso bot', source: 'user', agent: { type: 'aionrs' } },
     ]);
     mocks.readSetting.mockResolvedValue({
-      [orphanId]: { workspace: `/tmp/jr-workspaces/${orphanId}` },
-      ours: { workspace: '/tmp/ours' },
+      [orphanId]: { ownerAccountId: 'account-fixture', workspace: `/tmp/jr-workspaces/${orphanId}` },
+      ours: { ownerAccountId: 'account-fixture', workspace: '/tmp/ours' },
     });
     expect((await listJrBots()).map((bot) => bot.name)).toEqual(['Nosso bot']);
   });
@@ -368,6 +380,7 @@ it('keeps animated appearance outside the native emoji or local-file avatar cont
   expect(bot.appearance).toEqual({ shape: 'star', color: 'blue' });
   expect(mocks.writeSetting).toHaveBeenCalledWith('jr.botWorkspaces', {
     'jr-bot': {
+      ownerAccountId: 'account-fixture',
       workspace: input.workspace,
       instructions: input.instructions,
       learning: '',
@@ -380,7 +393,11 @@ it('keeps animated appearance outside the native emoji or local-file avatar cont
 
 it('restores the previous bot name and instructions when editing its workspace fails', async () => {
   mocks.readSetting.mockResolvedValue({
-    'jr-bot': { workspace: input.workspace, appearance: { shape: 'heart', color: 'red' } },
+    'jr-bot': {
+      ownerAccountId: 'account-fixture',
+      workspace: input.workspace,
+      appearance: { shape: 'heart', color: 'red' },
+    },
   });
   mocks.get.mockResolvedValue({
     source: 'user',
@@ -433,7 +450,9 @@ describe('JR bot conversations', () => {
   };
 
   it('reopens the bound conversation without starting a parallel chat', async () => {
-    mocks.readSetting.mockResolvedValue({ [bot.id]: { workspace: bot.workspace, conversationId: conversation.id } });
+    mocks.readSetting.mockResolvedValue({
+      [bot.id]: { ownerAccountId: 'account-fixture', workspace: bot.workspace, conversationId: conversation.id },
+    });
     mocks.getConversation.mockResolvedValue(conversation);
     expect(await startJrConversation(bot)).toEqual(conversation);
     expect(mocks.conversation).not.toHaveBeenCalled();
@@ -442,7 +461,9 @@ describe('JR bot conversations', () => {
   });
 
   it('starts a fresh chat for the same bot and keeps its shared project workspace', async () => {
-    mocks.readSetting.mockResolvedValue({ [bot.id]: { workspace: bot.workspace, conversationId: conversation.id } });
+    mocks.readSetting.mockResolvedValue({
+      [bot.id]: { ownerAccountId: 'account-fixture', workspace: bot.workspace, conversationId: conversation.id },
+    });
     mocks.getConversation.mockResolvedValue(conversation);
     await expect(startJrConversation(bot, { newConversation: true })).resolves.toEqual({ id: 'real-conversation' });
     expect(mocks.conversations).not.toHaveBeenCalled();
@@ -459,6 +480,25 @@ describe('JR bot conversations', () => {
     expect(mocks.removeConversation).not.toHaveBeenCalled();
   });
 
+  it('starts a fresh chat without re-binding the bot when bind is false', async () => {
+    let stored: Record<string, unknown> = {
+      [bot.id]: { ownerAccountId: 'account-fixture', workspace: bot.workspace, conversationId: conversation.id },
+    };
+    mocks.readSetting.mockImplementation(async () => stored);
+    mocks.writeSetting.mockImplementation(async (_key: string, value: Record<string, unknown>) => {
+      stored = value;
+    });
+    mocks.getConversation.mockResolvedValue(conversation);
+    await expect(startJrConversation(bot, { newConversation: true, bind: false })).resolves.toEqual({
+      id: 'real-conversation',
+    });
+    expect(mocks.conversation).toHaveBeenCalledTimes(1);
+    expect(mocks.writeSetting).not.toHaveBeenCalledWith('jr.botWorkspaces', expect.anything());
+    // The next sidebar open still lands in the employee's own chat.
+    expect(await startJrConversation(bot)).toEqual(conversation);
+    expect(mocks.conversation).toHaveBeenCalledTimes(1);
+  });
+
   it('reuses a bound conversation that is missing skills or Chrome without patching it', async () => {
     const chrome = {
       id: 'chrome-jr-1',
@@ -473,7 +513,9 @@ describe('JR bot conversations', () => {
       ...conversation,
       extra: { workspace: input.workspace, skills: [] as string[], mcp_server_ids: [] as string[] },
     };
-    mocks.readSetting.mockResolvedValue({ [bot.id]: { workspace: bot.workspace, conversationId: existing.id } });
+    mocks.readSetting.mockResolvedValue({
+      [bot.id]: { ownerAccountId: 'account-fixture', workspace: bot.workspace, conversationId: existing.id },
+    });
     mocks.getConversation.mockResolvedValue(existing);
     expect(await startJrConversation({ ...bot, skillIds: [], useChrome: false })).toEqual(existing);
     expect(mocks.conversation).not.toHaveBeenCalled();
@@ -533,7 +575,11 @@ describe('JR bot conversations', () => {
   it('recognizes the same workspace across macOS Unicode normalization forms', async () => {
     const workspace = '/tmp/Comprás';
     mocks.readSetting.mockResolvedValue({
-      [bot.id]: { workspace: workspace.normalize('NFD'), conversationId: conversation.id },
+      [bot.id]: {
+        ownerAccountId: 'account-fixture',
+        workspace: workspace.normalize('NFD'),
+        conversationId: conversation.id,
+      },
     });
     mocks.getConversation.mockResolvedValue({ ...conversation, extra: { workspace: workspace.normalize('NFC') } });
     expect((await startJrConversation({ ...bot, workspace: workspace.normalize('NFD') })).id).toBe(conversation.id);
@@ -553,14 +599,18 @@ describe('JR bot conversations', () => {
   });
 
   it('does not reuse another bot conversation from an invalid local binding', async () => {
-    mocks.readSetting.mockResolvedValue({ [bot.id]: { workspace: bot.workspace, conversationId: 'foreign' } });
+    mocks.readSetting.mockResolvedValue({
+      [bot.id]: { ownerAccountId: 'account-fixture', workspace: bot.workspace, conversationId: 'foreign' },
+    });
     mocks.getConversation.mockResolvedValue({ ...conversation, id: 'foreign', assistant: { id: 'another-bot' } });
     expect((await startJrConversation(bot)).id).toBe('real-conversation');
     expect(mocks.conversation).toHaveBeenCalledTimes(1);
   });
 
   it('fails closed when the existing conversation cannot be checked', async () => {
-    mocks.readSetting.mockResolvedValue({ [bot.id]: { workspace: bot.workspace, conversationId: conversation.id } });
+    mocks.readSetting.mockResolvedValue({
+      [bot.id]: { ownerAccountId: 'account-fixture', workspace: bot.workspace, conversationId: conversation.id },
+    });
     mocks.getConversation.mockRejectedValue(new Error('offline'));
     await expect(startJrConversation(bot)).rejects.toThrow('offline');
     expect(mocks.conversation).not.toHaveBeenCalled();
@@ -573,7 +623,9 @@ describe('JR bot conversations', () => {
   });
 
   it('preserves the conversation binding while editing the bot appearance', async () => {
-    mocks.readSetting.mockResolvedValue({ [bot.id]: { workspace: bot.workspace, conversationId: conversation.id } });
+    mocks.readSetting.mockResolvedValue({
+      [bot.id]: { ownerAccountId: 'account-fixture', workspace: bot.workspace, conversationId: conversation.id },
+    });
     mocks.get.mockResolvedValue({
       source: 'user',
       profile: { name: bot.name },
@@ -631,7 +683,7 @@ describe('JR bot conversations', () => {
       { id: 'ours', name: 'Nosso bot', source: 'user', agent: { type: 'aionrs' } },
     ]);
     mocks.readSetting.mockResolvedValue({
-      ours: { workspace: '/tmp/ours', skillIds: ['planilhas'], useChrome: false },
+      ours: { ownerAccountId: 'account-fixture', workspace: '/tmp/ours', skillIds: ['planilhas'], useChrome: false },
     });
     const [loadedBot] = await listJrBots();
     expect(loadedBot).toMatchObject({ id: 'ours', skillIds: ['pesquisa-jr', 'planilhas'], useChrome: true });
@@ -651,8 +703,8 @@ describe('JR bot conversations', () => {
 describe('deleting a bot', () => {
   const storedBot = () => {
     mocks.readSetting.mockResolvedValue({
-      'jr-bot': { workspace: '/tmp/jr-bot' },
-      other: { workspace: '/tmp/other' },
+      'jr-bot': { ownerAccountId: 'account-fixture', workspace: '/tmp/jr-bot' },
+      other: { ownerAccountId: 'account-fixture', workspace: '/tmp/other' },
     });
     mocks.get.mockResolvedValue({
       source: 'user',
@@ -681,7 +733,9 @@ describe('deleting a bot', () => {
       { id: 'preset' },
     ]);
     expect(mocks.remove).toHaveBeenCalledWith({ id: 'jr-bot' });
-    expect(mocks.writeSetting).toHaveBeenLastCalledWith('jr.botWorkspaces', { other: { workspace: '/tmp/other' } });
+    expect(mocks.writeSetting).toHaveBeenLastCalledWith('jr.botWorkspaces', {
+      other: { ownerAccountId: 'account-fixture', workspace: '/tmp/other' },
+    });
   });
 
   it('still removes the bot when one of its chats cannot be deleted', async () => {
@@ -709,4 +763,158 @@ describe('deleting a bot', () => {
     expect(mocks.conversations).not.toHaveBeenCalled();
     expect(mocks.remove).not.toHaveBeenCalled();
   });
+});
+
+describe('instructionWithLearning general lessons', () => {
+  it('appends the lessons section only when there are general lessons', async () => {
+    const { instructionWithLearning } = await import('@/renderer/pages/Jr/jrBots');
+    expect(instructionWithLearning('X', '', '- a')).toContain('## Lições aprendidas com você\n- a');
+    expect(instructionWithLearning('X', '')).toBe('X');
+    expect(instructionWithLearning('X', 'L', '- a')).not.toContain('Cérebro da empresa');
+    expect(instructionWithLearning('X', 'L', '- a')).toContain('## Aprendizados deste bot\nL');
+  });
+});
+
+describe('account-owned employee bots', () => {
+  it('waits for native migration, restores every legacy bot and reopens its original conversation', async () => {
+    const original = {
+      workspace: input.workspace,
+      conversationId: 'original-chat',
+      instructions: input.instructions,
+      learning: 'Original lessons',
+      skillIds: [],
+      useChrome: true,
+    };
+    let records: ClientBusinessSettingMap['jr.botWorkspaces'] = {
+      'legacy-one': original,
+      'legacy-two': { ...original, workspace: '/tmp/second', conversationId: 'second-chat' },
+      'legacy-three': { ...original, workspace: '/tmp/third', conversationId: 'third-chat' },
+    };
+    mocks.list.mockResolvedValue(
+      Object.keys(records).map((id) => ({ ...runtime, id, source: 'user', name: id + ' name' }))
+    );
+    mocks.readSetting.mockImplementation(async () => records);
+    mocks.writeSetting.mockImplementation(async (_key, next) => {
+      records = next;
+    });
+    mocks.identity.mockImplementation(
+      createEmployeeAssistantMigration({
+        identity: () => ({ ownerAccountId: 'account-fixture', assistantId: 'jr-bot', generation: 1 }),
+        list: mocks.list,
+        read: mocks.readSetting,
+        write: (next) => mocks.writeSetting('jr.botWorkspaces', next),
+      })
+    );
+    mocks.get.mockResolvedValue({
+      source: 'user',
+      profile: { name: 'Original bot' },
+      engine: { agent: { type: 'aionrs' } },
+      rules: { content: input.instructions },
+    });
+    const conversation = {
+      id: 'original-chat',
+      type: 'aionrs',
+      assistant: { id: 'legacy-one' },
+      extra: { workspace: input.workspace },
+    };
+    mocks.getConversation.mockResolvedValue(conversation);
+    const bots = await listJrBots();
+    expect(bots.map(({ id }) => id)).toEqual(['legacy-one', 'legacy-two', 'legacy-three']);
+    const restored = await getJrBot('legacy-one');
+    expect(await startJrConversation(restored)).toEqual(conversation);
+    expect(mocks.conversation).not.toHaveBeenCalled();
+  });
+
+  it('does not adopt unowned legacy assistants by a matching name', async () => {
+    mocks.list.mockResolvedValue([
+      runtime,
+      { id: 'legacy', name: input.name, source: 'user', agent: { type: 'aionrs' } },
+    ]);
+    mocks.readSetting.mockResolvedValue({ legacy: { workspace: '/tmp/legacy', useChrome: false } });
+    expect(await listJrBots()).toEqual([]);
+    expect(mocks.writeSetting).not.toHaveBeenCalled();
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it('keeps every owned legacy bot visible without exposing other employees or unowned records', async () => {
+    mocks.list.mockResolvedValue([
+      runtime,
+      ...['jr-bot', 'owned-old', 'foreign', 'legacy'].map((id) => ({
+        id,
+        name: input.name,
+        source: 'user',
+        agent: { type: 'aionrs' },
+      })),
+    ]);
+    mocks.readSetting.mockResolvedValue({
+      'jr-bot': { ownerAccountId: 'account-fixture', workspace: '/tmp/own', skillIds: [], useChrome: true },
+      'owned-old': { ownerAccountId: 'account-fixture', workspace: '/tmp/old', skillIds: [], useChrome: true },
+      foreign: { ownerAccountId: 'another-account', workspace: '/tmp/foreign', useChrome: false },
+      legacy: { workspace: '/tmp/legacy', useChrome: false },
+    });
+    expect((await listJrBots()).map((bot) => bot.id)).toEqual(['jr-bot', 'owned-old']);
+    expect(mocks.writeSetting).not.toHaveBeenCalled();
+    expect(mocks.remove).not.toHaveBeenCalled();
+  });
+
+  it('creates a second bot without replacing existing history or another employees records', async () => {
+    const original = {
+      ownerAccountId: 'account-fixture',
+      workspace: '/tmp/first',
+      conversationId: 'historic-chat',
+      skillIds: [],
+      useChrome: true,
+    };
+    const foreign = { ownerAccountId: 'another-account', workspace: '/tmp/foreign' };
+    mocks.readSetting.mockResolvedValue({ 'jr-bot': original, foreign });
+    mocks.employeeCreate.mockResolvedValue({ ownerAccountId: 'account-fixture', assistantId: 'jr-bot-new' });
+    const saved = await saveJrBot(input);
+    expect(saved.id).toBe('jr-bot-new');
+    expect(mocks.writeSetting).toHaveBeenCalledWith(
+      'jr.botWorkspaces',
+      expect.objectContaining({
+        'jr-bot': original,
+        foreign,
+        'jr-bot-new': expect.objectContaining({ ownerAccountId: 'account-fixture' }),
+      })
+    );
+    expect(mocks.remove).not.toHaveBeenCalled();
+  });
+
+  it('rejects a creation response bound to another account', async () => {
+    mocks.employeeCreate.mockResolvedValue({ ownerAccountId: 'another-account', assistantId: 'jr-bot-new' });
+    await expect(saveJrBot(input)).rejects.toThrow('JR_ACCESS_REQUIRED');
+    expect(mocks.writeRules).not.toHaveBeenCalled();
+    expect(mocks.writeSetting).not.toHaveBeenCalled();
+  });
+
+  it('does not open or edit a workspace belonging to another employee', async () => {
+    mocks.readSetting.mockResolvedValue({
+      'jr-bot': { ownerAccountId: 'another-account', workspace: input.workspace },
+    });
+    await expect(getJrBot('jr-bot')).rejects.toThrow('JR bot not found');
+    await expect(startJrConversation({ id: 'jr-bot', ...input })).rejects.toThrow('JR bot not found');
+    expect(mocks.conversation).not.toHaveBeenCalled();
+  });
+});
+
+it('does not release a private bot catalog if the employee changes while it loads', async () => {
+  mocks.readSetting.mockImplementation(async () => {
+    mocks.identity.mockResolvedValue({ ownerAccountId: 'another-account', assistantId: 'another-bot' });
+    return { 'jr-bot': { ownerAccountId: 'account-fixture', workspace: input.workspace } };
+  });
+  await expect(listJrBots()).rejects.toThrow('JR_ACCESS_REQUIRED');
+  expect(mocks.writeSetting).not.toHaveBeenCalled();
+});
+
+it('does not release a bound private conversation after its employee context changes', async () => {
+  mocks.readSetting.mockResolvedValue({
+    'jr-bot': { ownerAccountId: 'account-fixture', workspace: input.workspace, conversationId: 'private-chat' },
+  });
+  mocks.getConversation.mockImplementation(async () => {
+    mocks.identity.mockResolvedValue({ ownerAccountId: 'another-account', assistantId: 'another-bot' });
+    return { id: 'private-chat', type: 'aionrs', assistant: { id: 'jr-bot' }, extra: { workspace: input.workspace } };
+  });
+  await expect(startJrConversation({ id: 'jr-bot', ...input })).rejects.toThrow('JR_ACCESS_REQUIRED');
+  expect(mocks.conversation).not.toHaveBeenCalled();
 });

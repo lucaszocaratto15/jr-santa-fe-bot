@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.2.8](https://github.com/lucaszocaratto15/jr-santa-fe-bot/compare/v2.2.7...v2.2.8) (2026-10-29)
+
+### Desktop
+
+#### Features
+
+- **teach:** Ensinar tarefa, Minhas tarefas (Executar / Editar / Agendar), cofre local e cartão seguro de 2FA no chat (#25)
+- **learn:** Aprender com seu trabalho, com termo LGPD e insights privados (#25)
+- **handbook:** Manual da função por cargo (#25)
+
+#### Styles
+
+- **jr:** redesign das telas novas, da barra lateral e do chat a partir do canvas MagicPath (#25)
+
+---
+
 ## [2.2.7](https://github.com/lucaszocaratto15/jr-santa-fe-bot/compare/v2.2.6...v2.2.7) (2026-10-28)
 
 ### Desktop

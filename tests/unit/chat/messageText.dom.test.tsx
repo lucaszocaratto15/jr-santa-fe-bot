@@ -141,10 +141,39 @@ vi.mock('@/renderer/utils/ui/clipboard', () => ({
   copyText: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock('@renderer/pages/Jr/Brain/Notes', () => ({
+  __esModule: true,
+  default: () => <span data-testid='brain-note-composer' />,
+}));
+
 vi.mock('@arco-design/web-react', () => {
-  const Menu = ({ children }: { children?: React.ReactNode }) => <div>{children}</div>;
-  Menu.Item = ({ children, onClick }: { children?: React.ReactNode; onClick?: () => void }) => (
-    <button type='button' onClick={onClick}>
+  const Menu = ({
+    children,
+    onClickMenuItem,
+  }: {
+    children?: React.ReactNode;
+    onClickMenuItem?: (key: string) => void;
+  }) => (
+    <div>
+      {React.Children.map(children, (child) =>
+        React.isValidElement(child)
+          ? React.cloneElement(child as React.ReactElement<{ onClick?: () => void }>, {
+              onClick: () => onClickMenuItem?.(String(child.key ?? '')),
+            })
+          : child
+      )}
+    </div>
+  );
+  Menu.Item = ({
+    children,
+    onClick,
+    ...rest
+  }: {
+    children?: React.ReactNode;
+    onClick?: () => void;
+    [key: string]: unknown;
+  }) => (
+    <button type='button' onClick={onClick} {...rest}>
       {children}
     </button>
   );
@@ -166,7 +195,12 @@ vi.mock('@arco-design/web-react', () => {
         {children}
       </button>
     ),
-    Dropdown: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+    Dropdown: ({ children, droplist }: { children?: React.ReactNode; droplist?: React.ReactNode }) => (
+      <div>
+        {children}
+        {droplist}
+      </div>
+    ),
     Menu,
     Message: {
       error: vi.fn(),
@@ -179,6 +213,7 @@ vi.mock('@icon-park/react', () => ({
   Copy: () => <span data-testid='copy-icon' />,
   ThumbsUp: () => <span data-testid='react-icon' />,
   Comment: () => <span data-testid='reply-icon' />,
+  More: () => <span data-testid='more-icon' />,
 }));
 
 vi.mock('react-i18next', () => ({

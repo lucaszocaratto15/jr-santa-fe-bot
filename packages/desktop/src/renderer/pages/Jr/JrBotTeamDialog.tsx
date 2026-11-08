@@ -1,11 +1,14 @@
-import { Alert, Button, Checkbox, Input, Message, Modal } from '@arco-design/web-react';
+import { Alert, Button, Input, Message, Modal } from '@arco-design/web-react';
+import { Check } from '@icon-park/react';
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ipcBridge } from '@/common';
 import type { TTeam } from '@/common/types/team/teamTypes';
 import { WorkspaceFolderSelect } from '@renderer/components/workspace';
 import { useAuth } from '@renderer/hooks/context/AuthContext';
+import JrCharacter from './JrCharacter';
 import { JR_MODEL, type JrBot } from './jrBots';
+import styles from './JrWorkspace.module.css';
 
 const JrBotTeamDialog: React.FC<{
   visible: boolean;
@@ -77,12 +80,13 @@ const JrBotTeamDialog: React.FC<{
       maskClosable={!saving}
       closable={!saving}
       footer={[
-        <Button key='cancel' disabled={saving} onClick={onClose}>
+        <Button key='cancel' shape='round' disabled={saving} onClick={onClose}>
           {t('common.cancel')}
         </Button>,
         <Button
           key='create'
           type='primary'
+          shape='round'
           loading={saving}
           disabled={saving || selectedIds.length < 2 || !workspace || !name.trim()}
           onClick={() => void create()}
@@ -92,27 +96,46 @@ const JrBotTeamDialog: React.FC<{
       ]}
     >
       <div className='flex flex-col gap-12px'>
-        <label htmlFor='jr-team-name'>{t('common.jr.teamName')}</label>
+        <label htmlFor='jr-team-name' className={styles.fieldLabel}>
+          {t('common.jr.teamName')}
+        </label>
         <Input id='jr-team-name' value={name} onChange={setName} maxLength={80} disabled={saving} />
-        <label>{t('common.jr.teamBots')}</label>
+        <div className={`${styles.fieldLabel} flex items-center mt-4px`}>
+          <span className='flex-1'>{t('common.jr.teamBots')}</span>
+          <span className='font-400 text-t-tertiary'>{t('common.jr.teamSelected', { count: selectedIds.length })}</span>
+        </div>
         {availableBots.length < 2 ? (
           <Alert type='warning' content={t('common.jr.teamUnavailable')} />
         ) : (
-          <Checkbox.Group
-            value={selectedIds}
-            onChange={(value) => setSelectedIds(Array.isArray(value) ? (value as string[]) : [])}
-            disabled={saving}
-          >
-            <div className='flex flex-col gap-8px'>
-              {availableBots.map((bot) => (
-                <Checkbox key={bot.id} value={bot.id}>
-                  {bot.name}
-                </Checkbox>
-              ))}
-            </div>
-          </Checkbox.Group>
+          <div className={styles.teamPicker} role='group' aria-label={t('common.jr.teamBots')}>
+            {availableBots.map((bot) => {
+              const selected = selectedIds.includes(bot.id);
+              return (
+                <Button
+                  key={bot.id}
+                  type='text'
+                  className={`${styles.teamChoice} ${selected ? styles.teamChoiceOn : ''}`}
+                  aria-pressed={selected}
+                  disabled={saving}
+                  onClick={() =>
+                    setSelectedIds((current) =>
+                      current.includes(bot.id) ? current.filter((id) => id !== bot.id) : [...current, bot.id]
+                    )
+                  }
+                >
+                  {selected && (
+                    <span className={styles.teamChoiceCheck} aria-hidden='true'>
+                      <Check size={10} fill='currentColor' strokeWidth={5} />
+                    </span>
+                  )}
+                  <JrCharacter appearance={bot.appearance} size={36} still />
+                  <span className={styles.teamChoiceName}>{bot.name}</span>
+                </Button>
+              );
+            })}
+          </div>
         )}
-        <label>{t('common.jr.teamWorkspace')}</label>
+        <label className={`${styles.fieldLabel} mt-4px`}>{t('common.jr.teamWorkspace')}</label>
         <WorkspaceFolderSelect
           value={workspace}
           onChange={setWorkspace}

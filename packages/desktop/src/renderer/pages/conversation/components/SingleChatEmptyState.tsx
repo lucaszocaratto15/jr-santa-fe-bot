@@ -19,6 +19,8 @@ type Props = {
   assistant_name?: string;
   assistant_backend?: string;
   icon?: string;
+  /** Replaces the agent logo, e.g. the JR bot's animated character. */
+  avatar?: React.ReactNode;
 };
 
 /**
@@ -46,7 +48,13 @@ const resolveAssistantName = (
  * example a freshly created or cloned conversation). Renders the assistant
  * identity plus a short greeting so the pre-built window is not blank.
  */
-const SingleChatEmptyState: React.FC<Props> = ({ conversation_id, assistant_name, assistant_backend, icon }) => {
+const SingleChatEmptyState: React.FC<Props> = ({
+  conversation_id,
+  assistant_name,
+  assistant_backend,
+  icon,
+  avatar,
+}) => {
   const { t } = useTranslation();
   const logos = useAgentLogos();
 
@@ -69,6 +77,7 @@ const SingleChatEmptyState: React.FC<Props> = ({ conversation_id, assistant_name
   const agentAvatar = resolveAgentAvatar(logos, { icon, backend: assistantBackend });
 
   const renderAvatar = () => {
+    if (avatar) return avatar;
     if (presetInfo) {
       if (presetInfo.isFallback) {
         return (

@@ -1,0 +1,134 @@
+/**
+ * @license
+ * Copyright 2025 AionUi (aionui.com)
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import type { LearnExclusion } from '@/common/types/agent/learnTypes';
+import { DEFAULT_EXCLUSIONS } from './privacyFilter';
+import { ensurePrivateDir, writePrivateFile } from './sampleStore';
+
+export type LearnSettingsData = {
+  /** Legacy date retained for existing installations; pauses no longer use a daily quota. */
+  pauseDay: string | null;
+  consentUserId: string | null;
+  consentedAt: number | null;
+  workEventsConsentVersion: number;
+  enabled: boolean;
+  paused: boolean;
+  exclusions: LearnExclusion[];
+  /** Last successful insights run. */
+  lastSummaryAt: number | null;
+  /** Insights attempts on the local calendar day `day` (YYYY-MM-DD). */
+  attempts: { day: string; count: number };
+};
+
+export type LearnSettings = {
+  read(): Promise<LearnSettingsData>;
+  write(patch: Partial<LearnSettingsData>): Promise<LearnSettingsData>;
+};
+
+const MAX_PATTERN = 200;
+/** Custom rules shorter than this (or beyond MAX_CUSTOM_RULES) would let a rule like "a" blank out Aprender. */
+export const MIN_CUSTOM_PATTERN = 3;
+export const MAX_CUSTOM_RULES = 20;
+
+export const defaultLearnSettings = (): LearnSettingsData => ({
+  pauseDay: null,
+  consentUserId: null,
+  consentedAt: null,
+  workEventsConsentVersion: 0,
+  enabled: false,
+  paused: false,
+  exclusions: [...DEFAULT_EXCLUSIONS],
+  lastSummaryAt: null,
+  attempts: { day: '', count: 0 },
+});
+
+const record = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === 'object' && !Array.isArray(value);
+
+const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+const finiteOrNull = (value: unknown): number | null =>
+  typeof value === 'number' && Number.isFinite(value) ? value : null;
+
+/** Keep only well-formed rules; trims patterns and drops empty ones. */
+export function sanitizeExclusions(value: unknown): LearnExclusion[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const rules: LearnExclusion[] = [];
+  let custom = 0;
+  for (const item of value) {
+    if (!record(item)) continue;
+    const { id, kind, pattern, builtin } = item;
+    if (typeof id !== 'string' || !id || id.length > 100 || seen.has(id)) continue;
+    if (kind !== 'app' && kind !== 'domain' && kind !== 'title') continue;
+    if (typeof pattern !== 'string') continue;
+    const trimmed = pattern.trim().slice(0, MAX_PATTERN);
+    if (!trimmed) continue;
+    // `builtin` only counts for the shipped defaults; anything else is a custom rule.
+    const isBuiltin = builtin === true && DEFAULT_EXCLUSIONS.some((rule) => rule.id === id);
+    if (!isBuiltin) {
+      if (trimmed.length < MIN_CUSTOM_PATTERN || custom >= MAX_CUSTOM_RULES) continue;
+      custom += 1;
+    }
+    seen.add(id);
+    rules.push({ id, kind, pattern: trimmed, builtin: isBuiltin });
+  }
+  return rules;
+}
+
+function parseSettings(value: unknown): LearnSettingsData {
+  const defaults = defaultLearnSettings();
+  if (!record(value)) return defaults;
+  const attempts = record(value.attempts) ? value.attempts : {};
+  return {
+    consentUserId: typeof value.consentUserId === 'string' ? value.consentUserId : null,
+    consentedAt: finiteOrNull(value.consentedAt),
+    workEventsConsentVersion: value.workEventsConsentVersion === 1 ? 1 : 0,
+    enabled:
+      value.enabled === true && typeof value.consentUserId === 'string' && finiteOrNull(value.consentedAt) !== null,
+    paused: value.paused === true,
+    pauseDay: typeof value.pauseDay === 'string' && DAY_PATTERN.test(value.pauseDay) ? value.pauseDay : null,
+    exclusions: Array.isArray(value.exclusions) ? sanitizeExclusions(value.exclusions) : defaults.exclusions,
+    lastSummaryAt: finiteOrNull(value.lastSummaryAt),
+    attempts: {
+      day: typeof attempts.day === 'string' ? attempts.day : '',
+      count: typeof attempts.count === 'number' && attempts.count >= 0 ? attempts.count : 0,
+    },
+  };
+}
+
+async function readJson(file: string): Promise<unknown> {
+  try {
+    return JSON.parse(await readFile(file, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+/** `settings.json` (no observation data). Reads never create files. */
+export function createLearnSettings(root: string): LearnSettings {
+  const settingsFile = join(root, 'settings.json');
+  let queue: Promise<unknown> = Promise.resolve();
+  const serialize = <T>(operation: () => Promise<T>): Promise<T> => {
+    const next = queue.catch(() => {}).then(operation);
+    queue = next;
+    return next;
+  };
+  const read = async () => parseSettings(await readJson(settingsFile));
+
+  return {
+    read,
+    write: (patch) =>
+      serialize(async () => {
+        const next = parseSettings({ ...(await read()), ...patch });
+        await ensurePrivateDir(root);
+        await writePrivateFile(settingsFile, `${JSON.stringify(next, null, 2)}\n`);
+        return next;
+      }),
+  };
+}

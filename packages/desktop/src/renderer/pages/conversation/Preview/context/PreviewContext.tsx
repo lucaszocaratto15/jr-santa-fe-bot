@@ -9,11 +9,35 @@ import type { PreviewContentType } from '@/common/types/office/preview';
 import type { ChatFileRef, ContentEncoding } from '@/common/types/chatFile';
 import { chatFileRefKey, isChatFileRef } from '@/common/types/chatFile';
 import { emitter } from '@/renderer/utils/emitter';
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Notification } from '@arco-design/web-react';
+import i18next from 'i18next';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { BROWSER_BLANK_URL, BROWSER_TAB_FALLBACK_TITLE, MAX_BROWSER_TABS } from '../browser/constants';
 import { isBrowserMcpActivity, isBrowserMcpSettled } from '../browser/agentActivity';
 import { maybeNotifyFirstAgentBrowserUse } from '../browser/firstUseNotice';
-import { listPersistedPreviewScopeKeys, previewScopeStorageKey, type PreviewScopeKey } from './previewScope';
+import { useTeachUi } from '../browser/TeachCards/teachStore';
+import { useSecureRequests } from '../browser/TeachCards/useSecureRequests';
+import BrowserTabLayer, {
+  type BrowserViewportState,
+  type LiveBrowserSession,
+  type RegisterBrowserViewport,
+} from '../browser/BrowserTabLayer';
+import type { JrAccessState } from '@/common/config/clientSettings';
+import {
+  clearPersistedPreviewScopes,
+  listPersistedPreviewScopeKeys,
+  previewScopeStorageKey,
+  type PreviewScopeKey,
+} from './previewScope';
 import { peKey } from '@/renderer/pages/conversation/explorer/explorerModel';
 import { reflessTabKey } from './reflessTabKey';
 import { onPreviewWatchChange, reconcilePreviewWatch, resetPreviewWatch } from './previewWatchStore';
@@ -160,6 +184,12 @@ export interface PreviewContextValue {
    * the silent tab reuse looking like a bug.
    */
   browserTabLimitHitAt: number | null;
+  /** An attempted close or replacement was refused to preserve ongoing browser work. */
+  browserTabProtectedAt: number | null;
+  /** All live browser slots are occupied, including parked projects. */
+  browserSessionLimitHitAt: number | null;
+  /** Panels report a viewport; the browser guests stay mounted at the app root. */
+  registerBrowserViewport: RegisterBrowserViewport;
   /**
    * Timestamp of the most recent time persisting tabs had to be given up because
    * local storage is full (null when it never happened).
@@ -530,6 +560,8 @@ const persistScopeState = (scope: string, state: PersistedScopeState): void => {
 };
 
 export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const teach = useTeachUi();
+  const secureRequests = useSecureRequests();
   // State starts empty; the active scope's persisted state is loaded on the first
   // `closePreviewIfScopeChanged` (per-project restore, see switchScope below).
   const [isOpen, setIsOpen] = useState(false);
@@ -549,6 +581,212 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Set when a browser-tab open was folded into an existing tab because the cap
   // was reached, so the UI can tell the user instead of silently reusing a tab.
   const [browserTabLimitHitAt, setBrowserTabLimitHitAt] = useState<number | null>(null);
+  const [browserTabProtectedAt, setBrowserTabProtectedAt] = useState<number | null>(null);
+  const [browserSessionLimitHitAt, setBrowserSessionLimitHitAt] = useState<number | null>(null);
+  const [browserSessions, setBrowserSessions] = useState<LiveBrowserSession[]>([]);
+  const browserSessionsRef = useRef<LiveBrowserSession[]>([]);
+  const browserOwnerRef = useRef<string | null>(ipcBridge.jr?.accessStatus?.invoke ? null : 'local');
+  const [browserViewport, setBrowserViewport] = useState<BrowserViewportState | null>(null);
+  const [agentTargetTabId, setAgentTargetTabId] = useState<string | null>(null);
+  const agentTargetTabIdRef = useRef<string | null>(null);
+  const blockedBrowserTargetRef = useRef<string | null>(null);
+  const commitBrowserSessions = useCallback((next: LiveBrowserSession[]) => {
+    browserSessionsRef.current = next;
+    setBrowserSessions(next);
+  }, []);
+  const registerBrowserGuest = useCallback(
+    (source: LiveBrowserSession, webContentsId: number) => {
+      if (!Number.isSafeInteger(webContentsId) || webContentsId <= 0 || source.ownerId !== browserOwnerRef.current)
+        return;
+      const sessions = browserSessionsRef.current;
+      const current = sessions.find(
+        (session) =>
+          session.ownerId === source.ownerId && session.scopeKey === source.scopeKey && session.tab.id === source.tab.id
+      );
+      if (!current || current.webContentsId === webContentsId) return;
+      commitBrowserSessions(sessions.map((session) => (session === current ? { ...session, webContentsId } : session)));
+    },
+    [commitBrowserSessions]
+  );
+  const browserAgentActiveRef = useRef(false);
+  const browserTurnsRef = useRef(new Map<string, string | undefined>());
+  const isProtectedBrowserTab = useCallback(
+    (tab: PreviewTab): boolean => {
+      if (tab.content_type !== 'browser') return false;
+      if (
+        browserAgentActiveRef.current ||
+        browserTurnsRef.current.size > 0 ||
+        tab.metadata?.agentActive ||
+        teach.takenOver ||
+        ['recording', 'paused', 'stopping', 'discarding'].includes(teach.phase)
+      )
+        return true;
+      try {
+        const origin = new URL(tab.content).origin;
+        return secureRequests.some((request) => request.origin === origin);
+      } catch {
+        return false;
+      }
+    },
+    [secureRequests, teach.phase, teach.takenOver]
+  );
+  const isProtectedBrowserTabRef = useRef(isProtectedBrowserTab);
+  isProtectedBrowserTabRef.current = isProtectedBrowserTab;
+  const ensureBrowserSession = useCallback(
+    (tab: PreviewTab, scopeKey: PreviewScopeKey): boolean => {
+      const ownerId = browserOwnerRef.current;
+      if (!ownerId) return false;
+      const sessions = browserSessionsRef.current;
+      const existing = sessions.find(
+        (session) => session.tab.id === tab.id && session.ownerId === ownerId && session.scopeKey === scopeKey
+      );
+      if (existing) {
+        if (existing.tab !== tab)
+          commitBrowserSessions(sessions.map((session) => (session === existing ? { ...session, tab } : session)));
+        return true;
+      }
+      if (sessions.length >= MAX_BROWSER_TABS) {
+        setBrowserSessionLimitHitAt(Date.now());
+        return false;
+      }
+      commitBrowserSessions([...sessions, { ownerId, scopeKey, tab }]);
+      return true;
+    },
+    [commitBrowserSessions]
+  );
+  const registerBrowserViewport = useCallback<RegisterBrowserViewport>((tabId, element) => {
+    const ownerId = browserOwnerRef.current;
+    const scopeKey = currentScopeRef.current;
+    let disposed = false;
+    const measure = () => {
+      if (
+        disposed ||
+        !element.isConnected ||
+        ownerId !== browserOwnerRef.current ||
+        scopeKey !== currentScopeRef.current ||
+        !ownerId
+      )
+        return;
+      const { left, top, width, height } = element.getBoundingClientRect();
+      const next = width > 0 && height > 0 ? { tabId, ownerId, scopeKey, left, top, width, height } : null;
+      setBrowserViewport((previous) => (JSON.stringify(previous) === JSON.stringify(next) ? previous : next));
+    };
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    observer?.observe(element);
+    window.addEventListener('resize', measure);
+    window.addEventListener('scroll', measure, true);
+    measure();
+    return () => {
+      disposed = true;
+      observer?.disconnect();
+      window.removeEventListener('resize', measure);
+      window.removeEventListener('scroll', measure, true);
+      setBrowserViewport((previous) =>
+        previous?.tabId === tabId && previous.ownerId === ownerId && previous.scopeKey === scopeKey ? null : previous
+      );
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    if (
+      !isOpen ||
+      !browserViewport ||
+      browserViewport.ownerId !== browserOwnerRef.current ||
+      browserViewport.scopeKey !== currentScopeRef.current ||
+      browserViewport.tabId !== activeTabId
+    )
+      return;
+    const candidate = browserSessions.find(
+      (session) =>
+        session.tab.id === browserViewport.tabId &&
+        session.ownerId === browserOwnerRef.current &&
+        session.scopeKey === currentScopeRef.current
+    );
+    if (!candidate || candidate.tab.id === agentTargetTabIdRef.current) return;
+    const current = browserSessions.find((session) => session.tab.id === agentTargetTabIdRef.current);
+    if (current && isProtectedBrowserTabRef.current(current.tab)) {
+      if (blockedBrowserTargetRef.current !== candidate.tab.id) setBrowserTabProtectedAt(Date.now());
+      blockedBrowserTargetRef.current = candidate.tab.id;
+      return;
+    }
+    blockedBrowserTargetRef.current = null;
+    agentTargetTabIdRef.current = candidate.tab.id;
+    setAgentTargetTabId(candidate.tab.id);
+  }, [activeTabId, browserSessions, browserViewport, isOpen, secureRequests, teach.phase, teach.takenOver]);
+
+  useEffect(() => {
+    const access = ipcBridge.jr;
+    if (!access?.accessChanged?.on || !access.accessStatus?.invoke) return;
+    let observed = false;
+    let disposed = false;
+    let generation = 0;
+    let requestedOwner: string | null | undefined;
+    let mustClear = false;
+    let clearing: Promise<boolean> | null = null;
+    const bind = (state: JrAccessState) => {
+      const owner =
+        state.status === 'authenticated' ? (state.user?.id ?? null) : state.status === 'pilot' ? 'pilot' : null;
+      if (owner === requestedOwner && (clearing || owner === browserOwnerRef.current)) return;
+      const previousOwner = requestedOwner ?? browserOwnerRef.current;
+      if (previousOwner !== null && previousOwner !== owner) mustClear = true;
+      requestedOwner = owner;
+      const epoch = ++generation;
+      browserOwnerRef.current = null;
+      commitBrowserSessions([]);
+      setBrowserViewport(null);
+      agentTargetTabIdRef.current = null;
+      setAgentTargetTabId(null);
+      browserAgentActiveRef.current = false;
+      browserTurnsRef.current.clear();
+      currentScopeRef.current = null;
+      activeTabIdRef.current = null;
+      setTabs([]);
+      setActiveTabId(null);
+      setIsOpen(false);
+      setIsMaximized(false);
+      if (previousOwner !== null) clearPersistedPreviewScopes();
+      // A same-employee app restart keeps cookies. An observed logout/account switch does not.
+      if (!mustClear && !clearing) {
+        browserOwnerRef.current = owner;
+        return;
+      }
+      clearing ??= Promise.resolve()
+        .then(() => ipcBridge.application?.clearBrowserData?.invoke())
+        .then((result) => result?.success === true)
+        .catch(() => false);
+      const cleanup = clearing;
+      void cleanup.then((success) => {
+        if (clearing === cleanup) {
+          clearing = null;
+          if (success) mustClear = false;
+        }
+        if (disposed || generation !== epoch) return;
+        if (!success) {
+          Notification.error({
+            title: i18next.t('common.error'),
+            content: i18next.t('settings.browserData.clearFailed'),
+          });
+          return;
+        }
+        browserOwnerRef.current = owner;
+        commitBrowserSessions([]);
+      });
+    };
+    const unsubscribe = access.accessChanged.on((state) => {
+      observed = true;
+      if (!disposed) bind(state);
+    });
+    void access.accessStatus
+      .invoke()
+      .then((state) => {
+        if (!observed && !disposed) bind(state);
+      })
+      .catch(() => {});
+    return () => {
+      disposed = true;
+      unsubscribe();
+    };
+  }, [commitBrowserSessions]);
   // Set when a persist attempt was abandoned on a full quota, so the UI can warn
   // instead of letting persistence stop working unannounced.
   const [persistQuotaExceededAt, setPersistQuotaExceededAt] = useState<number | null>(null);
@@ -771,13 +1009,11 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const existingTab = findPreviewTabInList(currentTabs, type, new_content, meta);
 
       // 浏览器 tab 上限：满了就复用最旧的一个，并给 UI 一个可提示的信号
-      // Browser tab cap: when full, reuse the oldest and raise a signal the UI can
-      // surface, so the reuse doesn't look like a bug.
+      // Browser tab cap: only an idle tab can be reused; ongoing work must survive.
       const atBrowserTabLimit =
         !existingTab &&
         type === 'browser' &&
         currentTabs.filter((tab) => tab.content_type === 'browser').length >= MAX_BROWSER_TABS;
-      if (atBrowserTabLimit) setBrowserTabLimitHitAt(Date.now());
 
       // Tab 标题：优先使用文件名，并从 title 中提取实际文件名
       // Tab title: Prefer file_name and extract actual filename from title
@@ -801,17 +1037,38 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
         const activeTab = activeTabIdRef.current
           ? currentTabs.find((tab) => tab.id === activeTabIdRef.current)
           : undefined;
-        return activeTab && !activeTab.isDirty ? activeTab : null;
+        return activeTab && !activeTab.isDirty && !isProtectedBrowserTab(activeTab) ? activeTab : null;
       })();
 
-      // 上限触发时被复用的最旧浏览器 tab / Oldest browser tab reused at the cap
+      // 上限触发时被复用的最旧浏览器 tab / Oldest idle browser tab reused at the cap
       const cappedTarget = atBrowserTabLimit
-        ? (currentTabs.find((tab) => tab.content_type === 'browser') ?? null)
+        ? (currentTabs.find((tab) => tab.content_type === 'browser' && !isProtectedBrowserTab(tab)) ?? null)
         : null;
+      if (atBrowserTabLimit) {
+        if (!cappedTarget) {
+          setBrowserTabProtectedAt(Date.now());
+          return;
+        }
+        setBrowserTabLimitHitAt(Date.now());
+      }
 
       // 生成唯一 ID / Generate unique ID
       const newTabId = `${type}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
       const targetTabId = existingTab?.id ?? replaceTarget?.id ?? cappedTarget?.id ?? newTabId;
+      if (type === 'browser') {
+        const liveTab: PreviewTab = {
+          id: targetTabId,
+          content: new_content,
+          content_type: type,
+          title,
+          metadata: browserAgentActiveRef.current ? { ...meta, agentActive: true } : meta,
+          isDirty: false,
+          originalContent: new_content,
+        };
+        if (!ensureBrowserSession(liveTab, currentScopeRef.current)) return;
+      } else if (replaceTarget?.content_type === 'browser') {
+        commitBrowserSessions(browserSessionsRef.current.filter((session) => session.tab.id !== replaceTarget.id));
+      }
 
       setTabs((prevTabs) => {
         if (existingTab) {
@@ -836,7 +1093,7 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
           id: newTabId,
           content: new_content,
           content_type: type,
-          metadata: meta,
+          metadata: type === 'browser' && browserAgentActiveRef.current ? { ...meta, agentActive: true } : meta,
           title,
           isDirty: false,
           originalContent: new_content, // 保存原始内容 / Save original content
@@ -859,7 +1116,7 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setActiveTabId(targetTabId);
       setIsOpen(true);
     },
-    [extractFileName, findPreviewTabInList]
+    [commitBrowserSessions, ensureBrowserSession, extractFileName, findPreviewTabInList, isProtectedBrowserTab]
   );
 
   /**
@@ -917,12 +1174,19 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const toggleMaximized = useCallback(() => setIsMaximized((prev) => !prev), []);
 
   const clearPreviewForScope = useCallback(() => {
+    commitBrowserSessions([]);
+    setBrowserViewport(null);
+    agentTargetTabIdRef.current = null;
+    setAgentTargetTabId(null);
+    browserAgentActiveRef.current = false;
+    browserTurnsRef.current.clear();
+    activeTabIdRef.current = null;
     setIsMaximized(false);
     setIsOpen(false);
     setTabs([]);
     setActiveTabId(null);
     setDomSnippets([]);
-  }, []);
+  }, [commitBrowserSessions]);
 
   // Switch the preview scope (project id / workspace fallback / null). Persists
   // the leaving scope's state, then restores the entering scope's persisted open
@@ -947,21 +1211,37 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
       // would drop the subscriptions the restore had just created.
       resetPreviewWatch();
       currentScopeRef.current = scopeKey;
+      setBrowserViewport(null);
       const loaded = scopeKey != null ? loadScopeState(scopeKey) : EMPTY_SCOPE_STATE;
+      const restoredTabs = loaded.tabs.map(
+        (tab) =>
+          browserSessionsRef.current.find(
+            (session) =>
+              session.ownerId === browserOwnerRef.current && session.scopeKey === scopeKey && session.tab.id === tab.id
+          )?.tab ?? tab
+      );
+      const activeBrowser = restoredTabs.find((tab) => tab.id === loaded.activeTabId && tab.content_type === 'browser');
+      const available = !activeBrowser || ensureBrowserSession(activeBrowser, scopeKey);
       // Subscriptions for these tabs come from the tabs effect, which this setTabs
       // triggers — restored tabs are subscribed exactly like freshly opened ones.
-      setTabs(loaded.tabs);
+      setTabs(restoredTabs);
       setActiveTabId(loaded.activeTabId);
       activeTabIdRef.current = loaded.activeTabId;
-      setIsOpen(loaded.isOpen);
+      setIsOpen(loaded.isOpen && available);
       setIsMaximized(false);
       setDomSnippets([]);
     },
-    [isOpen, tabs, activeTabId]
+    [isOpen, tabs, activeTabId, ensureBrowserSession]
   );
 
   const closeTab = useCallback(
     (tabId: string) => {
+      const target = tabsRef.current.find((tab) => tab.id === tabId);
+      if (target && isProtectedBrowserTab(target)) {
+        setBrowserTabProtectedAt(Date.now());
+        return;
+      }
+      commitBrowserSessions(browserSessionsRef.current.filter((session) => session.tab.id !== tabId));
       setTabs((prevTabs) => {
         // Clean up mtime record for the closed tab (keyed by ChatFileRef identity)
         const tabToClose = prevTabs.find((tab) => tab.id === tabId);
@@ -986,7 +1266,7 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return newTabs;
       });
     },
-    [activeTabId]
+    [activeTabId, commitBrowserSessions, isProtectedBrowserTab]
   );
 
   const closePreviewByIdentity = useCallback(
@@ -1029,21 +1309,40 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
     [activeTabId]
   );
 
-  const updateTab = useCallback((tabId: string, patch: PreviewTabPatch) => {
-    if (!tabId) return;
-
-    setTabs((prevTabs) =>
-      prevTabs.map((tab) => {
-        if (tab.id !== tabId) return tab;
-
-        const next: PreviewTab = { ...tab };
+  const updateTab = useCallback(
+    (tabId: string, patch: PreviewTabPatch) => {
+      if (!tabId) return;
+      const apply = (tab: PreviewTab): PreviewTab => {
+        const next = { ...tab };
         if (typeof patch.title === 'string' && patch.title) next.title = patch.title;
         if (typeof patch.content === 'string') next.content = patch.content;
         if (patch.metadata) next.metadata = { ...tab.metadata, ...patch.metadata };
         return next;
-      })
-    );
-  }, []);
+      };
+      const sessions = browserSessionsRef.current;
+      if (sessions.some((session) => session.ownerId === browserOwnerRef.current && session.tab.id === tabId)) {
+        commitBrowserSessions(
+          sessions.map((session) =>
+            session.ownerId === browserOwnerRef.current && session.tab.id === tabId
+              ? { ...session, tab: apply(session.tab) }
+              : session
+          )
+        );
+      }
+      setTabs((prevTabs) => prevTabs.map((tab) => (tab.id === tabId ? apply(tab) : tab)));
+    },
+    [commitBrowserSessions]
+  );
+
+  const switchTab = useCallback(
+    (tabId: string) => {
+      const tab = tabsRef.current.find((item) => item.id === tabId);
+      if (tab?.content_type === 'browser' && !ensureBrowserSession(tab, currentScopeRef.current)) return;
+      setActiveTabId(tabId);
+      activeTabIdRef.current = tabId;
+    },
+    [ensureBrowserSession]
+  );
 
   /**
    * Re-read a tab's content from disk, replacing what is on screen.
@@ -1291,6 +1590,26 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
   }, [openPreview]);
 
+  // Popups / target=_blank from the in-app browser arrive here as new browser tabs.
+  useEffect(() => {
+    return ipcBridge.teach.openTab.on(({ url, openerWebContentsId }) => {
+      const source = browserSessionsRef.current.find(
+        (session) =>
+          session.webContentsId === openerWebContentsId &&
+          session.ownerId === browserOwnerRef.current &&
+          session.scopeKey === currentScopeRef.current
+      );
+      if (!Number.isSafeInteger(openerWebContentsId) || openerWebContentsId <= 0 || !source) {
+        Notification.warning({
+          title: i18next.t('preview.browser.newTab'),
+          content: i18next.t('preview.browser.popupBlocked'),
+        });
+        return;
+      }
+      openBrowserTab(url);
+    });
+  }, [openBrowserTab]);
+
   /**
    * 跟踪 Agent 对应用内浏览器的操作，并驱动两件事：
    * 1. tab 上的活动角标（持续显示，用户随时知道浏览器不是自己在动）
@@ -1311,17 +1630,34 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
    */
   useEffect(() => {
     const markBrowserTabs = (agentActive: boolean) => {
+      browserAgentActiveRef.current = agentActive;
+      const targetTabId = agentTargetTabIdRef.current ?? activeTabIdRef.current;
+      commitBrowserSessions(
+        browserSessionsRef.current.map((session) => ({
+          ...session,
+          tab: {
+            ...session.tab,
+            metadata: { ...session.tab.metadata, agentActive: agentActive && session.tab.id === targetTabId },
+          },
+        }))
+      );
       setTabs((prevTabs) => {
         // 只标记浏览器 tab；没有浏览器 tab 时返回原数组，避免无意义的重渲染
         // Only browser tabs are marked; return the same array when there are none
         // so no pointless re-render is triggered.
         if (
-          !prevTabs.some((tab) => tab.content_type === 'browser' && Boolean(tab.metadata?.agentActive) !== agentActive)
+          !prevTabs.some(
+            (tab) =>
+              tab.content_type === 'browser' &&
+              Boolean(tab.metadata?.agentActive) !== (agentActive && tab.id === targetTabId)
+          )
         ) {
           return prevTabs;
         }
         return prevTabs.map((tab) =>
-          tab.content_type === 'browser' ? { ...tab, metadata: { ...tab.metadata, agentActive } } : tab
+          tab.content_type === 'browser'
+            ? { ...tab, metadata: { ...tab.metadata, agentActive: agentActive && tab.id === targetTabId } }
+            : tab
         );
       });
     };
@@ -1340,7 +1676,17 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!stream?.on) return;
 
     const unsubscribe = stream.on((message) => {
+      if (message.type === 'finish' && browserTurnsRef.current.has(message.conversation_id)) {
+        const turnId = browserTurnsRef.current.get(message.conversation_id);
+        if (!turnId || turnId === message.turn_id) {
+          browserTurnsRef.current.delete(message.conversation_id);
+          if (browserTurnsRef.current.size === 0) markBrowserTabs(false);
+        }
+        return;
+      }
       if (isBrowserMcpActivity(message.type, message.data)) {
+        // Keep the browser alive between tool calls until the same turn actually finishes.
+        if (message.conversation_id) browserTurnsRef.current.set(message.conversation_id, message.turn_id);
         markBrowserTabs(true);
         maybeNotifyFirstAgentBrowserUse();
         return;
@@ -1351,7 +1697,7 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
     });
 
     return unsubscribe;
-  }, []);
+  }, [commitBrowserSessions]);
 
   const previewContextValue = useMemo(() => {
     return {
@@ -1365,11 +1711,14 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
       toggleMaximized,
       clearPreviewForScope,
       closeTab,
-      switchTab: setActiveTabId,
+      switchTab,
       updateContent,
       updateTab,
       openBrowserTab,
       browserTabLimitHitAt,
+      browserTabProtectedAt,
+      browserSessionLimitHitAt,
+      registerBrowserViewport,
       persistQuotaExceededAt,
       saveContent,
       reloadTabContent,
@@ -1396,11 +1745,14 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
     toggleMaximized,
     clearPreviewForScope,
     closeTab,
-    setActiveTabId,
+    switchTab,
     updateContent,
     updateTab,
     openBrowserTab,
     browserTabLimitHitAt,
+    browserTabProtectedAt,
+    browserSessionLimitHitAt,
+    registerBrowserViewport,
     persistQuotaExceededAt,
     saveContent,
     reloadTabContent,
@@ -1417,7 +1769,25 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
     clearDomSnippets,
   ]);
 
-  return <PreviewContext.Provider value={previewContextValue}>{children}</PreviewContext.Provider>;
+  const viewport =
+    isOpen &&
+    browserViewport?.tabId === activeTabId &&
+    browserViewport.scopeKey === currentScopeRef.current &&
+    browserViewport.ownerId === browserOwnerRef.current
+      ? browserViewport
+      : null;
+  return (
+    <PreviewContext.Provider value={previewContextValue}>
+      {children}
+      <BrowserTabLayer
+        sessions={browserSessions}
+        viewport={viewport}
+        agentTargetTabId={agentTargetTabId}
+        updateTab={updateTab}
+        registerGuest={registerBrowserGuest}
+      />
+    </PreviewContext.Provider>
+  );
 };
 
 export const usePreviewContext = () => {

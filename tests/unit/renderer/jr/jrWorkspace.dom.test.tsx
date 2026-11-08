@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   search: vi.fn(),
   refresh: vi.fn(),
   route: '?bot=bot-1',
+  noBots: false,
   user: { id: 'owner', name: 'Lucas', role: 'admin' as const },
   bot: { id: 'bot-1', name: 'Compras', workspace: '/tmp/compras', appearance: { shape: 'cloud', color: 'red' } },
 }));
@@ -21,14 +22,25 @@ vi.mock('react-router-dom', () => ({
   useSearchParams: () => [new URLSearchParams(mocks.route), vi.fn()],
 }));
 vi.mock('swr', () => ({
-  default: (key: string | string[]) => ({
-    data: Array.isArray(key) ? mocks.bot : key === 'jr.bots' ? [mocks.bot] : { items: [] },
+  default: (key: string | string[] | null) => ({
+    data:
+      Array.isArray(key) && key[0] === 'jr.bots'
+        ? mocks.noBots
+          ? []
+          : [mocks.bot]
+        : Array.isArray(key)
+          ? mocks.bot
+          : { items: [] },
     mutate: mocks.refresh,
   }),
   mutate: vi.fn(),
 }));
 vi.mock('@/common', () => ({
-  ipcBridge: { conversation: { listChanged: { on: () => () => {} } } },
+  ipcBridge: {
+    conversation: { listChanged: { on: () => () => {} }, artifactStream: { on: () => () => {} } },
+    learn: { state: { invoke: async () => null }, stateChanged: { on: () => () => {} } },
+    teach: { lessonsChanged: { on: () => () => {} } },
+  },
 }));
 vi.mock('@/renderer/pages/Jr/jrBots', () => ({
   listJrBots: vi.fn(),
@@ -37,7 +49,10 @@ vi.mock('@/renderer/pages/Jr/jrBots', () => ({
   startJrConversation: mocks.start,
   reportJrOpenError: (error: unknown) => mocks.report(error),
 }));
-vi.mock('@/renderer/pages/Jr/JrBotDialog', () => ({ default: () => null }));
+vi.mock('@/renderer/pages/Jr/JrBotDialog', () => ({
+  default: ({ visible, bot }: { visible: boolean; bot?: { id: string } }) =>
+    visible ? <section role='dialog' data-bot-id={bot?.id ?? ''} /> : null,
+}));
 vi.mock('@/renderer/pages/Jr/Connections', () => ({
   default: ({ onClose }: { onClose?: () => void }) => (
     <section role='dialog' aria-label='common.jr.mcp.title'>
@@ -46,7 +61,7 @@ vi.mock('@/renderer/pages/Jr/Connections', () => ({
   ),
 }));
 vi.mock('@/renderer/hooks/context/ThemeContext', () => ({
-  useThemeContext: () => ({ theme: 'light', setTheme: mocks.theme }),
+  useThemeContext: () => ({ theme: 'light', setTheme: mocks.theme, fontSizes: { chat: 14 }, setFontSize: vi.fn() }),
 }));
 vi.mock('@/renderer/pages/Jr/Access/context', () => ({
   useJrAccess: () => ({ state: { status: 'active', user: mocks.user }, logout: mocks.logout }),
@@ -61,7 +76,7 @@ vi.mock('@/renderer/pages/conversation/GroupedHistory/ConversationSearchPopover'
     renderTrigger: (props: { onClick: () => void; isActive: boolean }) => React.ReactNode;
   }) => renderTrigger({ onClick: mocks.search, isActive: false }),
 }));
-vi.mock('@/renderer/utils/emitter', () => ({ emitter: { emit: vi.fn() } }));
+vi.mock('@/renderer/utils/emitter', () => ({ emitter: { emit: vi.fn() }, useAddEventListener: () => {} }));
 
 import JrWorkspace from '@/renderer/pages/Jr';
 import JrSidebar from '@/renderer/pages/Jr/JrSidebar';
@@ -72,6 +87,7 @@ beforeEach(() => {
   sessionStorage.clear();
   mocks.user = { id: 'owner', name: 'Lucas', role: 'admin' };
   mocks.route = '?bot=bot-1';
+  mocks.noBots = false;
   mocks.start.mockResolvedValue({ id: 'conversation-1' });
 });
 
@@ -114,40 +130,55 @@ it('shows a localized retry and the underlying error when the bot conversation c
   );
 });
 
-it('keeps search and new bot controls first, with real search and creation actions', () => {
+it('keeps search and allows creating more bots', () => {
   render(<JrSidebar />);
   const buttons = screen.getAllByRole('button');
-  expect(buttons.slice(0, 2).map((button) => button.getAttribute('aria-label'))).toEqual([
-    'common.jr.search',
-    'common.jr.newBot',
-  ]);
+  expect(buttons[0].getAttribute('aria-label')).toBe('common.jr.search');
   fireEvent.click(screen.getByRole('button', { name: 'common.jr.search' }));
   expect(mocks.search).toHaveBeenCalledTimes(1);
+  expect(screen.getByRole('button', { name: 'common.jr.newBot' })).toBeInTheDocument();
+});
+
+it('opens creation from the main sidebar even when a bot exists', () => {
+  render(<JrSidebar />);
   fireEvent.click(screen.getByRole('button', { name: 'common.jr.newBot' }));
   expect(mocks.navigate).toHaveBeenCalledWith('/guid?create=1');
+  expect(screen.queryByRole('button', { name: 'common.jr.firstBot' })).not.toBeInTheDocument();
+});
+
+it('offers creation on the main sidebar before the employee has a bot', () => {
+  mocks.noBots = true;
+  render(<JrSidebar />);
+  fireEvent.click(screen.getByRole('button', { name: 'common.jr.newBot' }));
+  expect(mocks.navigate).toHaveBeenCalledWith('/guid?create=1');
+  expect(screen.queryByRole('button', { name: 'common.jr.editBot' })).not.toBeInTheDocument();
 });
 
 async function openSettingsFromUserMenu(): Promise<void> {
   await act(async () => {
     fireEvent.click(screen.getByRole('button', { name: /Lucas/ }));
   });
-  fireEvent.click(await screen.findByText('common.settings'));
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'common.settings' }));
 }
 
 it('opens a user menu with settings and sign out, and signs out from the account card', async () => {
   render(<JrSidebar />);
-  expect(screen.queryByRole('dialog', { name: 'common.jr.look.settingsNav' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('region', { name: 'common.jr.look.settingsNav' })).not.toBeInTheDocument();
   await act(async () => fireEvent.click(screen.getByRole('button', { name: /Lucas/ })));
-  expect(await screen.findByText('common.settings')).toBeInTheDocument();
+  expect(await screen.findByRole('menuitem', { name: 'common.settings' })).toBeInTheDocument();
   fireEvent.click(screen.getByText('common.jr.access.signOut'));
   expect(mocks.logout).toHaveBeenCalledTimes(1);
-  expect(screen.queryByRole('dialog', { name: 'common.jr.look.settingsNav' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('region', { name: 'common.jr.look.settingsNav' })).not.toBeInTheDocument();
 
   mocks.logout.mockClear();
   await act(async () => fireEvent.click(screen.getByRole('button', { name: /Lucas/ })));
-  fireEvent.click(screen.getByText('common.settings'));
-  expect(await screen.findByRole('dialog', { name: 'common.jr.look.settingsNav' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'common.jr.access.adminTitle' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('menuitem', { name: 'common.settings' }));
+  expect(await screen.findByRole('region', { name: 'common.jr.look.settingsNav' })).toBeInTheDocument();
+  expect(
+    within(screen.getByRole('region', { name: 'common.jr.look.settingsNav' })).getByRole('button', {
+      name: 'common.jr.access.adminTitle',
+    })
+  ).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'common.jr.access.signOut' })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'common.jr.look.theme' }));
   fireEvent.click(await screen.findByText('common.jr.look.themeDark'));
@@ -162,36 +193,45 @@ it('opens a user menu with settings and sign out, and signs out from the account
 it('closes settings from the close button', async () => {
   render(<JrSidebar />);
   await openSettingsFromUserMenu();
-  expect(await screen.findByRole('dialog', { name: 'common.jr.look.settingsNav' })).toBeInTheDocument();
+  expect(await screen.findByRole('region', { name: 'common.jr.look.settingsNav' })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'common.jr.look.closeSettings' }));
   await waitFor(() =>
-    expect(screen.queryByRole('dialog', { name: 'common.jr.look.settingsNav' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'common.jr.look.settingsNav' })).not.toBeInTheDocument()
   );
 });
 
 it('keeps settings open when the dialog is clicked', async () => {
   render(<JrSidebar />);
   await openSettingsFromUserMenu();
-  const dialog = await screen.findByRole('dialog', { name: 'common.jr.look.settingsNav' });
+  const dialog = await screen.findByRole('region', { name: 'common.jr.look.settingsNav' });
   fireEvent.click(dialog);
-  expect(screen.getByRole('dialog', { name: 'common.jr.look.settingsNav' })).toBeInTheDocument();
+  expect(screen.getByRole('region', { name: 'common.jr.look.settingsNav' })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'common.jr.look.tabs.computer' }));
-  expect(screen.getByRole('dialog', { name: 'common.jr.look.settingsNav' })).toBeInTheDocument();
+  expect(screen.getByRole('region', { name: 'common.jr.look.settingsNav' })).toBeInTheDocument();
 });
 
-it('closes settings when the backdrop is clicked', async () => {
-  render(<JrSidebar />);
-  await openSettingsFromUserMenu();
-  const dialog = await screen.findByRole('dialog', { name: 'common.jr.look.settingsNav' });
-  const backdrop = dialog.parentElement;
-  if (!backdrop) throw new Error('settings dialog has no backdrop');
-  fireEvent.click(backdrop);
-  await waitFor(() =>
-    expect(screen.queryByRole('dialog', { name: 'common.jr.look.settingsNav' })).not.toBeInTheDocument()
+it('keeps the current chat and its draft mounted while settings is open', async () => {
+  render(
+    <>
+      <JrSidebar />
+      <div id='jr-workspace-content'>
+        <textarea aria-label='draft' defaultValue='Mensagem não enviada' />
+      </div>
+      <div id='jr-settings-host' />
+    </>
   );
+  const draft = screen.getByRole('textbox', { name: 'draft' });
+  await openSettingsFromUserMenu();
+  expect(document.getElementById('jr-workspace-content')?.inert).toBe(true);
+  fireEvent.keyDown(window, { key: 'Escape' });
+  await waitFor(() =>
+    expect(screen.queryByRole('region', { name: 'common.jr.look.settingsNav' })).not.toBeInTheDocument()
+  );
+  expect(screen.getByRole('textbox', { name: 'draft' })).toBe(draft);
+  expect(draft).toHaveValue('Mensagem não enviada');
 });
 
-it('leaves connectors and route traffic out of settings', async () => {
+it('keeps all settings sections reachable without changing the chat route', async () => {
   render(<JrSidebar />);
   await openSettingsFromUserMenu();
   expect(screen.queryByRole('button', { name: 'common.jr.look.tabs.connectors' })).not.toBeInTheDocument();
@@ -224,12 +264,23 @@ it('opens and closes connections over the current chat without navigation', asyn
       <main data-testid='current-chat'>Mensagem atual</main>
     </>
   );
-  fireEvent.click(screen.getByRole('button', { name: 'common.jr.mcp.title' }));
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: /Lucas/ }));
+  });
+  fireEvent.click(await screen.findByText('common.jr.mcp.title'));
   expect(await screen.findByRole('dialog', { name: 'common.jr.mcp.title' })).toBeInTheDocument();
   expect(screen.getByTestId('current-chat')).toHaveTextContent('Mensagem atual');
   expect(mocks.navigate).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole('button', { name: 'common.close' }));
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   expect(screen.getByTestId('current-chat')).toBeInTheDocument();
+  expect(mocks.navigate).not.toHaveBeenCalled();
+});
+
+it('opens creation without reopening or editing the existing bot', async () => {
+  mocks.route = '?bot=bot-1&create=1';
+  render(<JrWorkspace />);
+  expect(await screen.findByRole('dialog')).toHaveAttribute('data-bot-id', '');
+  expect(mocks.start).not.toHaveBeenCalled();
   expect(mocks.navigate).not.toHaveBeenCalled();
 });

@@ -153,7 +153,10 @@
     "tabLimitReached": "Sekme sınırına ulaşıldı ({{count}}). En eski sekme yeniden kullanıldı.",
     "agentFirstUseTitle": "Aracı uygulama içi tarayıcıyı kullanıyor",
     "agentFirstUseContent": "Bu panelde sayfa açabilir, tıklayabilir ve içerik okuyabilir. Oturum bilgileriniz korunur.",
-    "agentFirstUseAction": "Ayarları aç"
+    "agentFirstUseAction": "Ayarları aç",
+    "tabProtected": "Bu tarayıcı kullanımda. Sekmeyi kapatmadan veya değiştirmeden önce görevi, kaydı ya da güvenli oturum açma işlemini tamamlayın veya denetimi bota geri verin.",
+    "sessionLimitReached": "Tarayıcıda zaten {{count}} açık oturum var. Yeni bir oturum açmadan önce kullanılmayan bir sekmeyi kapatın; diğer projelerdeki oturumlar açık kalır.",
+    "popupBlocked": "Kaynak tarayıcı bu projede etkin olmadığı için yeni sekme engellendi. Bağlantıyı geçerli projenin tarayıcısından açın."
   },
   "saveConflict": "Kaydedilemedi: bu dosya siz açtıktan sonra diskte değişti. Diğer değişiklikleri görmek için yeniden yükleyin — düzenlemeleriniz kaydedilmemiş olarak duruyor.",
   "persistQuotaExceeded": "Yerel depolama dolu, bu proje için açık sekmeler artık hatırlanamıyor. Bazı sekmeleri kapatın veya site verilerini temizleyin.",

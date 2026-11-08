@@ -1,16 +1,212 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, open, realpath, unlink } from 'node:fs/promises';
+import { lstat, mkdir, open, readFile, realpath, unlink, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { BUILTIN_TEACH_MCP_NAME, JR_STRATA_READ_TOOLS } from '@/common/config/constants';
+import type { ClientBusinessSettingMap } from '@/common/config/clientSettings';
+import { isAionrsAssistant, type Assistant, type CreateAssistantRequest } from '@/common/types/agent/assistantTypes';
+
+type EmployeeAssistantIdentity = { ownerAccountId: string; assistantId: string; generation: number };
+type EmployeeWorkspaces = NonNullable<ClientBusinessSettingMap['jr.botWorkspaces']>;
+
+/** Preserve legacy bots only for the authenticated owner of this device-bound local profile. */
+export function createEmployeeAssistantMigration(deps: {
+  identity: () => EmployeeAssistantIdentity;
+  list: () => Promise<Assistant[]>;
+  read: () => Promise<EmployeeWorkspaces | undefined>;
+  write: (workspaces: EmployeeWorkspaces) => Promise<void>;
+}): () => Promise<Omit<EmployeeAssistantIdentity, 'generation'>> {
+  const migrations = new Map<string, Promise<void>>();
+  return async () => {
+    const identity = deps.identity();
+    const key = `${identity.ownerAccountId}:${identity.generation}`;
+    const current = (): void => {
+      const next = deps.identity();
+      if (next.ownerAccountId !== identity.ownerAccountId || next.generation !== identity.generation)
+        throw new Error('JR_ACCESS_REQUIRED');
+    };
+    let migration = migrations.get(key);
+    if (!migration) {
+      migration = (async () => {
+        const assistants = await deps.list();
+        current();
+        const workspaces = await deps.read();
+        current();
+        if (!workspaces) return;
+        const next = { ...workspaces };
+        let changed = false;
+        for (const assistant of assistants) {
+          const record = workspaces[assistant.id];
+          if (
+            !record ||
+            record.ownerAccountId != null ||
+            assistant.source !== 'user' ||
+            !isAionrsAssistant(assistant) ||
+            (assistant.id.startsWith('jr-employee-') && assistant.id !== identity.assistantId)
+          )
+            continue;
+          next[assistant.id] = { ...record, ownerAccountId: identity.ownerAccountId };
+          changed = true;
+        }
+        if (changed) await deps.write(next);
+        current();
+      })().catch((error: unknown) => {
+        migrations.delete(key);
+        throw error;
+      });
+      migrations.set(key, migration);
+    }
+    await migration;
+    current();
+    return { ownerAccountId: identity.ownerAccountId, assistantId: identity.assistantId };
+  };
+}
+
+/** Coalesce duplicate submissions; each completed creation gets a new account-bound id. */
+export function createEmployeeAssistantRegistry(deps: {
+  identity: () => EmployeeAssistantIdentity;
+  list: () => Promise<Assistant[]>;
+  create: (input: CreateAssistantRequest) => Promise<Assistant>;
+  skills: () => Promise<string[]>;
+}): (input: { name: string }) => Promise<Omit<EmployeeAssistantIdentity, 'generation'>> {
+  const pending = new Map<string, Promise<Omit<EmployeeAssistantIdentity, 'generation'>>>();
+  return async (input) => {
+    const identity = deps.identity();
+    if (typeof input?.name !== 'string' || !input.name.trim() || input.name.trim().length > 80)
+      throw new Error('JR_ASSISTANT_INVALID_REQUEST');
+    const current = (): void => {
+      const next = deps.identity();
+      if (next.ownerAccountId !== identity.ownerAccountId || next.generation !== identity.generation)
+        throw new Error('JR_ACCESS_REQUIRED');
+    };
+    const key = `${identity.ownerAccountId}:${identity.generation}:${input.name.trim()}`;
+    let run = pending.get(key);
+    if (!run) {
+      run = (async () => {
+        const assistants = await deps.list();
+        current();
+        const assistantId = `${identity.assistantId}-${randomUUID()}`;
+        const runtime = assistants.find(isAionrsAssistant);
+        if (!runtime) throw new Error('JR_ASSISTANT_RUNTIME_UNAVAILABLE');
+        const skillIds = await deps.skills();
+        current();
+        const created = await deps.create({
+          id: assistantId,
+          name: input.name.trim(),
+          agent_id: runtime.agent_id,
+          avatar: '🤖',
+          defaults: { skills: { mode: 'fixed', value: [...new Set(skillIds)].toSorted() } },
+        });
+        if (created.id !== assistantId) throw new Error('JR_ASSISTANT_INVALID_RESPONSE');
+        current();
+        return { ownerAccountId: identity.ownerAccountId, assistantId };
+      })().finally(() => {
+        if (pending.get(key) === run) pending.delete(key);
+      });
+      pending.set(key, run);
+    }
+    const result = await run;
+    current();
+    return result;
+  };
+}
 
 type RelayEnvironment = Record<string, string | undefined>;
 export type JrRelayConfig = { url: string; token: string; model: string };
 
-const JR_AIONRS_CONFIG = `# Gerenciado pelo JR Bot: compacte o contexto antes do limite do provedor.
+const JR_AIONRS_COMPACT = `# Gerenciado pelo JR Bot: compacte o contexto antes do limite do provedor.
 [compact]
 enabled = true
 context_window = 200000
 autocompact_threshold_pct = 55
 `;
+
+/**
+ * jr-teach tools that only read or show a card run without asking. vault_fill (types a saved
+ * password into a page) keeps the prompt. AionRS names MCP tools bare unless they collide.
+ */
+const JR_TRUSTED_TEACH_TOOLS = [
+  'vault_list',
+  'secure_input',
+  'secure_input_status',
+  'teach_submit_draft',
+  'handbook_lookup',
+  'handbook_show',
+  'brain_search',
+  'brain_wrong',
+  'strata_list_tools',
+  ...JR_STRATA_READ_TOOLS,
+  'web_search',
+  'web_fetch',
+];
+const allowListConfig = (
+  builtins: readonly string[],
+  teachTools: readonly string[] = JR_TRUSTED_TEACH_TOOLS
+): string => {
+  const tools = [...builtins, ...teachTools, ...teachTools.map((tool) => `mcp__${BUILTIN_TEACH_MCP_NAME}__${tool}`)];
+  return `${JR_AIONRS_COMPACT}
+[tools]
+allow_list = [${tools.map((tool) => `"${tool}"`).join(', ')}]
+`;
+};
+/** Engine built-ins that only read: files, search, and looking up its own deferred tools. */
+const JR_AIONRS_CONFIG = allowListConfig(['Read', 'Grep', 'Glob', 'ToolSearch']);
+/** Configs earlier app versions wrote; only these are ever rewritten. */
+const JR_MANAGED_CONFIGS: ReadonlySet<string> = new Set([
+  JR_AIONRS_CONFIG,
+  JR_AIONRS_COMPACT,
+  allowListConfig(['Read', 'Grep', 'Glob']),
+  ...[
+    ['Read', 'Grep', 'Glob'],
+    ['Read', 'Grep', 'Glob', 'ToolSearch'],
+  ].map((builtins) =>
+    allowListConfig(
+      builtins,
+      JR_TRUSTED_TEACH_TOOLS.filter((tool) => !(JR_STRATA_READ_TOOLS as readonly string[]).includes(tool))
+    )
+  ),
+  ...[
+    ['Read', 'Grep', 'Glob'],
+    ['Read', 'Grep', 'Glob', 'ToolSearch'],
+  ].map((builtins) =>
+    allowListConfig(
+      builtins,
+      JR_TRUSTED_TEACH_TOOLS.filter(
+        (tool) => tool !== 'strata_list_tools' && !(JR_STRATA_READ_TOOLS as readonly string[]).includes(tool)
+      )
+    )
+  ),
+]);
+
+const JR_TEACH_CONFIG_MARKER = '# JR managed built-in MCP\n';
+
+function teachMcpConfig(scriptPath: string): string {
+  if (!isAbsolute(scriptPath)) throw new Error('Invalid built-in MCP script path');
+  return `${JR_TEACH_CONFIG_MARKER}[mcp.servers."${BUILTIN_TEACH_MCP_NAME}"]
+transport = "stdio"
+command = "node"
+args = [${JSON.stringify(scriptPath)}]
+deferred = false
+startup_timeout_ms = 10000
+`;
+}
+
+function isManagedConfig(content: string): boolean {
+  if (JR_MANAGED_CONFIGS.has(content)) return true;
+  const marker = content.indexOf(JR_TEACH_CONFIG_MARKER);
+  if (marker < 0 || !JR_MANAGED_CONFIGS.has(content.slice(0, marker))) return false;
+  const args = /^args = (\[.*\])$/m.exec(content.slice(marker));
+  try {
+    const paths: unknown = JSON.parse(args?.[1] ?? 'null');
+    return (
+      Array.isArray(paths) &&
+      paths.length === 1 &&
+      typeof paths[0] === 'string' &&
+      content.slice(marker) === teachMcpConfig(paths[0])
+    );
+  } catch {
+    return false;
+  }
+}
 
 function isWithin(parent: string, candidate: string): boolean {
   const path = relative(parent, candidate);
@@ -21,8 +217,21 @@ function hasErrorCode(error: unknown, code: string): boolean {
   return Boolean(error && typeof error === 'object' && 'code' in error && error.code === code);
 }
 
+/** Rewrite a config an older app version wrote; never touch any other. */
+async function upgradeManagedConfig(configPath: string, config: string): Promise<void> {
+  const info = await lstat(configPath);
+  if (!info.isFile()) return;
+  const current = await readFile(configPath, 'utf8');
+  if (current === config || !isManagedConfig(current)) return;
+  await writeFile(configPath, config, { encoding: 'utf8', mode: 0o600 });
+}
+
 /** Add JR compaction defaults without overwriting a workspace-owned AionRS config. */
-export async function configureJrWorkspaceContext(userDataPath: string, workspace: string): Promise<void> {
+export async function configureJrWorkspaceContext(
+  userDataPath: string,
+  workspace: string,
+  teachScriptPath: string
+): Promise<void> {
   if (!isAbsolute(userDataPath) || !isAbsolute(workspace)) throw new Error('Invalid local workspace root');
   const userData = await realpath(userDataPath);
   const workspaceRoot = join(resolve(userDataPath), 'jr-workspaces');
@@ -36,24 +245,26 @@ export async function configureJrWorkspaceContext(userDataPath: string, workspac
     throw new Error('Invalid local workspace path');
 
   const configPath = join(realWorkspace, '.aionrs.toml');
+  // Frozen conversation snapshots predate jr-teach; project config also reaches those existing sessions.
+  const config = JR_AIONRS_CONFIG + teachMcpConfig(teachScriptPath);
   let file: Awaited<ReturnType<typeof open>> | undefined;
   try {
     file = await open(configPath, 'wx', 0o600);
-    await file.writeFile(JR_AIONRS_CONFIG, 'utf8');
+    await file.writeFile(config, 'utf8');
     await file.close();
   } catch (error) {
     await file?.close().catch((): void => undefined);
     if (file) await unlink(configPath).catch((): void => undefined);
-    if (hasErrorCode(error, 'EEXIST')) return;
+    if (hasErrorCode(error, 'EEXIST')) return upgradeManagedConfig(configPath, config);
     throw error;
   }
 }
 
-export async function createJrWorkspace(userDataPath: string): Promise<string> {
+export async function createJrWorkspace(userDataPath: string, teachScriptPath: string): Promise<string> {
   if (!isAbsolute(userDataPath)) throw new Error('Invalid local workspace root');
   const directory = join(userDataPath, 'jr-workspaces', randomUUID());
   await mkdir(directory, { recursive: true, mode: 0o700 });
-  await configureJrWorkspaceContext(userDataPath, directory);
+  await configureJrWorkspaceContext(userDataPath, directory, teachScriptPath);
   return directory;
 }
 

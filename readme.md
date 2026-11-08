@@ -21,7 +21,7 @@ No Mac, o agente já leu dados, executou código, navegou no Chrome, criou um JS
 
 O controle foi publicado em `https://jrsantafe.stratacerta.com.br/bot`, com HTTPS, armazenamento separado e chave restrita ao serviço. A validação remota confirmou convite, papéis, resposta MiniMax e interrupção de resposta em andamento após revogação. Essas medições não equivalem ao tempo completo de uma tarefa no PC.
 
-[Operação e limites da edição JR](./docs/pilot/jr-corporativo.md) · [Serviço de controle](./services/control/README.md) · [Primeiro piloto MiniMax](./docs/pilot/minimax-local-pilot.md)
+[Operação e limites da edição JR](./docs/pilot/jr-corporativo.md) · [Serviço de controle](./docs/pilot/jr-control.md) · [Primeiro piloto MiniMax](./docs/pilot/minimax-local-pilot.md)
 
 Instalador Windows e desempenho em máquinas de 4/8 GB ainda precisam de validação. Revogação bloqueia o uso do aplicativo; arquivos já copiados/exportados continuam no computador.
 

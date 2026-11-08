@@ -240,3 +240,12 @@ temp/
 .playwright-mcp/
 # Local JR pilot databases, logs, temporary relay credentials and artifacts.
 .local-pilot/
+
+# Private Strata source and production evidence are versioned in the ERP repository.
+docs/pilot/strata-brain-policy.patch
+docs/pilot/strata-catalog/
+docs/pilot/jr-oauth-production.json
+docs/pilot/jr-production-preflight.md
+# Python gateway test artifacts
+__pycache__/
+*.pyc
