@@ -211,15 +211,7 @@ export function createRoutineStore({ db, now = Date.now, publicBaseUrl = '' }) {
           `INSERT INTO routine_triggers
             (id,routine_id,user_id,payload_hash,payload_json,created_at,expires_at,status)
            VALUES (?,?,?,?,?,?,?,'pending')`
-        ).run(
-          triggerId,
-          id,
-          row.user_id,
-          keyHex(encoded),
-          encoded,
-          timestamp,
-          timestamp + ROUTINE_TTL_MS
-        );
+        ).run(triggerId, id, row.user_id, keyHex(encoded), encoded, timestamp, timestamp + ROUTINE_TTL_MS);
         return { accepted: true, triggerId, expiresAt: iso(timestamp + ROUTINE_TTL_MS) };
       });
     },
@@ -328,7 +320,8 @@ export async function handleRoutines({
 
   if (!session?.user?.id) throw httpErr(401, 'invalid_session');
 
-  if (request.method === 'GET' && path === '/routines') return json(response, 200, { routines: store.list(session.user.id) });
+  if (request.method === 'GET' && path === '/routines')
+    return json(response, 200, { routines: store.list(session.user.id) });
   if (request.method === 'POST' && path === '/routines') {
     const body = await readJson(request, 16_384);
     reauth?.(request);

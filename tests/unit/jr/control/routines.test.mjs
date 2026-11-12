@@ -26,7 +26,10 @@ test('creates a routine with a one-time webhook secret and lists it for the owne
 
   const created = await createRoutine(app, employee.token);
   assert.equal(created.response.status, 201);
-  assert.match(created.webhookUrl, /^https:\/\/jrsantafe\.stratacerta\.com\.br\/bot\/routines\/[0-9a-f-]{36}\/webhook\//);
+  assert.match(
+    created.webhookUrl,
+    /^https:\/\/jrsantafe\.stratacerta\.com\.br\/bot\/routines\/[0-9a-f-]{36}\/webhook\//
+  );
   assert.equal(created.webhookSecret.length, 43);
   assert.equal(created.enabled, true);
 

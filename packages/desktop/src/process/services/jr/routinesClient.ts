@@ -8,7 +8,8 @@ export type RoutineCall = (path: string, init?: RequestInit) => Promise<unknown>
 
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
-const text = (value: unknown, max: number): value is string => typeof value === 'string' && value.length > 0 && value.length <= max;
+const text = (value: unknown, max: number): value is string =>
+  typeof value === 'string' && value.length > 0 && value.length <= max;
 
 function parseRoutine(value: unknown): JrRoutine {
   if (
