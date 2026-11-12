@@ -19,6 +19,24 @@ const TERMINAL_ERRORS = new Set([
   'strata_link_required',
 ]);
 
+/** Catalog discovery is cheap and models often call it twice; it must not trip the read guard. */
+const DISCOVERY_TOOLS = new Set(['strata_list_tools']);
+
+/** Cap of ERP catalog reads in one user turn before a deterministic stop. */
+export const STRATA_READ_BUDGET = 24;
+
+const STOP_REASONS = {
+  strata_rate_limited: 'O ERP atingiu o limite de chamadas. Interrompi a consulta para evitar novas tentativas em sequência.',
+  rate_limited: 'O ERP atingiu o limite de chamadas. Interrompi a consulta para evitar novas tentativas em sequência.',
+  strata_reconnect_required: 'A conexão com o Strata precisa ser renovada. Religue a conta em Conectar aplicativos e tente de novo.',
+  strata_forbidden: 'O ERP negou esta consulta com as permissões atuais. Nenhuma alteração de negócio foi tentada.',
+  permission_denied: 'O ERP negou esta consulta com as permissões atuais. Nenhuma alteração de negócio foi tentada.',
+  strata_link_required: 'Não há conta Strata vinculada neste aparelho. Conecte o Strata em Conectar aplicativos e tente de novo.',
+  repeated_failure: 'Interrompi as consultas porque o ERP falhou duas vezes seguidas na mesma resposta.',
+  repeated_query: 'Interrompi as consultas porque a mesma leitura do ERP foi pedida de novo com os mesmos argumentos.',
+  read_budget: `Interrompi as consultas porque esta resposta já usou ${STRATA_READ_BUDGET} leituras do ERP. Continue em uma nova mensagem com o próximo passo.`,
+};
+
 /** Honor explicit MCP-only read requests; ERP remains the authority for permissions. */
 export function isStrataReadOnlyTurn(messages) {
   const user = messages.findLast((message) => message?.role === 'user');
@@ -82,6 +100,11 @@ function resultOf(message) {
   return body;
 }
 
+function trackedName(name, operation) {
+  if (DISCOVERY_TOOLS.has(name)) return name;
+  return operation || name;
+}
+
 /** Bound a single ERP read turn without caching data or changing any ERP permission. */
 export function inspectStrataTurn(messages) {
   const start = messages.findLastIndex((message) => message?.role === 'user');
@@ -98,30 +121,39 @@ export function inspectStrataTurn(messages) {
       const name = (call.function?.name || '').replace(/^mcp__jr-teach__/, '');
       const args = json(call.function?.arguments);
       const operation = name === 'strata_call_tool' ? args?.name : DIRECT_TOOLS[name];
-      if (!READ_TOOLS.has(operation) && name !== 'strata_list_tools') continue;
-      calls.set(
-        call.id,
-        `${operation || name}:${JSON.stringify(ordered(name === 'strata_call_tool' ? args.arguments : args))}`
-      );
+      if (!READ_TOOLS.has(operation) && !DISCOVERY_TOOLS.has(name)) continue;
+      calls.set(call.id, {
+        discovery: DISCOVERY_TOOLS.has(name),
+        key: `${trackedName(name, operation)}:${JSON.stringify(
+          ordered(name === 'strata_call_tool' ? args.arguments : args)
+        )}`,
+      });
     }
     if (message?.role !== 'tool' || !calls.has(message.tool_call_id) || completed.has(message.tool_call_id)) continue;
     completed.add(message.tool_call_id);
-    count += 1;
+    const tracked = calls.get(message.tool_call_id);
     const result = resultOf(message);
     const code = typeof result?.error === 'string' ? result.error : result?.error?.code;
     if (result?.operation === 'frota.consumo-combustivel' && result.summary?.complete === true)
       fuelSummary = result.summary;
-    const key = calls.get(message.tool_call_id);
-    repeats.set(key, (repeats.get(key) || 0) + 1);
+
+    // Discovery can be repeated while the model finds a process tool; it is not an ERP read loop.
+    if (tracked.discovery) {
+      if (TERMINAL_ERRORS.has(code)) return { reason: code, count, fuelSummary };
+      continue;
+    }
+
+    count += 1;
+    repeats.set(tracked.key, (repeats.get(tracked.key) || 0) + 1);
     const failed = Boolean(code || result?.isError === true || result?.ok === false);
     failures = failed ? failures + 1 : 0;
     const reason = TERMINAL_ERRORS.has(code)
       ? code
       : failures >= 2
         ? 'repeated_failure'
-        : repeats.get(key) >= 2
+        : repeats.get(tracked.key) >= 2
           ? 'repeated_query'
-          : count >= 12
+          : count >= STRATA_READ_BUDGET
             ? 'read_budget'
             : null;
     if (reason) return { reason, count, fuelSummary };
@@ -131,10 +163,9 @@ export function inspectStrataTurn(messages) {
 
 /** A deterministic stop cannot ask the executor to retry, sleep or switch to a browser. */
 export function strataStopMessage({ reason, fuelSummary }) {
-  const limited = reason === 'strata_rate_limited' || reason === 'rate_limited';
-  let message = limited
-    ? 'O ERP atingiu o limite de chamadas. Interrompi a consulta para evitar novas tentativas em sequência.'
-    : 'Interrompi as consultas porque houve repetição, falha persistente ou o limite de etapas desta resposta foi atingido.';
+  let message =
+    STOP_REASONS[reason] ||
+    'Interrompi as consultas porque houve repetição, falha persistente ou o limite de etapas desta resposta foi atingido.';
   if (fuelSummary && Number.isFinite(fuelSummary.totalLiters) && Number.isInteger(fuelSummary.records)) {
     const format = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 6 });
     message += `\n\nO retorno completo já confirmado do MCP contém ${format.format(fuelSummary.totalLiters)} litros em ${fuelSummary.records} registros. Fonte: frota.consumo-combustivel. Consulte as unidades e os alertas de qualidade antes de calcular médias.`;
