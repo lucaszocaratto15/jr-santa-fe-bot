@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   STRATA_READ_BUDGET,
   inspectStrataTurn,
+  isEmptyCatalogSearch,
   isStrataReadOnlyTurn,
   strataStopMessage,
 } from '../../../../../services/control/strata/loopGuard.mjs';
@@ -18,7 +19,16 @@ const query = (id, args = { id: 'frota.consumo-combustivel' }, output = { result
   },
   { role: 'tool', tool_call_id: id, content: JSON.stringify(output) },
 ];
-const listTools = (id, output = { tools: [] }) => [
+const search = (id, args = { q: 'processo xyz' }, output = { items: [] }) => [
+  {
+    role: 'assistant',
+    tool_calls: [
+      { id, type: 'function', function: { name: 'strata_consultas_buscar', arguments: JSON.stringify(args) } },
+    ],
+  },
+  { role: 'tool', tool_call_id: id, content: JSON.stringify(output) },
+];
+const listTools = (id, output = { tools: [{ name: 'erp.consultas.buscar' }] }) => [
   {
     role: 'assistant',
     tool_calls: [{ id, type: 'function', function: { name: 'strata_list_tools', arguments: '{}' } }],
@@ -132,7 +142,7 @@ test('limits a read turn without blocking non-ERP tools or treating record text 
   );
 });
 
-test('repeating strata_list_tools does not stop process discovery', () => {
+test('repeating strata_list_tools does not stop process discovery when tools exist', () => {
   assert.equal(inspectStrataTurn(turn(listTools('a'), listTools('b'), listTools('c'))), null);
   assert.equal(
     inspectStrataTurn(turn(listTools('a'), listTools('b'), query('c', { id: 'x' }), query('d', { id: 'y' }))),
@@ -140,11 +150,29 @@ test('repeating strata_list_tools does not stop process discovery', () => {
   );
 });
 
+test('empty catalog search stops with an explicit not-found message naming the term', () => {
+  assert.equal(isEmptyCatalogSearch({ items: [] }), true);
+  assert.equal(isEmptyCatalogSearch({ items: [{ id: 'a' }] }), false);
+  const stop = inspectStrataTurn(turn(search('a', { q: 'aprovacao de compra' }, { items: [] })));
+  assert.equal(stop.reason, 'not_found');
+  assert.equal(stop.subject, 'aprovacao de compra');
+  assert.match(strataStopMessage(stop), /Não encontrei no Strata Certa/);
+  assert.match(strataStopMessage(stop), /aprovacao de compra/);
+  assert.doesNotMatch(strataStopMessage(stop), /repetição, falha persistente/);
+});
+
+test('empty MCP tool list also stops with not-found', () => {
+  const stop = inspectStrataTurn(turn(listTools('a', { tools: [] })));
+  assert.equal(stop.reason, 'not_found');
+  assert.match(strataStopMessage(stop), /Não encontrei no Strata Certa/);
+});
+
 test('stop message names the concrete guard reason', () => {
   assert.match(strataStopMessage({ reason: 'repeated_query' }), /mesmos argumentos/);
   assert.match(strataStopMessage({ reason: 'repeated_failure' }), /duas vezes seguidas/);
   assert.match(strataStopMessage({ reason: 'read_budget' }), new RegExp(String(STRATA_READ_BUDGET)));
   assert.match(strataStopMessage({ reason: 'strata_link_required' }), /conta Strata vinculada/);
+  assert.match(strataStopMessage({ reason: 'not_found', subject: 'frota' }), /«frota»/);
 });
 
 test('recognizes the legacy MCP wrapper and preserves an already confirmed complete summary', () => {

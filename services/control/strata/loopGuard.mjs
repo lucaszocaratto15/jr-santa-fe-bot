@@ -105,6 +105,48 @@ function trackedName(name, operation) {
   return operation || name;
 }
 
+function cleanSubject(value) {
+  if (typeof value !== 'string') return '';
+  const text = value.replace(/\s+/g, ' ').trim();
+  return text.length > 120 ? `${text.slice(0, 117)}...` : text;
+}
+
+function searchSubject(args) {
+  if (!args || typeof args !== 'object') return '';
+  return cleanSubject(args.q || args.query || args.module || args.id || args.name || '');
+}
+
+/** True when a catalog search returned zero authorized matches. */
+export function isEmptyCatalogSearch(result) {
+  if (!result || typeof result !== 'object' || result.isError === true || result.ok === false) return false;
+  if (typeof result.error === 'string' || result.error?.code) return false;
+  for (const key of ['items', 'consultas', 'results', 'matches', 'tools', 'data']) {
+    if (Array.isArray(result[key])) return result[key].length === 0;
+  }
+  if (result.result && typeof result.result === 'object') {
+    for (const key of ['items', 'consultas', 'results', 'matches', 'data', 'rows']) {
+      if (Array.isArray(result.result[key])) return result.result[key].length === 0;
+    }
+  }
+  if (Number.isFinite(result.total) && result.total === 0) return true;
+  if (Number.isFinite(result.count) && result.count === 0) return true;
+  return false;
+}
+
+function notFoundMessage(subject) {
+  const label = cleanSubject(subject);
+  if (label) {
+    return (
+      `Não encontrei no Strata Certa nenhuma consulta ou processo para «${label}». ` +
+      'Confira o nome com quem libera o ERP, diga outro termo ou verifique se sua conta tem permissão para esse módulo.'
+    );
+  }
+  return (
+    'Não encontrei no Strata Certa a consulta ou o processo pedido. ' +
+    'Confira o nome com quem libera o ERP ou diga outro termo. Pode ser falta de permissão no módulo.'
+  );
+}
+
 /** Bound a single ERP read turn without caching data or changing any ERP permission. */
 export function inspectStrataTurn(messages) {
   const start = messages.findLastIndex((message) => message?.role === 'user');
@@ -115,6 +157,7 @@ export function inspectStrataTurn(messages) {
   let count = 0;
   let failures = 0;
   let fuelSummary = null;
+  let lastSubject = '';
   for (const message of messages.slice(start + 1)) {
     for (const call of message?.tool_calls || []) {
       if (typeof call.id !== 'string' || !call.id) continue;
@@ -122,11 +165,12 @@ export function inspectStrataTurn(messages) {
       const args = json(call.function?.arguments);
       const operation = name === 'strata_call_tool' ? args?.name : DIRECT_TOOLS[name];
       if (!READ_TOOLS.has(operation) && !DISCOVERY_TOOLS.has(name)) continue;
+      const callArgs = name === 'strata_call_tool' ? args?.arguments : args;
       calls.set(call.id, {
         discovery: DISCOVERY_TOOLS.has(name),
-        key: `${trackedName(name, operation)}:${JSON.stringify(
-          ordered(name === 'strata_call_tool' ? args.arguments : args)
-        )}`,
+        search: operation === 'erp.consultas.buscar',
+        subject: searchSubject(callArgs) || (typeof args?.name === 'string' ? cleanSubject(args.name) : ''),
+        key: `${trackedName(name, operation)}:${JSON.stringify(ordered(callArgs))}`,
       });
     }
     if (message?.role !== 'tool' || !calls.has(message.tool_call_id) || completed.has(message.tool_call_id)) continue;
@@ -136,10 +180,13 @@ export function inspectStrataTurn(messages) {
     const code = typeof result?.error === 'string' ? result.error : result?.error?.code;
     if (result?.operation === 'frota.consumo-combustivel' && result.summary?.complete === true)
       fuelSummary = result.summary;
+    if (tracked.subject) lastSubject = tracked.subject;
 
     // Discovery can be repeated while the model finds a process tool; it is not an ERP read loop.
     if (tracked.discovery) {
-      if (TERMINAL_ERRORS.has(code)) return { reason: code, count, fuelSummary };
+      if (TERMINAL_ERRORS.has(code)) return { reason: code, count, fuelSummary, subject: lastSubject };
+      if (isEmptyCatalogSearch(result))
+        return { reason: 'not_found', count, fuelSummary, subject: lastSubject || 'ferramentas do MCP' };
       continue;
     }
 
@@ -147,6 +194,12 @@ export function inspectStrataTurn(messages) {
     repeats.set(tracked.key, (repeats.get(tracked.key) || 0) + 1);
     const failed = Boolean(code || result?.isError === true || result?.ok === false);
     failures = failed ? failures + 1 : 0;
+
+    // Empty catalog search: stop with an explicit "não encontrei" instead of letting the model retry.
+    if (tracked.search && isEmptyCatalogSearch(result)) {
+      return { reason: 'not_found', count, fuelSummary, subject: tracked.subject || lastSubject };
+    }
+
     const reason = TERMINAL_ERRORS.has(code)
       ? code
       : failures >= 2
@@ -156,19 +209,27 @@ export function inspectStrataTurn(messages) {
           : count >= STRATA_READ_BUDGET
             ? 'read_budget'
             : null;
-    if (reason) return { reason, count, fuelSummary };
+    if (reason) return { reason, count, fuelSummary, subject: lastSubject };
   }
   return null;
 }
 
 /** A deterministic stop cannot ask the executor to retry, sleep or switch to a browser. */
-export function strataStopMessage({ reason, fuelSummary }) {
+export function strataStopMessage({ reason, fuelSummary, subject }) {
   let message =
-    STOP_REASONS[reason] ||
-    'Interrompi as consultas porque houve repetição, falha persistente ou o limite de etapas desta resposta foi atingido.';
+    reason === 'not_found'
+      ? notFoundMessage(subject)
+      : STOP_REASONS[reason] ||
+        'Interrompi as consultas porque houve repetição, falha persistente ou o limite de etapas desta resposta foi atingido.';
   if (fuelSummary && Number.isFinite(fuelSummary.totalLiters) && Number.isInteger(fuelSummary.records)) {
     const format = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 6 });
     message += `\n\nO retorno completo já confirmado do MCP contém ${format.format(fuelSummary.totalLiters)} litros em ${fuelSummary.records} registros. Fonte: frota.consumo-combustivel. Consulte as unidades e os alertas de qualidade antes de calcular médias.`;
+  }
+  if (reason === 'not_found') {
+    return (
+      message +
+      '\n\nNenhuma alteração de negócio foi executada. Diga outro nome ou peça para quem libera o ERP conferir a permissão.'
+    );
   }
   return (
     message +
