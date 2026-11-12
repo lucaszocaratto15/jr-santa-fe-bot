@@ -40,6 +40,8 @@ vi.mock('@/common', () => ({
     conversation: { listChanged: { on: () => () => {} }, artifactStream: { on: () => () => {} } },
     learn: { state: { invoke: async () => null }, stateChanged: { on: () => () => {} } },
     teach: { lessonsChanged: { on: () => () => {} } },
+    jr: { routines: { deliver: { on: () => () => {} }, ack: { invoke: async () => undefined } } },
+    cron: { runNow: { invoke: async () => undefined } },
   },
 }));
 vi.mock('@/renderer/pages/Jr/jrBots', () => ({

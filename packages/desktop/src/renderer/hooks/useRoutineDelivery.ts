@@ -13,13 +13,15 @@ export function useRoutineDelivery(): void {
   const busy = useRef(new Set<string>());
 
   useEffect(() => {
-    const off = ipcBridge.jr.routines.deliver.on((trigger: JrRoutineTrigger) => {
+    const routines = ipcBridge.jr?.routines;
+    if (!routines?.deliver?.on) return;
+    const off = routines.deliver.on((trigger: JrRoutineTrigger) => {
       if (busy.current.has(trigger.id)) return;
       busy.current.add(trigger.id);
       void (async () => {
         try {
           await ipcBridge.cron.runNow.invoke({ job_id: trigger.cronJobId });
-          await ipcBridge.jr.routines.ack.invoke({
+          await routines.ack.invoke({
             routineId: trigger.routineId,
             triggerId: trigger.id,
             outcome: 'delivered',
@@ -27,7 +29,7 @@ export function useRoutineDelivery(): void {
           Message.success(t('cron.webhook.delivered', { name: trigger.name }));
         } catch {
           try {
-            await ipcBridge.jr.routines.ack.invoke({
+            await routines.ack.invoke({
               routineId: trigger.routineId,
               triggerId: trigger.id,
               outcome: 'failed',
