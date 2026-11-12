@@ -222,11 +222,24 @@ test('a brain 401 (wrong shared secret) becomes 502 brain_unavailable, never a s
   assert.equal(session.status, 200);
 });
 
-/** A brainFetch that never answers and only fails when its timeout signal fires. */
+/**
+ * A brainFetch that never answers and only fails when its timeout signal fires.
+ * AbortSignal.timeout uses an unref'd timer, so keep a ref'd handle until abort or
+ * Node's test runner drains the loop and cancels later tests.
+ */
 const hungFetch = (seen) => (_url, init) =>
   new Promise((_resolve, reject) => {
     seen.push(init.signal);
-    init.signal.addEventListener('abort', () => reject(init.signal.reason));
+    const keepAlive = setInterval(() => {}, 1_000);
+    const fail = () => {
+      clearInterval(keepAlive);
+      reject(init.signal.reason);
+    };
+    if (init.signal.aborted) {
+      fail();
+      return;
+    }
+    init.signal.addEventListener('abort', fail, { once: true });
   });
 
 test('a hung brain answers 503 within about 4 s while /auth/session keeps answering', async (t) => {
