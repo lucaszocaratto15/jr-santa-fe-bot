@@ -26,12 +26,15 @@ const DISCOVERY_TOOLS = new Set(['strata_list_tools']);
 export const STRATA_READ_BUDGET = 24;
 
 const STOP_REASONS = {
-  strata_rate_limited: 'O ERP atingiu o limite de chamadas. Interrompi a consulta para evitar novas tentativas em sequência.',
+  strata_rate_limited:
+    'O ERP atingiu o limite de chamadas. Interrompi a consulta para evitar novas tentativas em sequência.',
   rate_limited: 'O ERP atingiu o limite de chamadas. Interrompi a consulta para evitar novas tentativas em sequência.',
-  strata_reconnect_required: 'A conexão com o Strata precisa ser renovada. Religue a conta em Conectar aplicativos e tente de novo.',
+  strata_reconnect_required:
+    'A conexão com o Strata precisa ser renovada. Religue a conta em Conectar aplicativos e tente de novo.',
   strata_forbidden: 'O ERP negou esta consulta com as permissões atuais. Nenhuma alteração de negócio foi tentada.',
   permission_denied: 'O ERP negou esta consulta com as permissões atuais. Nenhuma alteração de negócio foi tentada.',
-  strata_link_required: 'Não há conta Strata vinculada neste aparelho. Conecte o Strata em Conectar aplicativos e tente de novo.',
+  strata_link_required:
+    'Não há conta Strata vinculada neste aparelho. Conecte o Strata em Conectar aplicativos e tente de novo.',
   repeated_failure: 'Interrompi as consultas porque o ERP falhou duas vezes seguidas na mesma resposta.',
   repeated_query: 'Interrompi as consultas porque a mesma leitura do ERP foi pedida de novo com os mesmos argumentos.',
   read_budget: `Interrompi as consultas porque esta resposta já usou ${STRATA_READ_BUDGET} leituras do ERP. Continue em uma nova mensagem com o próximo passo.`,

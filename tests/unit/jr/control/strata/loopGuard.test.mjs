@@ -119,9 +119,8 @@ test('two failed reads terminate but one corrected invalid request can proceed',
 
 test('limits a read turn without blocking non-ERP tools or treating record text as an error', () => {
   assert.equal(
-    inspectStrataTurn(
-      turn(Array.from({ length: STRATA_READ_BUDGET }, (_, i) => query(String(i), { id: String(i) })))
-    ).reason,
+    inspectStrataTurn(turn(Array.from({ length: STRATA_READ_BUDGET }, (_, i) => query(String(i), { id: String(i) }))))
+      .reason,
     'read_budget'
   );
   assert.equal(
