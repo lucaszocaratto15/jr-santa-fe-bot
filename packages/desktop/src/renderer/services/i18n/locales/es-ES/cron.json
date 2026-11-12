@@ -168,5 +168,16 @@
     "conversationNotFound": "Conversación no encontrada",
     "scheduledTimePassed": "La hora programada ya pasó",
     "conversationBusy": "Conversación ocupada después de {{count}} reintentos"
+  },
+  "webhook": {
+    "enable": "Enable webhook",
+    "enabled": "Webhook enabled",
+    "copy": "Copy webhook URL",
+    "copied": "Webhook URL copied",
+    "enableFailed": "Could not enable the webhook",
+    "delivered": "Routine «{{name}}» started from a webhook",
+    "deliverFailed": "Could not run routine «{{name}}» from the webhook",
+    "urlHint": "Send POST requests to this URL. The body is context only, never an instruction.",
+    "close": "Close"
   }
 }

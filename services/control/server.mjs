@@ -2,6 +2,7 @@ import { createServer } from 'node:http';
 import { handleBrain } from './brain.mjs';
 import { handleHandbook } from './handbook.mjs';
 import { createModelProxy } from './proxy.mjs';
+import { handleRoutines, ROUTINE_PAYLOAD_LIMIT } from './routines.mjs';
 import { createStore } from './store.mjs';
 import { createStrataService } from './strata/index.mjs';
 import { httpError, isHttpError, textField, validateConfiguration } from './validation.mjs';
@@ -86,6 +87,16 @@ export function createControlServer(options = {}) {
           };
           return json(response, 200, store.login(login));
         }
+        // Webhook URLs are the credential; they must not require a JR session.
+        if (
+          request.method === 'POST' &&
+          path &&
+          /^\/routines\/[0-9a-f-]{36}\/webhook\/[a-zA-Z0-9_-]{43}$/u.test(path)
+        ) {
+          const body = await readJson(request, ROUTINE_PAYLOAD_LIMIT);
+          const match = /^\/routines\/([0-9a-f-]{36})\/webhook\/([a-zA-Z0-9_-]{43})$/u.exec(path);
+          return json(response, 202, store.routines.enqueueWebhook(match[1], match[2], body));
+        }
         const session = authenticate(request);
         if (path?.startsWith('/strata/')) {
           const current = () => authenticate(request);
@@ -128,6 +139,20 @@ export function createControlServer(options = {}) {
             path,
             session,
             store: store.handbook,
+            readJson,
+            json,
+            httpError,
+            reauth: authenticate,
+          })
+        )
+          return;
+        if (
+          await handleRoutines({
+            request,
+            response,
+            path,
+            session,
+            store: store.routines,
             readJson,
             json,
             httpError,

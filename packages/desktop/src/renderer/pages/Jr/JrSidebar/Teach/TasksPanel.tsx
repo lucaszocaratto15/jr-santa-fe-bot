@@ -1,6 +1,7 @@
 import { ipcBridge } from '@/common';
 import type { ICronJob } from '@/common/adapter/ipcBridge';
-import { Button, Dropdown, Menu, Message, Modal, Tooltip } from '@arco-design/web-react';
+import type { JrRoutine } from '@/common/types/agent/routineTypes';
+import { Button, Dropdown, Input, Menu, Message, Modal, Tooltip } from '@arco-design/web-react';
 import { AlarmClock, Edit, MagicWand, More, PlayOne, Plus } from '@icon-park/react';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -48,6 +49,8 @@ const TasksPanel: React.FC<TasksPanelProps> = ({ onClose }) => {
   const [scheduling, setScheduling] = useState<Scheduling | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [removing, setRemoving] = useState(false);
+  const [webhook, setWebhook] = useState<JrRoutine | null>(null);
+  const [enablingWebhook, setEnablingWebhook] = useState<string | null>(null);
   const tasks = (skills.data ?? []).filter((skill) => skill.name.startsWith(TAUGHT_SKILL_PREFIX));
   const jobsBySkill = useMemo(() => taughtJobsBySkill(jobs.data ?? []), [jobs.data]);
   const refreshJobs = jobs.mutate;
@@ -176,6 +179,26 @@ const TasksPanel: React.FC<TasksPanelProps> = ({ onClose }) => {
     void refreshJobs();
   };
 
+  /** Register the scheduled job on the control service and show the one-time webhook URL. */
+  const enableWebhook = async (task: TaughtTaskSummary, job: ICronJob) => {
+    if (enablingWebhook || !job.metadata.conversation_id) return;
+    setEnablingWebhook(task.name);
+    try {
+      const created = await ipcBridge.jr.routines.create.invoke({
+        name: task.description || task.name,
+        instructions: buildRunPrompt(t, task, 'scheduled'),
+        conversationId: job.metadata.conversation_id,
+        cronJobId: job.id,
+      });
+      setWebhook(created);
+      Message.success(t('cron.webhook.enabled'));
+    } catch {
+      Message.error(t('cron.webhook.enableFailed'));
+    } finally {
+      setEnablingWebhook(null);
+    }
+  };
+
   const deletingHasJobs = deleting !== null && (jobsBySkill.get(deleting)?.length ?? 0) > 0;
 
   return (
@@ -270,12 +293,21 @@ const TasksPanel: React.FC<TasksPanelProps> = ({ onClose }) => {
                   position='br'
                   droplist={
                     <Menu
-                      onClickMenuItem={() => {
+                      onClickMenuItem={(key) => {
+                        if (key === 'webhook' && job) {
+                          void enableWebhook(task, job);
+                          return;
+                        }
                         setDeleting(task.name);
                         // The confirmation names the schedules; make sure it reads a current list.
                         void refreshJobs();
                       }}
                     >
+                      {job?.metadata.conversation_id ? (
+                        <Menu.Item key='webhook' disabled={enablingWebhook === task.name}>
+                          {t('cron.webhook.enable')}
+                        </Menu.Item>
+                      ) : null}
                       <Menu.Item key='delete'>{t('common.jr.teach.tasks.delete')}</Menu.Item>
                     </Menu>
                   }
@@ -314,6 +346,26 @@ const TasksPanel: React.FC<TasksPanelProps> = ({ onClose }) => {
         unmountOnExit
       >
         {t(deletingHasJobs ? 'common.jr.teach.tasks.deleteConfirmScheduled' : 'common.jr.teach.tasks.deleteConfirm')}
+      </Modal>
+      <Modal
+        visible={webhook !== null}
+        title={t('cron.webhook.enabled')}
+        okText={t('cron.webhook.copy')}
+        cancelText={t('cron.webhook.close')}
+        onOk={async () => {
+          if (!webhook?.webhookUrl) return;
+          try {
+            await navigator.clipboard.writeText(webhook.webhookUrl);
+            Message.success(t('cron.webhook.copied'));
+          } catch {
+            Message.error(t('cron.webhook.enableFailed'));
+          }
+        }}
+        onCancel={() => setWebhook(null)}
+        unmountOnExit
+      >
+        <p className={styles.muted}>{t('cron.webhook.urlHint')}</p>
+        <Input.TextArea value={webhook?.webhookUrl ?? ''} autoSize={{ minRows: 3, maxRows: 6 }} readOnly />
       </Modal>
     </div>
   );

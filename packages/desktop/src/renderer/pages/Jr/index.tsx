@@ -7,6 +7,7 @@ import { getJrBot, listJrBots, reportJrOpenError, startJrConversation, type JrBo
 import JrBotDialog from './JrBotDialog';
 import styles from './JrWorkspace.module.css';
 import { useJrAccess } from './Access/context';
+import { useRoutineDelivery } from '@renderer/hooks/useRoutineDelivery';
 
 export const JR_BOTS_KEY = 'jr.bots';
 
@@ -14,6 +15,7 @@ const JrWorkspace: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { state } = useJrAccess();
+  useRoutineDelivery();
   const [params, setParams] = useSearchParams();
   const botsKey = state.user?.id ? [JR_BOTS_KEY, state.user.id] : null;
   const { data: bots, error, isLoading, mutate: refreshBots } = useSWR(botsKey, listJrBots);

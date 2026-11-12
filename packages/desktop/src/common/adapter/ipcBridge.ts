@@ -239,6 +239,24 @@ export const jr = {
     roles: bridge.buildProvider<HandbookRoleSummary[], void>('jr-handbook-roles'),
     role: bridge.buildProvider<HandbookView, { key: string }>('jr-handbook-role'),
   },
+  /** Webhook routines: create/list in Minhas tarefas; main emits deliver for pending triggers. */
+  routines: {
+    list: bridge.buildProvider<import('@/common/types/agent/routineTypes').JrRoutine[], void>('jr-routines-list'),
+    create: bridge.buildProvider<
+      import('@/common/types/agent/routineTypes').JrRoutine,
+      import('@/common/types/agent/routineTypes').JrRoutineCreateInput
+    >('jr-routines-create'),
+    setEnabled: bridge.buildProvider<
+      import('@/common/types/agent/routineTypes').JrRoutine,
+      { id: string; enabled: boolean }
+    >('jr-routines-set-enabled'),
+    ack: bridge.buildProvider<
+      string,
+      { routineId: string; triggerId: string; outcome?: 'delivered' | 'failed' | 'discarded' }
+    >('jr-routines-ack'),
+    /** Main → renderer: run the linked cron job for this webhook trigger. */
+    deliver: bridge.buildEmitter<import('@/common/types/agent/routineTypes').JrRoutineTrigger>('jr-routines-deliver'),
+  },
 };
 
 type HandbookView = import('@/common/types/agent/handbookTypes').HandbookView;

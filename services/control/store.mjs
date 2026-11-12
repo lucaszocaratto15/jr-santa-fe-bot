@@ -3,6 +3,7 @@ import { chmodSync, mkdirSync } from 'node:fs';
 import { dirname, isAbsolute } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { createHandbookStore, migrateHandbook } from './handbook.mjs';
+import { createRoutineStore, migrateRoutines } from './routines.mjs';
 import { httpError } from './validation.mjs';
 
 const DAY = 86_400_000;
@@ -136,7 +137,7 @@ export function usageHistory(rows, timestamp) {
 }
 
 /** Open the private control database; only hashes and aggregate usage are persisted. */
-export function createStore({ databasePath, adminCode, model, now = Date.now }) {
+export function createStore({ databasePath, adminCode, model, now = Date.now, publicBaseUrl = '' }) {
   if (databasePath !== ':memory:' && (typeof databasePath !== 'string' || !isAbsolute(databasePath)))
     throw new Error('invalid_configuration');
   if (databasePath !== ':memory:') mkdirSync(dirname(databasePath), { recursive: true, mode: 0o700 });
@@ -183,6 +184,8 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
     if (!userColumns.has(name)) db.exec(`ALTER TABLE users ADD COLUMN ${name} ${type}`);
   }
   migrateHandbook(db);
+  migrateRoutines(db);
+  const routines = createRoutineStore({ db, now, publicBaseUrl });
   db.prepare("INSERT OR IGNORE INTO users (id,name,role,created_at) VALUES ('owner',?,'admin',?)").run(
     OWNER_PROFILE_NAME,
     now()
@@ -343,6 +346,7 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
         db.prepare('UPDATE users SET revoked_at = COALESCE(revoked_at,?) WHERE id = ?').run(timestamp, id);
         db.prepare('UPDATE sessions SET revoked_at = COALESCE(revoked_at,?) WHERE user_id = ?').run(timestamp, id);
         db.prepare('DELETE FROM invites WHERE user_id = ?').run(id);
+        routines.discardForUser(id);
       });
     },
     setBlocked(id, blocked) {
@@ -353,6 +357,7 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
         if (user.revoked_at !== null) throw httpError(409, 'employee_revoked');
         const blockedAt = blocked ? (user.blocked_at ?? now()) : null;
         db.prepare('UPDATE users SET blocked_at = ? WHERE id = ?').run(blockedAt, id);
+        if (blocked) routines.discardForUser(id);
         return { blocked };
       });
     },
@@ -381,6 +386,7 @@ export function createStore({ databasePath, adminCode, model, now = Date.now }) 
       });
     },
     handbook: createHandbookStore(db, now, httpError),
+    routines,
     tokenPolicy(userId) {
       if (!TOKEN_LIMITS_ENFORCED) return null;
       const row = db.prepare('SELECT token_limit FROM users WHERE id = ?').get(userId);

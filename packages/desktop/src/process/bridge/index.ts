@@ -17,6 +17,7 @@ import { initLearnBridge } from '@process/services/teach/learn/learnIpc';
 import { initLessonsBridge } from '@process/services/teach/lessons/lessonsIpc';
 import { initBrainBridge } from '@process/services/brain/brainIpc';
 import { initHandbookBridge } from '@process/services/teach/handbook/handbookIpc';
+import { initRoutinesBridge } from '@process/services/jr/routinesIpc';
 
 export type BridgeDependencies = Record<string, never>;
 
@@ -36,6 +37,7 @@ export function initAllBridges(_deps: BridgeDependencies = {}): void {
   initLessonsBridge();
   initHandbookBridge();
   initBrainBridge();
+  initRoutinesBridge();
 }
 
 export {
