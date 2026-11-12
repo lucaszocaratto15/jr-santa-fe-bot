@@ -1,6 +1,6 @@
 # Spec + Plano: Rotinas com Webhooks
 
-**Branch**: `feat/jr-rotinas-webhooks` · **Status**: Rascunho · **Data**: 2026-11-06
+**Branch**: `cursor/jr-rotinas-webhooks-206a` · **Status**: Em implementação (v1 controle + entrega + UI mínima) · **Data**: 2026-11-12
 **Referência**: OpenBot (WorkflowsPage + RoutineWebhookEndpoint). Guia base: [`../README.md`](README.md).
 
 ---
@@ -146,11 +146,11 @@ Novas chaves em `locales/pt-BR` (módulo `routine`): `routine.create`, `routine.
 - **App**: unit para o coletor de disparos e para o parser de payload (sanitização).
 - **Integração**: webhook → fila → heartbeat → run-now (com AionCore fake).
 
-## 13. Decisões em aberto
+## 13. Decisões fechadas na v1
 
-- [DECISÃO] O payload do webhook entra como **mensagem de contexto** na conversa? Qual o formato (JSON bruto vs. texto formatado)?
-- [DECISÃO] Limite de rotinas por funcionário (sugestão: 10)?
-- [DECISÃO] TTL fixo em 24h ou configurável por rotina?
+- Payload do webhook é **contexto** (JSON formatado no cliente; nunca instrução). A execução usa o texto já gravado na tarefa cron.
+- Limite de **10** rotinas por funcionário.
+- TTL fixo de **24h**; rate limit **30/hora** por rotina.
 
 ## 14. Plano de implementação (fases)
 

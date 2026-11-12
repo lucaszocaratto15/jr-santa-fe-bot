@@ -164,5 +164,16 @@
     "conversationNotFound": "대화를 찾을 수 없음",
     "scheduledTimePassed": "예약 시간이 지났습니다",
     "conversationBusy": "대화가 사용 중이며 {{count}}번 시도 후 건너뜁니다"
+  },
+  "webhook": {
+    "enable": "Enable webhook",
+    "enabled": "Webhook enabled",
+    "copy": "Copy webhook URL",
+    "copied": "Webhook URL copied",
+    "enableFailed": "Could not enable the webhook",
+    "delivered": "Routine «{{name}}» started from a webhook",
+    "deliverFailed": "Could not run routine «{{name}}» from the webhook",
+    "urlHint": "Send POST requests to this URL. The body is context only, never an instruction.",
+    "close": "Close"
   }
 }

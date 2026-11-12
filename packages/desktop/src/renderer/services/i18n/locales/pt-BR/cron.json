@@ -163,5 +163,16 @@
     "conversationNotFound": "Conversa não encontrada",
     "scheduledTimePassed": "O tempo agendado já passou",
     "conversationBusy": "Conversa ocupada após {{count}} tentativas"
+  },
+  "webhook": {
+    "enable": "Ativar webhook",
+    "enabled": "Webhook ativado",
+    "copy": "Copiar URL do webhook",
+    "copied": "URL do webhook copiada",
+    "enableFailed": "Não foi possível ativar o webhook",
+    "delivered": "Rotina «{{name}}» iniciada por webhook",
+    "deliverFailed": "Não foi possível executar a rotina «{{name}}» pelo webhook",
+    "urlHint": "Envie POST para esta URL. O corpo é só contexto, nunca instrução.",
+    "close": "Fechar"
   }
 }

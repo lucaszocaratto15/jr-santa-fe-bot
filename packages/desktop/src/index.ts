@@ -44,6 +44,7 @@ import {
 import { startLearnService } from './process/services/teach/learn/learnIpc';
 import { onBrainAccessChanged, startBrainService } from './process/services/brain/brainIpc';
 import { onHandbookAccessChanged, startHandbookService } from './process/services/teach/handbook/handbookIpc';
+import { onRoutinesAccessChanged, startRoutinesClient } from './process/services/jr/routinesIpc';
 import { createRecorder, sweepTaughtTasks } from './process/services/teach/recording/recorder';
 import { SHOT_MAX_WIDTH } from './process/services/teach/recording/stepShots';
 import { TAUGHT_TASKS_DIRNAME } from './process/services/teach/recording/teachSession';
@@ -1031,6 +1032,7 @@ const handleAppReady = async (): Promise<void> => {
       ipcBridge.jr.accessChanged.emit(state);
       onHandbookAccessChanged(state.status);
       onBrainAccessChanged(state.status, state.user?.id);
+      onRoutinesAccessChanged(state.status);
       void getLearnService()
         ?.refreshProfile()
         .catch(() => {});
@@ -1085,6 +1087,8 @@ const handleAppReady = async (): Promise<void> => {
   });
   // "Manual da função": drafts, employee-approved publishing and the role handbook reads.
   startHandbookService(app.getPath('userData'), (target, init, admin) => controller.call(target, init, admin));
+  // Webhook routines: pending triggers are emitted to the renderer after each session refresh.
+  startRoutinesClient((target, init) => controller.call(target, init));
   // Company brain: explicit proposals and consented notes; live capture remains disabled.
   // Brain calls never mark the app offline: a slow or missing brain fails only that call.
   startBrainService(app.getPath('userData'), (target, init, admin) => controller.brainCall(target, init, admin));
